@@ -14,10 +14,10 @@ Any structural, behavioral, or naming deviation from this diagram must:
 
 ## Registered Deviations & Clarifications
 
-### 1. English Translation & Czech Backward-Compatibility Aliases
-- **Date**: 2026-09-04
-- **Context**: The original diagram and starter repository had Czech class, attribute, and method names (e.g. `HerníPlocha`, `Figurka`, `Tah`, `RevizorTahu`, `vyhozene_figurky_b`, `getSmery`). Per user instruction, all classes, methods, and attributes were translated into idiomatic English (`Board`, `Piece`, `Move`, `MoveValidator`, `captured_white`, `getDirections`), while retaining Czech aliases as properties/methods for backward compatibility.
-- **Approval**: User requested "change all czech to english".
+### 1. Language and Translation Policy (Not a Deviation)
+- **Policy**: Naming and language translations between the Czech reference diagram and the English codebase (e.g. `Figurka` -> `Piece`, `HerníPlocha` -> `Board`, `Tah` -> `Move`, `RevizorTahu` -> `MoveValidator`, `Hra` -> `GameManager`, `Hrac` -> `Player`, `Uzivatel` -> `User`, `vyhozene_figurky` -> `captured_pieces`, `zacni_tah` -> `start_turn`, etc.) are canonical design standards and do NOT constitute architecture or object model deviations.
+- **Pure English Standard**: All code, class names, method names, attributes, variables, comments, and docstrings must be written exclusively in English with no Czech identifiers or aliases.
+- **Approval**: Explicitly clarified and approved by the user.
 
 ### 2. Move Validation Architecture (Lazy Core + Aggregator)
 - **Date**: 2026-09-04

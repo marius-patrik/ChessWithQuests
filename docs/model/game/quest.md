@@ -8,8 +8,8 @@ Maps directly to **`Quest`** in the reference architecture diagram.
 Represents an in-game quest or achievement with evaluation conditions.
 
 #### Attributes
-- `name: str` (`nazev`): Quest name.
-- `description: str` (`popis`): Quest objective description.
+- `name: str`: Quest name.
+- `description: str`: Quest objective description.
 - `condition_fn: Optional[Callable[[Any], bool]]`: Predicate function evaluating fulfillment.
 - `reward_points: int`: Points granted upon completion.
 - `is_completed: bool`: Completion state flag.

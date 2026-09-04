@@ -48,7 +48,7 @@ class WindowController:
         return result
 
     def tick_timer(self) -> None:
-        active_color = self.game_controller.game_manager.aktivni_hrac
-        self.game_controller.game_manager.casovac.pocitej_cas(active_color, 1)
-        if self.game_controller.game_manager.casovac.is_expired(active_color):
+        active_color = self.game_controller.game_manager.active_player
+        self.game_controller.game_manager.timer.tick(active_color, 1)
+        if self.game_controller.game_manager.timer.is_expired(active_color):
             self.set_status("Time Expired!")

@@ -9,7 +9,7 @@ The repository maintains a `docs/` directory that mirrors the project structure 
 ### 3. Object Model Conformance
 The object model must strictly adhere to the reference architecture diagram:
 `https://app.diagrams.net/#G19OY7iySOQWRAZDFKy1r-7tJKG_L-_Qn8#%7B%22pageId%22%3A%22C5RBs43oDa-KdzZeNtuy%22%7D`
-Any architectural or structural deviation from the diagram must be explicitly approved by the user and recorded in `.agents/notes/object_model.md`.
+Language and naming translations between the Czech reference diagram and English code identifiers are canonical standards and do not count as diagram deviations. Any architectural or structural deviation from the diagram must be explicitly approved by the user and recorded in `notes/object_model.md`.
 
 ### 4. Language Consistency
 All code, class names, method names, variables, comments, docstrings, commit messages, and documentation must be written in English.

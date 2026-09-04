@@ -26,11 +26,3 @@ class User:
     def getEloRating(self) -> int:
         return self.elo
 
-    # Czech aliases from diagram
-    uzivatelske_jmeno = property(lambda self: self.username)
-    jmeno = property(lambda self: self.name)
-    splnene_kwesty = property(lambda self: self.completed_quests)
-    pridej_quest = add_quest
-
-
-Uzivatel = User

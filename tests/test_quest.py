@@ -6,8 +6,6 @@ def test_quest_initialization():
     quest = Quest(name="First Blood", description="Capture your first piece", reward_points=25)
     assert quest.name == "First Blood"
     assert quest.description == "Capture your first piece"
-    assert quest.nazev == "First Blood"
-    assert quest.popis == "Capture your first piece"
     assert quest.reward_points == 25
     assert not quest.is_completed
 

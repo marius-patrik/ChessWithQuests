@@ -46,13 +46,3 @@ class Move:
             board.replace_piece(self.end_pos, self.promotion_piece)
         return success
 
-    # Czech aliases
-    over_platnost = validate
-    proved_tah = execute
-    vychozi_pozice = property(lambda self: self.start_pos)
-    cilova_pozice = property(lambda self: self.end_pos)
-    figurka = property(lambda self: self.piece)
-    typ_tahu = property(lambda self: self.move_type)
-
-
-Tah = Move

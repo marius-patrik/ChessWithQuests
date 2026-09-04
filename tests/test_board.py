@@ -1,5 +1,5 @@
 import pytest
-from model.game.board import Board, HerniPlocha
+from model.game.board import Board
 from model.pieces.pawn import Pawn
 from model.pieces.queen import Queen
 
@@ -50,8 +50,3 @@ def test_board_replace_piece():
     queen = Queen(1)
     board.replace_piece((6, 0), queen)
     assert board.get_piece_at((6, 0)) is queen
-
-
-def test_board_alias():
-    board = HerniPlocha()
-    assert board.vrat_obsah((0, 4)).getName() == "King"

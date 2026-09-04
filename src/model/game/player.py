@@ -28,5 +28,3 @@ class Player:
     get_color = getColor
     get_user = getUser
 
-
-Hrac = Player
