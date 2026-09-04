@@ -25,3 +25,6 @@ All changes, features, refactors, and bug fixes must be developed on dedicated t
 
 ### 8. Automated Code Formatting
 All Python code must conform to Black formatting standards (`tool.black` configuration with line length 100). The GitHub Actions bot automatically formats the entire codebase on every push across branches and commits any formatting adjustments.
+
+### 9. Issue Binding & Lifecycle Management
+Every pull request must bind a tracked GitHub issue using closing keywords in the PR description (e.g. `Closes #123`, `Fixes #123`, or `Resolves #123`). Merging the pull request automatically closes the bound issue, and the remote branch is automatically deleted by GitHub upon merge and must be pruned/deleted locally. All issues created are automatically added to the GitHub project board with automated status movements based on lifecycle events and labels (`Backlog`, `ToDo`, `In Progress`, `Blocked`, `Done`).

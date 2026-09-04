@@ -17,3 +17,20 @@ def test_agents_rule_mandates_branches_prs_ci_and_protection():
     assert "ci" in lower_content
     assert "protect" in lower_content
     assert "main" in lower_content
+
+
+def test_agents_rule_mandates_bound_issue_autoclose_and_project_automation():
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    agents_file = os.path.join(repo_root, "AGENTS.md")
+
+    with open(agents_file, encoding="utf-8") as f:
+        content = f.read()
+
+    lower_content = content.lower()
+    assert "closes" in lower_content or "bound issue" in lower_content
+    assert "project board" in lower_content or "project" in lower_content
+    assert "deleted" in lower_content
+    assert "in progress" in lower_content
+    assert "backlog" in lower_content
+    assert "todo" in lower_content or "to do" in lower_content
+    assert "blocked" in lower_content
