@@ -1,0 +1,39 @@
+name: Open Pull Request
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Head branch name (e.g. feature/my-feature)'
+        required: true
+      title:
+        description: 'Pull request title'
+        required: true
+      body:
+        description: 'Pull request description'
+        required: true
+      base:
+        description: 'Target base branch'
+        required: false
+        default: 'main'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  open-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create Pull Request as GitHub Actions Bot
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --head "${{ inputs.branch }}" \
+            --base "${{ inputs.base }}" \
+            --title "${{ inputs.title }}" \
+            --body "${{ inputs.body }}"

@@ -34,3 +34,28 @@ def test_agents_rule_mandates_bound_issue_autoclose_and_project_automation():
     assert "backlog" in lower_content
     assert "todo" in lower_content or "to do" in lower_content
     assert "blocked" in lower_content
+
+
+def test_agents_rule_mandates_implementation_plan_and_review():
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    agents_file = os.path.join(repo_root, "AGENTS.md")
+
+    with open(agents_file, encoding="utf-8") as f:
+        content = f.read()
+
+    lower_content = content.lower()
+    assert "implementation plan" in lower_content
+    assert "review" in lower_content
+    assert "matches plan" in lower_content or "plan alignment" in lower_content
+
+
+def test_agents_rule_mandates_pr_review_approval():
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    agents_file = os.path.join(repo_root, "AGENTS.md")
+
+    with open(agents_file, encoding="utf-8") as f:
+        content = f.read()
+
+    lower_content = content.lower()
+    assert "review approval" in lower_content or "approving review" in lower_content
+    assert "marius-patrik" in content
