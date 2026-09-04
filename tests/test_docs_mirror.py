@@ -24,3 +24,17 @@ def test_documentation_mirrors_code_structure():
     assert checked_count == 27, f"Expected 27 Python modules, found {checked_count}"
     assert missing_docs == [], f"Missing documentation files in docs/: {missing_docs}"
 
+
+def test_verify_docs_workflow_exists():
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    workflow_path = os.path.join(repo_root, ".github", "workflows", "verify-docs.yml")
+
+    assert os.path.isfile(workflow_path), "verify-docs.yml workflow must exist"
+    with open(workflow_path, encoding="utf-8") as f:
+        content = f.read()
+
+    assert "Verify Docs Layout" in content
+    assert "src" in content and "docs" in content
+    assert "test_docs_mirror.py" in content
+
+

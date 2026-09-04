@@ -1,0 +1,54 @@
+name: Verify Docs Layout
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  verify-docs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+
+      - name: Verify documentation layout mirrors src layout
+        run: |
+          python -c '
+          import os, sys
+          repo_root = os.getcwd()
+          src_dir = os.path.join(repo_root, "src")
+          docs_dir = os.path.join(repo_root, "docs")
+          missing = []
+          count = 0
+          for root, _, files in os.walk(src_dir):
+              for f in files:
+                  if f.endswith(".py"):
+                      count += 1
+                      rel_path = os.path.relpath(os.path.join(root, f), src_dir)
+                      doc_rel = os.path.splitext(rel_path)[0] + ".md"
+                      doc_path = os.path.join(docs_dir, doc_rel)
+                      if not os.path.isfile(doc_path):
+                          missing.append(doc_rel)
+          print(f"Verified {count} source files have corresponding docs.")
+          if missing:
+              print(f"Missing doc files in docs/: {missing}", file=sys.stderr)
+              sys.exit(1)
+          '
+
+      - name: Run docs mirror tests
+        run: |
+          pytest -v tests/test_docs_mirror.py
