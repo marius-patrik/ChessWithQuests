@@ -1,3 +1,3 @@
 # ChessWithQuests
-Školní projekt hry šachy s definovatelnými figurkami, hrací deskou a kvesty.
-Společná repository všech studentů.
+School project of a chess game with customizable pieces, board, and quests.
+Shared repository of all students.

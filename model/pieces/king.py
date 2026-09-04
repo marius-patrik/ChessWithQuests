@@ -8,9 +8,9 @@ except ImportError:
 
 
 class King(Piece):
-    def __init__(self, barva, typ):
-        super().__init__(barva, typ)
-        self._vektory = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+    def __init__(self, color, piece_type):
+        super().__init__(color, piece_type)
+        self._vectors = [(0, 1), (0, -1), (1, 0), (-1, 0)]
 
-    def getSmery(self):
-        return self._vektory
+    def getDirections(self):
+        return self._vectors

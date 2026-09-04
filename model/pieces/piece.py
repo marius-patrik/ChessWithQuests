@@ -1,20 +1,20 @@
 class Piece:
-    def __init__(self, barva, typ):
-        self.__barva = barva
-        self._typ = typ
-        self._vektory = None
+    def __init__(self, color, piece_type):
+        self.__color = color
+        self._type = piece_type
+        self._vectors = None
 
-    def getSmery(self):
-        return self._vektory
+    def getDirections(self):
+        return self._vectors
 
-    def getBarva(self):
-        return self.__barva
+    def getColor(self):
+        return self.__color
 
-    def getTyp(self):
-        return self._typ
+    def getType(self):
+        return self._type
 
 
 if __name__ == "__main__":
     piece = Piece(1, False)
-    print(piece.getSmery())
-    print(piece.getBarva())
+    print(piece.getDirections())
+    print(piece.getColor())
