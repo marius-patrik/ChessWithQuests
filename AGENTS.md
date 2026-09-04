@@ -30,3 +30,10 @@ All Python code must conform to Black formatting standards (`tool.black` configu
 
 ### 9. Issue Binding & Lifecycle Management
 Every pull request must bind a tracked GitHub issue using closing keywords in the PR description (e.g. `Closes #123`, `Fixes #123`, or `Resolves #123`). Merging the pull request automatically closes the bound issue, and the remote branch is automatically deleted by GitHub upon merge and must be pruned/deleted locally. All issues created are automatically added to the GitHub project board with automated status movements based on lifecycle events and labels (`Backlog`, `ToDo`, `In Progress`, `Blocked`, `Done`).
+
+### 10. Pre-Implementation Planning & Plan Review
+Before starting implementation on any issue, an agent must post a comprehensive implementation plan as a comment on the bound GitHub issue detailing objectives, architectural/code changes, and verification steps. Prior to merging the bound pull request, a review must be conducted and commented on the issue confirming that the implementation matches the plan exactly (`Matches Plan: Yes`). If the implementation diverged from the plan, an alignment comment (`Plan Alignment:`) detailing all deviations must be posted and explicitly approved before the pull request can be merged. Automated CI checks enforce the presence of both the plan and the pre-merge review on all bound issues.
+
+### 11. Pull Request Review Approval Enforcement
+Pull requests require official GitHub review approval from the user (`marius-patrik`) before merging. Direct self-merges without user review approval are strictly prohibited. The `main` branch protection requires at least 1 approving review from an authorized reviewer. Pull requests created by automation are authored via GitHub Actions (`github-actions[bot]`) so that the repository owner (`marius-patrik`) can submit approving reviews on GitHub without restriction.
+
