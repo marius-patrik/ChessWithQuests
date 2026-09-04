@@ -24,3 +24,11 @@ def test_agents_and_symlinks_resolve():
     assert "ChessWithQuests" in readme_content
     assert readme_content == agents_content
     assert contrib_content == agents_content
+
+    docs_symlink = os.path.join(repo_root, "docs")
+    notes_symlink = os.path.join(repo_root, "notes")
+    assert os.path.islink(docs_symlink), "docs must be a symlink at root"
+    assert os.path.islink(notes_symlink), "notes must be a symlink at root"
+    assert os.path.exists(os.path.join(docs_symlink, "controller")), "docs symlink must resolve to docs folder"
+    assert os.path.exists(os.path.join(notes_symlink, "object_model.md")), "notes symlink must resolve to notes folder"
+
