@@ -11,10 +11,10 @@ def test_agents_and_symlinks_resolve():
 
     assert os.path.exists(agents_file), "AGENTS.md must exist at root"
     assert not os.path.islink(agents_file), "AGENTS.md must be a real file at root"
-    assert os.path.islink(readme_file), "README.md must be a symlink"
+    assert os.path.exists(readme_file), "README.md must exist at root"
+    assert not os.path.islink(readme_file), "README.md must be a real file and not a symlink"
     assert os.path.islink(contributing_file), "CONTRIBUTING.md must be a symlink"
     assert os.path.islink(claude_file), "CLAUDE.md must be a symlink at root"
-    assert os.readlink(readme_file) == "AGENTS.md"
     assert os.readlink(contributing_file) == "AGENTS.md"
     assert os.readlink(claude_file) == "AGENTS.md"
 
@@ -45,7 +45,9 @@ def test_agents_and_symlinks_resolve():
         agents_claude_content = f.read()
 
     assert "ChessWithQuests" in readme_content
-    assert readme_content == agents_content
+    assert "School project of a chess game" in readme_content
+    assert "ChessWithQuests" not in agents_content
+    assert "Repository Development Guidelines & Agent Rules" in agents_content
     assert contrib_content == agents_content
     assert claude_content == agents_content
     assert agents_agents_content == agents_content

@@ -1,14 +1,4 @@
-# ChessWithQuests
-
-School project of a chess game with customizable pieces, board, and quests.
-Shared repository of all students.
-
-## Project Overview
-ChessWithQuests is an extensible modular chess engine and desktop application built in Python following the Model-View-Controller (MVC) architectural pattern. It supports standard chess rules as well as custom board configurations, customizable pieces with configurable movement and attack vectors, and an in-game quest system.
-
----
-
-## Repository Development Guidelines & Agent Rules
+# Repository Development Guidelines & Agent Rules
 
 ### 1. Unit Tests with Every Commit
 Every commit that adds or modifies code, classes, or methods must be accompanied by corresponding unit tests in the `tests/` directory. All tests must pass locally via `pytest` before committing or pushing.
