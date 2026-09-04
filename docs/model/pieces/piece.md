@@ -4,7 +4,7 @@
 Maps directly to **`Figurka`** in the reference architecture diagram.
 
 ## Classes
-### `Piece` (Alias: `Figurka`)
+### `Piece`
 Base class for all chess pieces.
 
 #### Attributes
@@ -16,9 +16,9 @@ Base class for all chess pieces.
 - `_name`: Human-readable piece name.
 
 #### Methods
-- `getColor() -> Any` (`getBarva`): Returns color identifier.
-- `getType() -> Any` (`getTyp`): Returns type string.
+- `getColor() -> Any`: Returns color identifier.
+- `getType() -> Any`: Returns type string.
 - `getName() -> str`: Returns piece name.
-- `getDirections() -> Optional[List[Tuple[int, int]]]` (`getSmery`): Returns move directions.
+- `getDirections() -> Optional[List[Tuple[int, int]]]`: Returns move directions.
 - `getAttackDirections() -> List[Tuple[int, int]]`: Returns attack directions.
 - `canJump() -> bool`: Returns jumping capability.

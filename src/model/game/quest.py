@@ -28,6 +28,3 @@ class Quest:
     def complete(self) -> None:
         self.is_completed = True
 
-    # Czech aliases from diagram
-    nazev = property(lambda self: self.name)
-    popis = property(lambda self: self.description)

@@ -20,7 +20,7 @@ def test_logger_with_file(tmp_path):
     assert os.path.exists(log_file)
 
     move = Move((1, 0), (3, 0), move_type="double_step")
-    logger.uloz_tah(move)
+    logger.log_move(move)
 
     with open(log_file) as f:
         content = f.read()

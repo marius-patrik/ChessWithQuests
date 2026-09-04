@@ -97,9 +97,3 @@ class Board:
         for c in range(8):
             self.board[6][c] = Pawn(-1)
 
-    # Aliases to match diagram terminology
-    vrat_obsah = get_piece_at
-    nahrad_figurku = replace_piece
-
-
-HerniPlocha = Board

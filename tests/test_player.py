@@ -1,5 +1,5 @@
 import pytest
-from model.game.player import Player, Hrac
+from model.game.player import Player
 
 
 class MockUser:
@@ -28,8 +28,3 @@ def test_player_set_user():
     user = MockUser("beginner", 1000)
     player.setUser(user)
     assert player.getEloRating() == 1000
-
-
-def test_hrac_alias():
-    hrac = Hrac(1)
-    assert hrac.get_color() == 1

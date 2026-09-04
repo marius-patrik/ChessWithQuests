@@ -4,12 +4,12 @@
 Maps directly to **`Hrac`** in the reference architecture diagram.
 
 ## Classes
-### `Player` (Alias: `Hrac`)
+### `Player`
 Represents a game participant.
 
 #### Attributes
-- `color: int` (`+ barva : integer`): Player color (`1` for White, `-1` for Black).
-- `user: Optional[User]` (`+ uzivatel : Uzivatel`): Linked user account profile.
+- `color: int`: Player color (`1` for White, `-1` for Black).
+- `user: Optional[User]`: Linked user account profile.
 
 #### Methods
 - `getColor() -> int`: Returns assigned color code.

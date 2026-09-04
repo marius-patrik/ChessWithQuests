@@ -1,7 +1,7 @@
 import pytest
 from model.game.board import Board
 from model.game.move import Move
-from model.game.validator import MoveValidator, RevizorTahu
+from model.game.validator import MoveValidator
 from model.pieces.king import King
 from model.pieces.queen import Queen
 from model.pieces.rook import Rook
@@ -34,7 +34,6 @@ def test_validator_check_detection():
     board.set_piece_at((7, 4), black_rook)
 
     assert validator.is_check(1) is True
-    assert validator.check_Sach(1) is True
     assert validator.is_check(-1) is False
 
 
@@ -51,7 +50,6 @@ def test_validator_checkmate():
     board.set_piece_at((1, 1), black_rook)
 
     assert validator.is_checkmate(1) is True
-    assert validator.check_Mat(1) is True
 
 
 def test_validator_stalemate():
@@ -68,7 +66,6 @@ def test_validator_stalemate():
 
     assert validator.is_check(1) is False
     assert validator.is_stalemate(1) is True
-    assert validator.check_Pat(1) is True
 
 
 def test_validator_simulate_move():
@@ -79,8 +76,3 @@ def test_validator_simulate_move():
     saved_state = validator.simulate_move()
     assert len(saved_state) == 2
     assert board.get_piece_at((2, 0)).getName() == "Pawn"
-
-
-def test_revizor_alias():
-    revizor = RevizorTahu()
-    assert isinstance(revizor, MoveValidator)

@@ -14,20 +14,19 @@ except ImportError:
     from ..pieces.king import King
 
 
-
 class MoveValidator:
     def __init__(self, board: Optional[Board] = None, move: Optional[Move] = None):
-        self.herni_plocha = board  # herni_plocha: HerníPlocha
-        self.tah = move            # tah: Tah
+        self.board = board
+        self.move = move
 
     def set_board(self, board: Board) -> None:
-        self.herni_plocha = board
+        self.board = board
 
     def set_move(self, move: Move) -> None:
-        self.tah = move
+        self.move = move
 
     def find_king(self, color: int, board: Optional[Board] = None) -> Optional[Tuple[int, int]]:
-        b = board or self.herni_plocha
+        b = board or self.board
         if b is None:
             return None
         for r in range(b.rows):
@@ -38,7 +37,7 @@ class MoveValidator:
         return None
 
     def is_square_attacked(self, target_square: Tuple[int, int], by_color: int, board: Optional[Board] = None) -> bool:
-        b = board or self.herni_plocha
+        b = board or self.board
         if b is None:
             return False
 
@@ -73,7 +72,7 @@ class MoveValidator:
         return False
 
     def is_check(self, color: int, board: Optional[Board] = None) -> bool:
-        b = board or self.herni_plocha
+        b = board or self.board
         if b is None:
             return False
         king_pos = self.find_king(color, b)
@@ -83,7 +82,7 @@ class MoveValidator:
         return self.is_square_attacked(king_pos, opponent_color, b)
 
     def get_pseudo_legal_moves(self, start_pos: Tuple[int, int], board: Optional[Board] = None) -> List[Tuple[int, int]]:
-        b = board or self.herni_plocha
+        b = board or self.board
         if b is None:
             return []
 
@@ -138,7 +137,7 @@ class MoveValidator:
         return moves
 
     def get_valid_moves(self, start_pos: Tuple[int, int], board: Optional[Board] = None) -> List[Tuple[int, int]]:
-        b = board or self.herni_plocha
+        b = board or self.board
         if b is None:
             return []
 
@@ -168,7 +167,7 @@ class MoveValidator:
         return legal_moves
 
     def get_all_valid_moves(self, color: int, board: Optional[Board] = None) -> List[Move]:
-        b = board or self.herni_plocha
+        b = board or self.board
         if b is None:
             return []
         all_moves: List[Move] = []
@@ -183,27 +182,27 @@ class MoveValidator:
         return all_moves
 
     def is_valid_move(self, move: Move, board: Optional[Board] = None) -> bool:
-        b = board or self.herni_plocha
+        b = board or self.board
         if b is None or not move.validate():
             return False
         valid_destinations = self.get_valid_moves(move.start_pos, b)
         return move.end_pos in valid_destinations
 
     def is_checkmate(self, color: int, board: Optional[Board] = None) -> bool:
-        b = board or self.herni_plocha
+        b = board or self.board
         if not self.is_check(color, b):
             return False
         return len(self.get_all_valid_moves(color, b)) == 0
 
     def is_stalemate(self, color: int, board: Optional[Board] = None) -> bool:
-        b = board or self.herni_plocha
+        b = board or self.board
         if self.is_check(color, b):
             return False
         return len(self.get_all_valid_moves(color, b)) == 0
 
     def simulate_move(self, move: Optional[Move] = None) -> List[Tuple[Tuple[int, int], Optional[Piece]]]:
-        m = move or self.tah
-        b = self.herni_plocha
+        m = move or self.move
+        b = self.board
         if m is None or b is None:
             return []
         saved_state = [
@@ -212,12 +211,3 @@ class MoveValidator:
         ]
         m.execute(b)
         return saved_state
-
-    # Czech aliases from diagram
-    check_Sach = is_check
-    check_Mat = is_checkmate
-    check_Pat = is_stalemate
-    simulate_Move = simulate_move
-
-
-RevizorTahu = MoveValidator
