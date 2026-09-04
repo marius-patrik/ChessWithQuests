@@ -1,17 +1,17 @@
 # GameLogger (`model/game/logger.py`)
 
 ## Diagram Reference
-Maps directly to **`GameLogger`** in the reference architecture diagram.
+Canonical English implementation of **`GameLogger`** from the architecture diagram.
 
 ## Classes
 ### `GameLogger`
 Records chronological moves in-memory and optionally appends to a disk file.
 
 #### Attributes
-- `soubor: Optional[str]`: Path to output log file (`soubor: File`).
+- `filename: Optional[str]`: Path to output log file.
 - `moves: List[Move]`: In-memory list of executed moves.
 
 #### Methods
-- `vytvor_soubor(filename: str) -> None` (`create_file`): Creates/initializes log file with header.
-- `uloz_tah(tah: Move) -> None` (`log_move`): Logs move coordinate and type.
+- `create_file(filename: str) -> None`: Creates/initializes log file with header.
+- `log_move(move: Move) -> None`: Logs move coordinate and type.
 - `get_moves() -> List[Move]`: Returns history of logged moves.

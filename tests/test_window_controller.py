@@ -48,6 +48,6 @@ def test_window_controller_square_clicks_and_timer():
     assert "Move played" in wc.status_message
 
     # Tick timer
-    initial_time = wc.game_controller.game_manager.casovac.get_time(-1)
+    initial_time = wc.game_controller.game_manager.timer.get_time(-1)
     wc.tick_timer()  # Black's turn now
-    assert wc.game_controller.game_manager.casovac.get_time(-1) == initial_time - 1
+    assert wc.game_controller.game_manager.timer.get_time(-1) == initial_time - 1

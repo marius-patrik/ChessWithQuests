@@ -15,10 +15,10 @@ class GameController:
         self.highlighted_moves: List[Tuple[int, int]] = []
 
     def select_square(self, pos: Tuple[int, int]) -> List[Tuple[int, int]]:
-        piece = self.game_manager.plocha.get_piece_at(pos)
-        if piece is not None and piece.getColor() == self.game_manager.aktivni_hrac:
+        piece = self.game_manager.board.get_piece_at(pos)
+        if piece is not None and piece.getColor() == self.game_manager.active_player:
             self.selected_square = pos
-            self.highlighted_moves = self.game_manager.revizor_tahu.get_valid_moves(pos, self.game_manager.plocha)
+            self.highlighted_moves = self.game_manager.move_validator.get_valid_moves(pos, self.game_manager.board)
             return list(self.highlighted_moves)
         self.selected_square = None
         self.highlighted_moves = []
@@ -33,8 +33,8 @@ class GameController:
                 "valid_moves": moves,
             }
         else:
-            piece = self.game_manager.plocha.get_piece_at(pos)
-            if piece is not None and piece.getColor() == self.game_manager.aktivni_hrac:
+            piece = self.game_manager.board.get_piece_at(pos)
+            if piece is not None and piece.getColor() == self.game_manager.active_player:
                 moves = self.select_square(pos)
                 return {
                     "action": "reselected",
@@ -53,7 +53,7 @@ class GameController:
                 "success": success,
                 "from": prev_selected,
                 "to": pos,
-                "game_state": self.game_manager.get_stav(),
+                "game_state": self.game_manager.get_state(),
             }
 
     def reset_selection(self) -> None:

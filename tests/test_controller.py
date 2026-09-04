@@ -25,7 +25,7 @@ def test_controller_select_and_move_flow():
     assert res2["success"] is True
     assert ctrl.selected_square is None
     # Next turn is Black's turn (-1)
-    assert ctrl.game_manager.aktivni_hrac == -1
+    assert ctrl.game_manager.active_player == -1
 
 
 def test_controller_reselect():
@@ -44,8 +44,8 @@ def test_controller_new_game():
     ctrl = GameController()
     ctrl.handle_square_click((1, 4))
     ctrl.handle_square_click((3, 4))
-    assert ctrl.game_manager.aktivni_hrac == -1
+    assert ctrl.game_manager.active_player == -1
 
     ctrl.new_game()
-    assert ctrl.game_manager.aktivni_hrac == 1
+    assert ctrl.game_manager.active_player == 1
     assert ctrl.selected_square is None

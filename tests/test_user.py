@@ -1,5 +1,5 @@
 import pytest
-from model.users.user import User, Uzivatel
+from model.users.user import User
 
 
 def test_user_initialization():
@@ -20,11 +20,3 @@ def test_user_add_quest():
     user.add_quest(quest2)
     user.add_quest(quest1)  # duplicate should not be added again
     assert user.get_completed_quests() == [quest1, quest2]
-
-
-def test_user_diagram_aliases():
-    user = Uzivatel(username="charlie", name="Charlie Brown")
-    assert user.uzivatelske_jmeno == "charlie"
-    assert user.jmeno == "Charlie Brown"
-    user.pridej_quest("play_5_games")
-    assert user.splnene_kwesty == ["play_5_games"]

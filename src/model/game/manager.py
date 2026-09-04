@@ -31,57 +31,52 @@ class GameManager:
         logger: Optional[GameLogger] = None,
         validator: Optional[MoveValidator] = None,
     ):
-        self.plocha: Board = board or Board()
-        self.hraci: List[Player] = players or [Player(1), Player(-1)]
-        self.aktivni_hrac: int = 1
-        self.aktualni_tah: Optional[Move] = None
-        self.casovac: Timer = timer or Timer()
+        self.board: Board = board or Board()
+        self.players: List[Player] = players or [Player(1), Player(-1)]
+        self.active_player: int = 1
+        self.current_move: Optional[Move] = None
+        self.timer: Timer = timer or Timer()
         self.game_logger: GameLogger = logger or GameLogger()
-        self.revizor_tahu: MoveValidator = validator or MoveValidator(self.plocha)
+        self.move_validator: MoveValidator = validator or MoveValidator(self.board)
 
-    def zacni_tah(self) -> Optional[Move]:
-        self.aktualni_tah = None
-        return self.aktualni_tah
+    def start_turn(self) -> Optional[Move]:
+        self.current_move = None
+        return self.current_move
 
-    def mozne_tahy(self) -> List[Move]:
-        return self.revizor_tahu.get_all_valid_moves(self.aktivni_hrac, self.plocha)
+    def get_valid_moves(self) -> List[Move]:
+        return self.move_validator.get_all_valid_moves(self.active_player, self.board)
 
-    def zrus_tah(self) -> None:
-        self.aktualni_tah = None
+    possible_moves = get_valid_moves
 
-    def uloz_log(self) -> None:
+    def cancel_move(self) -> None:
+        self.current_move = None
+
+    def save_log(self) -> None:
         pass
 
-    def get_stav(self) -> int:
-        if self.casovac.is_expired(self.aktivni_hrac):
+    def get_state(self) -> int:
+        if self.timer.is_expired(self.active_player):
             return self.STATE_TIMEOUT
-        if self.revizor_tahu.is_checkmate(self.aktivni_hrac, self.plocha):
+        if self.move_validator.is_checkmate(self.active_player, self.board):
             return self.STATE_CHECKMATE
-        if self.revizor_tahu.is_stalemate(self.aktivni_hrac, self.plocha):
+        if self.move_validator.is_stalemate(self.active_player, self.board):
             return self.STATE_STALEMATE
-        if self.revizor_tahu.is_check(self.aktivni_hrac, self.plocha):
+        if self.move_validator.is_check(self.active_player, self.board):
             return self.STATE_CHECK
         return self.STATE_IN_PROGRESS
 
     def make_move(self, move: Move) -> bool:
-        if not self.revizor_tahu.is_valid_move(move, self.plocha):
+        if not self.move_validator.is_valid_move(move, self.board):
             return False
-        piece = self.plocha.get_piece_at(move.start_pos)
-        if piece is None or piece.getColor() != self.aktivni_hrac:
+        piece = self.board.get_piece_at(move.start_pos)
+        if piece is None or piece.getColor() != self.active_player:
             return False
 
-        success = move.execute(self.plocha)
+        success = move.execute(self.board)
         if not success:
             return False
 
-        self.aktualni_tah = move
-        self.game_logger.uloz_tah(move)
-        self.aktivni_hrac = -1 if self.aktivni_hrac == 1 else 1
+        self.current_move = move
+        self.game_logger.log_move(move)
+        self.active_player = -1 if self.active_player == 1 else 1
         return True
-
-    # English aliases
-    start_turn = zacni_tah
-    possible_moves = mozne_tahy
-    cancel_move = zrus_tah
-    save_log = uloz_log
-    get_state = get_stav
