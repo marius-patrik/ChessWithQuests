@@ -19,3 +19,6 @@ Keep commits modular, focused, and descriptive. When implementing components fro
 
 ### 6. CI Readiness & Verification
 Every push must maintain green status on GitHub Actions CI across all matrix Python versions (`3.10`, `3.11`, `3.12`, `3.13`).
+
+### 7. Branch & Pull Request Workflow
+All changes, features, refactors, and bug fixes must be developed on dedicated topic/feature branches and submitted through GitHub Pull Requests. Direct commits and pushes to the `main` branch are strictly prohibited. Every pull request requires all GitHub Actions CI checks (`CI` matrix and `Verify Docs Layout`) to pass green before merging. The `main` branch must remain protected at all times with required status checks and pull request enforcement.
