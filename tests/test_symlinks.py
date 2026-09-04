@@ -4,13 +4,15 @@ import pytest
 
 def test_agents_and_symlinks_resolve():
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    agents_file = os.path.join(repo_root, ".agents", "agents.md")
+    agents_file = os.path.join(repo_root, ".agents", "AGENTS.md")
     readme_file = os.path.join(repo_root, "README.md")
-    contributing_file = os.path.join(repo_root, "contributing.md")
+    contributing_file = os.path.join(repo_root, "CONTRIBUTING.md")
 
-    assert os.path.exists(agents_file), ".agents/agents.md must exist"
+    assert os.path.exists(agents_file), ".agents/AGENTS.md must exist"
     assert os.path.islink(readme_file), "README.md must be a symlink"
-    assert os.path.islink(contributing_file), "contributing.md must be a symlink"
+    assert os.path.islink(contributing_file), "CONTRIBUTING.md must be a symlink"
+    assert os.readlink(readme_file) == ".agents/AGENTS.md"
+    assert os.readlink(contributing_file) == ".agents/AGENTS.md"
 
     with open(agents_file, encoding="utf-8") as f:
         agents_content = f.read()
