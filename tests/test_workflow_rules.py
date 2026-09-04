@@ -59,3 +59,16 @@ def test_agents_rule_mandates_pr_review_approval():
     lower_content = content.lower()
     assert "review approval" in lower_content or "approving review" in lower_content
     assert "marius-patrik" in content
+
+
+def test_agents_rule_mandates_user_request_issue_and_verbatim_prompt():
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    agents_file = os.path.join(repo_root, "AGENTS.md")
+
+    with open(agents_file, encoding="utf-8") as f:
+        content = f.read()
+
+    lower_content = content.lower()
+    assert "user request" in lower_content
+    assert "issue" in lower_content
+    assert "verbatim" in lower_content

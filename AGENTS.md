@@ -37,3 +37,6 @@ Before starting implementation on any issue, an agent must post a comprehensive 
 ### 11. Pull Request Review Approval Enforcement
 Pull requests require official GitHub review approval from the user (`marius-patrik`) before merging. Direct self-merges without user review approval are strictly prohibited. The `main` branch protection requires at least 1 approving review from an authorized reviewer. Pull requests created by automation are authored via GitHub Actions (`github-actions[bot]`) so that the repository owner (`marius-patrik`) can submit approving reviews on GitHub without restriction.
 
+### 12. User Request Issue Creation & Verbatim Prompt Requirement
+Every user request or prompt must immediately be converted into a tracked GitHub issue before any planning, branching, or implementation starts. The issue body must contain the exact, verbatim text of the user's request. All subsequent planning comments, branches, and pull requests must bind directly to this issue.
+
