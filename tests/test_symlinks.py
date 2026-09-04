@@ -27,10 +27,20 @@ def test_agents_and_symlinks_resolve():
     assert readme_content == agents_content
     assert contrib_content == agents_content
 
-    docs_symlink = os.path.join(repo_root, "docs")
-    notes_symlink = os.path.join(repo_root, "notes")
-    assert os.path.islink(docs_symlink), "docs must be a symlink at root"
-    assert os.path.islink(notes_symlink), "notes must be a symlink at root"
-    assert os.path.exists(os.path.join(docs_symlink, "controller")), "docs symlink must resolve to docs folder"
-    assert os.path.exists(os.path.join(notes_symlink, "object_model.md")), "notes symlink must resolve to notes folder"
+    docs_dir = os.path.join(repo_root, "docs")
+    notes_dir = os.path.join(repo_root, "notes")
+    assert os.path.isdir(docs_dir), "docs must be a real directory at root"
+    assert not os.path.islink(docs_dir), "docs must not be a symlink at root"
+    assert os.path.isdir(notes_dir), "notes must be a real directory at root"
+    assert not os.path.islink(notes_dir), "notes must not be a symlink at root"
+
+    agents_docs = os.path.join(repo_root, ".agents", "docs")
+    agents_notes = os.path.join(repo_root, ".agents", "notes")
+    assert os.path.islink(agents_docs), ".agents/docs must be a symlink"
+    assert os.path.islink(agents_notes), ".agents/notes must be a symlink"
+    assert os.readlink(agents_docs) == "../docs"
+    assert os.readlink(agents_notes) == "../notes"
+    assert os.path.exists(os.path.join(agents_docs, "controller")), ".agents/docs must resolve to docs folder"
+    assert os.path.exists(os.path.join(agents_notes, "object_model.md")), ".agents/notes must resolve to notes folder"
+
 
