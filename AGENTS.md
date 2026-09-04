@@ -4,7 +4,7 @@
 Every commit that adds or modifies code, classes, or methods must be accompanied by corresponding unit tests in the `tests/` directory. All tests must pass locally via `pytest` before committing or pushing.
 
 ### 2. Documentation with Every Commit
-The repository maintains a `docs/` directory that mirrors the project structure with a corresponding `.md` documentation file for each Python source file. Every commit that creates or updates code must also create or update the respective documentation in `docs/`.
+The repository maintains a `docs/` directory that mirrors the project structure with a corresponding `.md` documentation file for each Python source file. Every commit that creates or updates code must also create or update the respective documentation in `docs/`. Furthermore, the documentation index (`DOCS.md` and its symlink `docs/INDEX.md`) must be updated with every docs change whenever documentation files are added, removed, or modified.
 
 ### 3. Object Model Conformance
 The object model must strictly adhere to the reference architecture diagram:

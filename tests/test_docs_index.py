@@ -37,3 +37,16 @@ def test_docs_md_and_index_symlink():
             if file.endswith(".md") and file != "INDEX.md":
                 rel_path = os.path.relpath(os.path.join(root, file), repo_root)
                 assert rel_path in docs_content, f"Documentation file {rel_path} must be referenced in DOCS.md"
+
+
+def test_agents_rule_requires_index_update():
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    agents_file = os.path.join(repo_root, "AGENTS.md")
+
+    with open(agents_file, encoding="utf-8") as f:
+        content = f.read()
+
+    assert "DOCS.md" in content
+    assert "INDEX.md" in content
+    assert "updated with every docs change" in content or "index" in content.lower()
+
