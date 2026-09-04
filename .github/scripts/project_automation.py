@@ -38,6 +38,8 @@ def extract_bound_issues(pr_body: Optional[str]) -> List[int]:
 def determine_status_from_labels(labels: List[str]) -> str:
     """Determine project board status from issue labels."""
     normalized = {lbl.strip().lower(): lbl for lbl in labels}
+    if "done" in normalized:
+        return "Done"
     if "blocked" in normalized:
         return "Blocked"
     if "in progress" in normalized:
@@ -164,6 +166,12 @@ def process_event(
             if item_id:
                 client.edit_status(item_id, "Done")
                 print(f"Issue {issue_url} status updated to Done")
+            issue_number = issue.get("number")
+            repo_full_name = payload.get("repository", {}).get(
+                "full_name", "marius-patrik/ChessWithQuests"
+            )
+            if issue_number:
+                client.add_issue_label(repo_full_name, issue_number, "Done")
 
     elif event_name == "pull_request":
         action = payload.get("action")
@@ -189,6 +197,7 @@ def process_event(
         elif action == "closed" and merged:
             for issue_num in bound_issues:
                 issue_url = f"https://github.com/{repo_full_name}/issues/{issue_num}"
+                client.add_issue_label(repo_full_name, issue_num, "Done")
                 item_id = client.add_item(issue_url)
                 if item_id:
                     client.edit_status(item_id, "Done")

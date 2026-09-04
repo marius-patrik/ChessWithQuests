@@ -33,6 +33,7 @@ def test_determine_status_from_labels():
     assert determine_status_from_labels(["enhancement", "In Progress"]) == "In Progress"
     assert determine_status_from_labels(["Backlog"]) == "Backlog"
     assert determine_status_from_labels(["ToDo"]) == "ToDo"
+    assert determine_status_from_labels(["Done"]) == "Done"
     assert determine_status_from_labels(["random", "label"]) == "ToDo"
     assert determine_status_from_labels([]) == "ToDo"
 
@@ -74,13 +75,16 @@ def test_process_event_issue_closed():
     client = MockGitHubProjectClient()
     payload = {
         "action": "closed",
+        "repository": {"full_name": "marius-patrik/ChessWithQuests"},
         "issue": {
-            "html_url": "https://github.com/test/repo/issues/1",
+            "number": 1,
+            "html_url": "https://github.com/marius-patrik/ChessWithQuests/issues/1",
             "labels": [],
         },
     }
     process_event("issues", payload, client=client)
     assert client.edited_statuses == [("item-1", "Done")]
+    assert client.added_labels == [("marius-patrik/ChessWithQuests", 1, "Done")]
 
 
 def test_process_event_pr_opened_with_bound_issue():
@@ -108,6 +112,7 @@ def test_process_event_pr_merged_with_bound_issue():
         },
     }
     process_event("pull_request", payload, client=client)
+    assert client.added_labels == [("marius-patrik/ChessWithQuests", 5, "Done")]
     assert client.edited_statuses == [("item-1", "Done")]
 
 
