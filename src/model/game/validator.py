@@ -36,7 +36,9 @@ class MoveValidator:
                     return (r, c)
         return None
 
-    def is_square_attacked(self, target_square: Tuple[int, int], by_color: int, board: Optional[Board] = None) -> bool:
+    def is_square_attacked(
+        self, target_square: Tuple[int, int], by_color: int, board: Optional[Board] = None
+    ) -> bool:
         b = board or self.board
         if b is None:
             return False
@@ -56,7 +58,9 @@ class MoveValidator:
 
                 directions = piece.getAttackDirections()
                 can_jump = piece.canJump()
-                max_steps = 1 if (can_jump or piece.getType() == "king" or isinstance(piece, King)) else 8
+                max_steps = (
+                    1 if (can_jump or piece.getType() == "king" or isinstance(piece, King)) else 8
+                )
 
                 for dr, dc in directions:
                     step = 1
@@ -81,7 +85,9 @@ class MoveValidator:
         opponent_color = -1 if color == 1 else 1
         return self.is_square_attacked(king_pos, opponent_color, b)
 
-    def get_pseudo_legal_moves(self, start_pos: Tuple[int, int], board: Optional[Board] = None) -> List[Tuple[int, int]]:
+    def get_pseudo_legal_moves(
+        self, start_pos: Tuple[int, int], board: Optional[Board] = None
+    ) -> List[Tuple[int, int]]:
         b = board or self.board
         if b is None:
             return []
@@ -104,7 +110,10 @@ class MoveValidator:
                         if hasattr(piece, "getInitialVectors"):
                             for idr, idc in piece.getInitialVectors():
                                 inr, inc = r + idr, c + idc
-                                if b.is_within_bounds(inr, inc) and b.get_piece_at((inr, inc)) is None:
+                                if (
+                                    b.is_within_bounds(inr, inc)
+                                    and b.get_piece_at((inr, inc)) is None
+                                ):
                                     moves.append((inr, inc))
 
             # Pawn diagonal attacks
@@ -136,7 +145,9 @@ class MoveValidator:
                 step += 1
         return moves
 
-    def get_valid_moves(self, start_pos: Tuple[int, int], board: Optional[Board] = None) -> List[Tuple[int, int]]:
+    def get_valid_moves(
+        self, start_pos: Tuple[int, int], board: Optional[Board] = None
+    ) -> List[Tuple[int, int]]:
         b = board or self.board
         if b is None:
             return []
@@ -178,7 +189,9 @@ class MoveValidator:
                     destinations = self.get_valid_moves((r, c), b)
                     for dest in destinations:
                         move_type = "capture" if b.get_piece_at(dest) is not None else "normal"
-                        all_moves.append(Move(start_pos=(r, c), end_pos=dest, piece=piece, move_type=move_type))
+                        all_moves.append(
+                            Move(start_pos=(r, c), end_pos=dest, piece=piece, move_type=move_type)
+                        )
         return all_moves
 
     def is_valid_move(self, move: Move, board: Optional[Board] = None) -> bool:
@@ -200,7 +213,9 @@ class MoveValidator:
             return False
         return len(self.get_all_valid_moves(color, b)) == 0
 
-    def simulate_move(self, move: Optional[Move] = None) -> List[Tuple[Tuple[int, int], Optional[Piece]]]:
+    def simulate_move(
+        self, move: Optional[Move] = None
+    ) -> List[Tuple[Tuple[int, int], Optional[Piece]]]:
         m = move or self.move
         b = self.board
         if m is None or b is None:

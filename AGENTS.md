@@ -22,3 +22,6 @@ Every push must maintain green status on GitHub Actions CI across all matrix Pyt
 
 ### 7. Branch & Pull Request Workflow
 All changes, features, refactors, and bug fixes must be developed on dedicated topic/feature branches and submitted through GitHub Pull Requests. Direct commits and pushes to the `main` branch are strictly prohibited. Every pull request requires all GitHub Actions CI checks (`CI` matrix and `Verify Docs Layout`) to pass green before merging. The `main` branch must remain protected at all times with required status checks and pull request enforcement.
+
+### 8. Automated Code Formatting
+All Python code must conform to Black formatting standards (`tool.black` configuration with line length 100). The GitHub Actions bot automatically formats the entire codebase on every push across branches and commits any formatting adjustments.

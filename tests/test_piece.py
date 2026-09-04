@@ -43,4 +43,3 @@ def test_piece_default_attack_directions():
     piece = Piece(color=1, piece_type="simple", vectors=[(0, 1)])
     assert piece.getAttackDirections() == [(0, 1)]
     assert piece.canJump() is False
-

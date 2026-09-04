@@ -96,4 +96,3 @@ class Board:
         self.board[7][7] = Rook(-1)
         for c in range(8):
             self.board[6][c] = Pawn(-1)
-

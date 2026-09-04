@@ -18,7 +18,9 @@ class GameController:
         piece = self.game_manager.board.get_piece_at(pos)
         if piece is not None and piece.getColor() == self.game_manager.active_player:
             self.selected_square = pos
-            self.highlighted_moves = self.game_manager.move_validator.get_valid_moves(pos, self.game_manager.board)
+            self.highlighted_moves = self.game_manager.move_validator.get_valid_moves(
+                pos, self.game_manager.board
+            )
             return list(self.highlighted_moves)
         self.selected_square = None
         self.highlighted_moves = []

@@ -25,7 +25,9 @@ def test_docs_index_references_all_documentation():
         for file in files:
             if file.endswith(".md") and file != "INDEX.md":
                 rel_path = os.path.relpath(os.path.join(root, file), repo_root)
-                assert rel_path in docs_content, f"Documentation file {rel_path} must be referenced in DOCS.md"
+                assert (
+                    rel_path in docs_content
+                ), f"Documentation file {rel_path} must be referenced in DOCS.md"
 
 
 def test_agents_rule_requires_index_update():

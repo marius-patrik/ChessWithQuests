@@ -22,7 +22,9 @@ class GameLogger:
         if self.filename:
             move_str = str(move)
             if hasattr(move, "start_pos") and hasattr(move, "end_pos"):
-                move_str = f"{move.start_pos} -> {move.end_pos} ({getattr(move, 'move_type', 'normal')})"
+                move_str = (
+                    f"{move.start_pos} -> {move.end_pos} ({getattr(move, 'move_type', 'normal')})"
+                )
             with open(self.filename, "a", encoding="utf-8") as f:
                 f.write(f"{move_str}\n")
 
