@@ -1,7 +1,3 @@
-# Controller Package (`controller`)
+# Controller Package (`controller/__init__.py`)
 
-Package initialization file for the Controller layer of the application following the Model-View-Controller (MVC) architectural pattern.
-
-## Responsibilities
-- Exports core controllers including `GameController` and `WindowController`.
-- Coordinates user input and view events with underlying game model state.
+::: controller

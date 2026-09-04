@@ -1,15 +1,6 @@
-# King (`model/pieces/king.py`)
+# King Piece (`model/pieces/king.py`)
 
 ## Diagram Reference
-Maps directly to **`Král`** in the reference diagram.
+Maps directly to **`Kral`** in the reference architecture diagram.
 
-## Classes
-### `King` (Inherits from `Piece`)
-The central piece whose capture defines checkmate.
-
-#### Characteristics
-- `vectors`: 8 adjacent coordinates (orthogonal + diagonal).
-- `attack_vectors`: Same as movement vectors.
-- `can_jump`: `False` (step limited to 1 square).
-- `name`: `"King"`.
-- `has_moved`: Boolean flag tracking castling eligibility.
+::: pieces.king

@@ -1,7 +1,6 @@
-# Tower (`model/pieces/tower.py`)
+# Tower Piece (`model/pieces/tower.py`)
 
 ## Diagram Reference
-English synonym alias for **`Věž`** (Rook).
+Maps directly to **`Vez (Tower alias)`** in the reference architecture diagram.
 
-## Exports
-- `Tower = Rook`: Direct alias to `model.pieces.rook.Rook`.
+::: pieces.tower

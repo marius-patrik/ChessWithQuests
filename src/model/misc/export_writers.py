@@ -1,3 +1,5 @@
+"""Chess export writers converting games to PGN, FEN, and stenographic notation."""
+
 from typing import List, Optional, Any
 
 try:
@@ -9,14 +11,28 @@ except ImportError:
 
 
 class ExportWriter:
+    """Abstract base class for game export serialization writers."""
+
     def __init__(self):
+        """Initialize an ExportWriter instance."""
         self.field: str = ""
 
-    def export(self, *args, **kwargs) -> str:
+    def export(self, *args: Any, **kwargs: Any) -> str:
+        """Export game data into the target serialization format.
+
+        Args:
+            *args: Variable positional arguments.
+            **kwargs: Variable keyword arguments.
+
+        Raises:
+            NotImplementedError: Must be implemented by subclasses.
+        """
         raise NotImplementedError
 
 
 class ChessNotationWriter(ExportWriter):
+    """Serializes chess moves and board states into standard chess formats (PGN, FEN, stenographic)."""
+
     PIECE_CHARS = {
         "king": "k",
         "queen": "q",
@@ -28,9 +44,18 @@ class ChessNotationWriter(ExportWriter):
     }
 
     def __init__(self):
+        """Initialize a ChessNotationWriter instance."""
         super().__init__()
 
     def to_stenographic(self, moves: List[Any]) -> str:
+        """Convert a list of moves to stenographic coordinate format (e.g. 'e2e4 e7e5').
+
+        Args:
+            moves: List of Move instances with start_pos and end_pos.
+
+        Returns:
+            Space-delimited string of concatenated coordinate pairs.
+        """
         tokens = []
         for m in moves:
             start = pos_to_algebraic(m.start_pos)
@@ -39,6 +64,15 @@ class ChessNotationWriter(ExportWriter):
         return " ".join(tokens)
 
     def to_fen(self, board: Any, active_color: int = 1) -> str:
+        """Convert board state to Forsyth-Edwards Notation (FEN) string.
+
+        Args:
+            board: Board instance with rows, cols, and get_piece_at.
+            active_color: Active side color (1 for White, -1 for Black).
+
+        Returns:
+            FEN record string.
+        """
         ranks = []
         for r in range(7, -1, -1):
             empty = 0
@@ -67,6 +101,15 @@ class ChessNotationWriter(ExportWriter):
         return f"{board_fen} {turn} - - 0 1"
 
     def to_pgn(self, moves: List[Any], metadata: Optional[MetadataWriter] = None) -> str:
+        """Export game moves and metadata to Portable Game Notation (PGN) text.
+
+        Args:
+            moves: List of played Move instances.
+            metadata: Optional MetadataWriter instance providing PGN header tags.
+
+        Returns:
+            Complete PGN format string.
+        """
         headers = (
             metadata.format_pgn_headers() if metadata else '[Event "Casual Game"]\n[Result "*"]'
         )
@@ -92,7 +135,16 @@ class ChessNotationWriter(ExportWriter):
         result = metadata.get_header("Result", "*") if metadata else "*"
         return f"{headers}\n\n{moves_text} {result}".strip()
 
-    def export(self, format_type: str = "PGN", **kwargs) -> str:
+    def export(self, format_type: str = "PGN", **kwargs: Any) -> str:
+        """Export game information in the requested format ('PGN', 'FEN', or 'STENOGRAPHIC').
+
+        Args:
+            format_type: Format name case-insensitively ('PGN', 'FEN', 'STENOGRAPHIC').
+            **kwargs: Format-specific parameters ('moves', 'board', 'metadata', 'active_color').
+
+        Returns:
+            Serialized string representation.
+        """
         fmt = format_type.upper()
         if fmt == "PGN":
             return self.to_pgn(kwargs.get("moves", []), kwargs.get("metadata"))

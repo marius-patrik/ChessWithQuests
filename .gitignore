@@ -45,4 +45,9 @@ htmlcov/
 .idea/
 *.swp
 *.swo
+# Documentation build
+site/
+
 .DS_Store
+
+
