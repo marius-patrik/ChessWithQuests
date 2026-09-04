@@ -6,7 +6,7 @@ def test_docs_md_and_index_symlink():
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     docs_md = os.path.join(repo_root, "DOCS.md")
     index_md = os.path.join(repo_root, "docs", "INDEX.md")
-    agents_index_md = os.path.join(repo_root, ".agents", "docs", "INDEX.md")
+    agents_docs_md = os.path.join(repo_root, ".agents", "DOCS.md")
 
     assert os.path.exists(docs_md), "DOCS.md must exist at root"
     assert not os.path.islink(docs_md), "DOCS.md must be a real file"
@@ -15,8 +15,9 @@ def test_docs_md_and_index_symlink():
     assert os.path.islink(index_md), "docs/INDEX.md must be a symlink"
     assert os.readlink(index_md) == "../DOCS.md", "docs/INDEX.md must symlink to ../DOCS.md"
 
-    assert os.path.exists(agents_index_md), ".agents/docs/INDEX.md must exist"
-    assert os.path.islink(agents_index_md), ".agents/docs/INDEX.md must resolve via symlink"
+    assert os.path.exists(agents_docs_md), ".agents/DOCS.md must exist"
+    assert os.path.islink(agents_docs_md), ".agents/DOCS.md must be a symlink"
+    assert os.readlink(agents_docs_md) == "../DOCS.md", ".agents/DOCS.md must symlink to ../DOCS.md"
 
     with open(docs_md, encoding="utf-8") as f:
         docs_content = f.read()
@@ -24,11 +25,11 @@ def test_docs_md_and_index_symlink():
     with open(index_md, encoding="utf-8") as f:
         index_content = f.read()
 
-    with open(agents_index_md, encoding="utf-8") as f:
-        agents_index_content = f.read()
+    with open(agents_docs_md, encoding="utf-8") as f:
+        agents_docs_content = f.read()
 
     assert index_content == docs_content, "docs/INDEX.md content must match DOCS.md"
-    assert agents_index_content == docs_content, ".agents/docs/INDEX.md content must match DOCS.md"
+    assert agents_docs_content == docs_content, ".agents/DOCS.md content must match DOCS.md"
 
     # Verify that every documentation file in docs/ (except INDEX.md) is referenced in DOCS.md
     docs_dir = os.path.join(repo_root, "docs")

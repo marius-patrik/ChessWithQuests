@@ -80,11 +80,9 @@ def test_agents_and_symlinks_resolve():
 
     agents_docs = os.path.join(repo_root, ".agents", "docs")
     agents_notes = os.path.join(repo_root, ".agents", "notes")
-    assert os.path.islink(agents_docs), ".agents/docs must be a symlink"
+    assert not os.path.lexists(agents_docs), ".agents/docs symlink must be removed"
     assert os.path.islink(agents_notes), ".agents/notes must be a symlink"
-    assert os.readlink(agents_docs) == "../docs"
     assert os.readlink(agents_notes) == "../notes"
-    assert os.path.exists(os.path.join(agents_docs, "controller")), ".agents/docs must resolve to docs folder"
     assert os.path.exists(os.path.join(agents_notes, "object_model.md")), ".agents/notes must resolve to notes folder"
 
 
