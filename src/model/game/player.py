@@ -27,4 +27,3 @@ class Player:
     get_elo_rating = getEloRating
     get_color = getColor
     get_user = getUser
-

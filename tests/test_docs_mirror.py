@@ -32,5 +32,3 @@ def test_verify_docs_workflow_exists():
     assert "Verify Docs Layout" in content
     assert "src" in content and "docs" in content
     assert "test_docs_mirror.py" in content
-
-

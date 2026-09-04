@@ -1,4 +1,5 @@
 from typing import List, Optional, Any
+
 try:
     from model.misc.notation import pos_to_algebraic
     from model.misc.metadata import MetadataWriter
@@ -52,7 +53,11 @@ class ChessNotationWriter(ExportWriter):
                         empty = 0
                     ptype = piece.getType().lower() if hasattr(piece, "getType") else "p"
                     char = self.PIECE_CHARS.get(ptype, "p")
-                    rank_str += char.upper() if (piece.getColor() == 1 or piece.getColor() == "white") else char.lower()
+                    rank_str += (
+                        char.upper()
+                        if (piece.getColor() == 1 or piece.getColor() == "white")
+                        else char.lower()
+                    )
             if empty > 0:
                 rank_str += str(empty)
             ranks.append(rank_str)
@@ -62,13 +67,23 @@ class ChessNotationWriter(ExportWriter):
         return f"{board_fen} {turn} - - 0 1"
 
     def to_pgn(self, moves: List[Any], metadata: Optional[MetadataWriter] = None) -> str:
-        headers = metadata.format_pgn_headers() if metadata else '[Event "Casual Game"]\n[Result "*"]'
+        headers = (
+            metadata.format_pgn_headers() if metadata else '[Event "Casual Game"]\n[Result "*"]'
+        )
         move_pairs = []
         for i in range(0, len(moves), 2):
             move_num = (i // 2) + 1
-            w_move = pos_to_algebraic(moves[i].end_pos) if hasattr(moves[i], "end_pos") else str(moves[i])
+            w_move = (
+                pos_to_algebraic(moves[i].end_pos)
+                if hasattr(moves[i], "end_pos")
+                else str(moves[i])
+            )
             if i + 1 < len(moves):
-                b_move = pos_to_algebraic(moves[i + 1].end_pos) if hasattr(moves[i + 1], "end_pos") else str(moves[i + 1])
+                b_move = (
+                    pos_to_algebraic(moves[i + 1].end_pos)
+                    if hasattr(moves[i + 1], "end_pos")
+                    else str(moves[i + 1])
+                )
                 move_pairs.append(f"{move_num}. {w_move} {b_move}")
             else:
                 move_pairs.append(f"{move_num}. {w_move}")

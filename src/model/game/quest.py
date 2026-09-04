@@ -27,4 +27,3 @@ class Quest:
 
     def complete(self) -> None:
         self.is_completed = True
-

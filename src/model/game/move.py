@@ -45,4 +45,3 @@ class Move:
         if success and self.promotion_piece is not None:
             board.replace_piece(self.end_pos, self.promotion_piece)
         return success
-

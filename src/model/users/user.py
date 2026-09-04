@@ -25,4 +25,3 @@ class User:
 
     def getEloRating(self) -> int:
         return self.elo
-

@@ -22,7 +22,10 @@ def test_white_pawn_vectors():
 def test_black_pawn_vectors():
     pawn = Pawn(-1)
     assert pawn.getDirections() == [(-1, 0)]
-    assert pawn.getAttackDirections() == [(-1, 1), [(-1, -1)]] or pawn.getAttackDirections() == [(-1, 1), (-1, -1)]
+    assert pawn.getAttackDirections() == [(-1, 1), [(-1, -1)]] or pawn.getAttackDirections() == [
+        (-1, 1),
+        (-1, -1),
+    ]
     assert pawn.getInitialVectors() == [(-2, 0)]
 
 
