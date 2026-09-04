@@ -5,6 +5,7 @@ Comprehensive index of all architecture, module, and component documentation in 
 ---
 
 ## Table of Contents
+- [Source Root (`docs/__init__.md`)](#source-root)
 - [Controllers (`docs/controller/`)](#controllers)
 - [Model - Game Domain (`docs/model/game/`)](#model---game-domain)
 - [Model - Pieces (`docs/model/pieces/`)](#model---pieces)
@@ -12,6 +13,11 @@ Comprehensive index of all architecture, module, and component documentation in 
 - [Model - Miscellaneous & Notations (`docs/model/misc/`)](#model---miscellaneous--notations)
 - [Model Root (`docs/model/`)](#model-root)
 - [Views (`docs/view/`)](#views)
+
+---
+
+## Source Root
+- [docs/__init__.md](docs/__init__.md): Source package root initialization (`src/__init__.py`).
 
 ---
 
