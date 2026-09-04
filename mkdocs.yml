@@ -31,20 +31,19 @@ theme:
     - search.highlight
     - content.code.copy
 
-exclude_docs: "INDEX.md"
-
 hooks:
   - .github/scripts/mkdocs_hooks.py
 
 nav:
-  - Overview: __init__.md
+  - Overview: index.md
   - Controllers:
-      - controller/__init__.md
+      - controller/index.md
       - controller/controller.md
       - controller/window_controller.md
   - Model:
-      - model/__init__.md
+      - model/index.md
       - Pieces:
+          - model/pieces/index.md
           - model/pieces/piece.md
           - model/pieces/bishop.md
           - model/pieces/horse.md
@@ -54,6 +53,7 @@ nav:
           - model/pieces/rook.md
           - model/pieces/tower.md
       - Game:
+          - model/game/index.md
           - model/game/board.md
           - model/game/logger.md
           - model/game/manager.md
@@ -63,15 +63,17 @@ nav:
           - model/game/timer.md
           - model/game/validator.md
       - Users:
+          - model/users/index.md
           - model/users/user.md
           - model/users/manager.md
       - Miscellaneous:
+          - model/misc/index.md
           - model/misc/export_writers.md
           - model/misc/metadata.md
           - model/misc/notation.md
           - model/misc/quest_manager.md
   - View:
-      - view/__init__.md
+      - view/index.md
 
 markdown_extensions:
   - admonition
@@ -86,10 +88,9 @@ plugins:
   - mkdocstrings:
       handlers:
         python:
-          paths: [".", "src", "src/model"]
+          paths: [".", "src"]
           options:
             docstring_style: google
             show_root_heading: true
             show_source: true
             heading_level: 3
-

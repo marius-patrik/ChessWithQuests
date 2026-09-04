@@ -1,12 +1,62 @@
+"""Dynamic MkDocs hook for generating virtual documentation pages from Python docstrings."""
+
 import os
 import shutil
+from mkdocs.structure.files import File
+
+
+def on_files(files, config):
+    """Dynamically generate virtual markdown documentation pages for all Python modules in src/."""
+    if not hasattr(config.plugins, "_current_plugin"):
+        config.plugins._current_plugin = None
+
+    docs_dir = config["docs_dir"]
+    repo_root = os.path.abspath(os.path.join(docs_dir, ".."))
+    src_dir = os.path.join(repo_root, "src")
+
+    for root, _, filenames in os.walk(src_dir):
+        for f in sorted(filenames):
+            if not f.endswith(".py"):
+                continue
+
+            full_path = os.path.join(root, f)
+            rel_path = os.path.relpath(full_path, src_dir)
+            parts = rel_path.split(os.sep)
+            parts[-1] = os.path.splitext(parts[-1])[0]
+
+            if parts[-1] == "__init__":
+                if len(parts) == 1:
+                    # Root package overview is covered by docs/index.md
+                    continue
+                dotted_path = ".".join(parts[:-1])
+                doc_uri = "/".join(parts[:-1]) + "/index.md"
+                title = f"{parts[-2].capitalize()} Package (`{dotted_path}`)"
+            else:
+                dotted_path = ".".join(parts)
+                doc_uri = "/".join(parts) + ".md"
+                title = f"{parts[-1].capitalize()} (`{dotted_path}`)"
+
+            # Avoid collisions with static docs if already present
+            if files.get_file_from_path(doc_uri):
+                continue
+
+            content = f"# {title}\n\n::: {dotted_path}\n"
+            gen_file = File.generated(
+                config,
+                doc_uri,
+                content=content,
+            )
+            files.append(gen_file)
+
+    return files
 
 
 def on_post_build(config):
+    """Ensure site/index.html is available."""
     site_dir = config["site_dir"]
     index_html = os.path.join(site_dir, "index.html")
     if not os.path.exists(index_html):
-        for candidate in ["__init__/index.html", "INDEX/index.html"]:
+        for candidate in ["index.html", "__init__/index.html", "src/index.html"]:
             src = os.path.join(site_dir, candidate)
             if os.path.exists(src):
                 shutil.copyfile(src, index_html)

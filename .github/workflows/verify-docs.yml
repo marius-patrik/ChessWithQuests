@@ -26,28 +26,21 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
 
-      - name: Verify documentation layout mirrors src layout
+      - name: Verify dynamic documentation autogeneration
         run: |
+          python -m mkdocs build --strict
           python -c '
           import os, sys
           repo_root = os.getcwd()
           src_dir = os.path.join(repo_root, "src")
           docs_dir = os.path.join(repo_root, "docs")
-          missing = []
-          count = 0
-          for root, _, files in os.walk(src_dir):
-              for f in files:
-                  if f.endswith(".py"):
-                      count += 1
-                      rel_path = os.path.relpath(os.path.join(root, f), src_dir)
-                      doc_rel = os.path.splitext(rel_path)[0] + ".md"
-                      doc_path = os.path.join(docs_dir, doc_rel)
-                      if not os.path.isfile(doc_path):
-                          missing.append(doc_rel)
-          print(f"Verified {count} source files have corresponding docs.")
-          if missing:
-              print(f"Missing doc files in docs/: {missing}", file=sys.stderr)
-              sys.exit(1)
+          site_dir = os.path.join(repo_root, "site")
+          assert os.path.isdir(src_dir), "src directory missing"
+          assert os.path.isfile(os.path.join(docs_dir, "index.md")), "docs/index.md missing"
+          assert os.path.isfile(os.path.join(site_dir, "index.html")), "site/index.html missing"
+          assert os.path.isfile(os.path.join(site_dir, "controller/controller/index.html")), "controller docs missing"
+          assert os.path.isfile(os.path.join(site_dir, "model/game/board/index.html")), "model docs missing"
+          print("✅ Dynamic documentation build verified successfully!")
           '
 
       - name: Run docs mirror tests

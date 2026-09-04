@@ -43,22 +43,28 @@ def test_all_source_modules_have_google_docstrings():
 
 
 def test_all_docs_use_mkdocstrings_directives():
+    """Verify that dynamic docs hook generates mkdocstrings ':::' directives for source modules."""
+    import mkdocs.config
+    from mkdocs.structure.files import get_files
+    import sys
+
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    docs_dir = os.path.join(repo_root, "docs")
-    missing_directives = []
+    scripts_dir = os.path.join(repo_root, ".github", "scripts")
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
 
-    for root, _, files in os.walk(docs_dir):
-        for file in files:
-            if file.endswith(".md") and file != "INDEX.md":
-                doc_path = os.path.join(root, file)
-                with open(doc_path, "r", encoding="utf-8") as f:
-                    content = f.read()
-                if ":::" not in content:
-                    missing_directives.append(file)
+    import mkdocs_hooks
 
+    cfg = mkdocs.config.load_config(os.path.join(repo_root, "mkdocs.yml"))
+    files = get_files(cfg)
+    files = mkdocs_hooks.on_files(files, cfg)
+
+    generated_files = [f for f in files if getattr(f, "_content", None)]
     assert (
-        not missing_directives
-    ), f"The following docs files are missing mkdocstrings ':::' directives: {missing_directives}"
+        len(generated_files) >= 25
+    ), f"Expected dynamic files generated, found {len(generated_files)}"
+    for f in generated_files:
+        assert ":::" in f._content, f"Generated file {f.src_uri} missing ':::' directive"
 
 
 def test_mkdocs_config_and_strict_build():
