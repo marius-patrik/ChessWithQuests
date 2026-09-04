@@ -21,10 +21,16 @@ def test_agents_and_symlinks_resolve():
     # .agents symlinks
     agents_agents = os.path.join(repo_root, ".agents", "AGENTS.md")
     agents_claude = os.path.join(repo_root, ".agents", "CLAUDE.md")
+    agents_readme = os.path.join(repo_root, ".agents", "README.md")
+    agents_docs_file = os.path.join(repo_root, ".agents", "DOCS.md")
     assert os.path.islink(agents_agents), ".agents/AGENTS.md must be a symlink"
     assert os.path.islink(agents_claude), ".agents/CLAUDE.md must be a symlink"
+    assert os.path.islink(agents_readme), ".agents/README.md must be a symlink"
+    assert os.path.islink(agents_docs_file), ".agents/DOCS.md must be a symlink"
     assert os.readlink(agents_agents) == "../AGENTS.md"
     assert os.readlink(agents_claude) == "../AGENTS.md"
+    assert os.readlink(agents_readme) == "../README.md"
+    assert os.readlink(agents_docs_file) == "../DOCS.md"
 
     with open(agents_file, encoding="utf-8") as f:
         agents_content = f.read()
@@ -44,6 +50,16 @@ def test_agents_and_symlinks_resolve():
     with open(agents_claude, encoding="utf-8") as f:
         agents_claude_content = f.read()
 
+    with open(agents_readme, encoding="utf-8") as f:
+        agents_readme_content = f.read()
+
+    docs_file = os.path.join(repo_root, "DOCS.md")
+    with open(docs_file, encoding="utf-8") as f:
+        docs_content = f.read()
+
+    with open(agents_docs_file, encoding="utf-8") as f:
+        agents_docs_content = f.read()
+
     assert "ChessWithQuests" in readme_content
     assert "School project of a chess game" in readme_content
     assert "ChessWithQuests" not in agents_content
@@ -52,6 +68,8 @@ def test_agents_and_symlinks_resolve():
     assert claude_content == agents_content
     assert agents_agents_content == agents_content
     assert agents_claude_content == agents_content
+    assert agents_readme_content == readme_content
+    assert agents_docs_content == docs_content
 
     docs_dir = os.path.join(repo_root, "docs")
     notes_dir = os.path.join(repo_root, "notes")
