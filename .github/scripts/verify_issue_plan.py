@@ -17,10 +17,28 @@ CLOSING_PATTERN = re.compile(
 
 
 def extract_bound_issues(pr_body: Optional[str]) -> List[int]:
-    """Extract issue numbers bound to a pull request using closing keywords."""
+    """Extract issue numbers bound to a pull request using closing keywords.
+
+    Ignores closing keywords that appear inside HTML comments, code blocks,
+    inline code, or quotation marks.
+    """
     if not pr_body:
         return []
-    matches = CLOSING_PATTERN.findall(pr_body)
+    # Strip HTML comments
+    cleaned = re.sub(r"<!--[\s\S]*?-->", "", pr_body)
+    # Strip multi-line code blocks
+    cleaned = re.sub(r"```[\s\S]*?```", "", cleaned)
+    # Strip inline code spans
+    cleaned = re.sub(r"`[^`]*`", "", cleaned)
+    # Strip keywords enclosed in quotes (e.g. 'Closes #123' or "Fixes #123")
+    cleaned = re.sub(
+        r"['\"](?:close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)\s+(?:#\d+|https?://[^\s'\"]+)['\"]",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+
+    matches = CLOSING_PATTERN.findall(cleaned)
     issues = set()
     for m in matches:
         num_str = m[0] or m[1]
@@ -118,7 +136,18 @@ def main() -> int:
         print(f"Skipping plan verification for non-pull_request event: {event_name}")
         return 0
 
-    pr_body = os.environ.get("PR_BODY", "")
+    pr_body = os.environ.get("PR_BODY")
+    pr_number = os.environ.get("PR_NUMBER")
+    if not pr_body and pr_number:
+        try:
+            cmd = ["gh", "pr", "view", str(pr_number), "--json", "body"]
+            res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            pr_body = json.loads(res.stdout).get("body", "")
+        except Exception as e:
+            print(f"Failed to fetch body for PR #{pr_number}: {e}", file=sys.stderr)
+
+    if not pr_body:
+        pr_body = ""
     repo = os.environ.get("GITHUB_REPOSITORY", "marius-patrik/ChessWithQuests")
 
     print(f"Verifying implementation plan and review for PR in {repo}...")

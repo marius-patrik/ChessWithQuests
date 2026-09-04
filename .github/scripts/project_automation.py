@@ -23,10 +23,28 @@ CLOSING_PATTERN = re.compile(
 
 
 def extract_bound_issues(pr_body: Optional[str]) -> List[int]:
-    """Extract issue numbers bound to a pull request using closing keywords."""
+    """Extract issue numbers bound to a pull request using closing keywords.
+
+    Ignores closing keywords that appear inside HTML comments, code blocks,
+    inline code, or quotation marks.
+    """
     if not pr_body:
         return []
-    matches = CLOSING_PATTERN.findall(pr_body)
+    # Strip HTML comments
+    cleaned = re.sub(r"<!--[\s\S]*?-->", "", pr_body)
+    # Strip multi-line code blocks
+    cleaned = re.sub(r"```[\s\S]*?```", "", cleaned)
+    # Strip inline code spans
+    cleaned = re.sub(r"`[^`]*`", "", cleaned)
+    # Strip keywords enclosed in quotes (e.g. 'Closes #123' or "Fixes #123")
+    cleaned = re.sub(
+        r"['\"](?:close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)\s+(?:#\d+|https?://[^\s'\"]+)['\"]",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+
+    matches = CLOSING_PATTERN.findall(cleaned)
     issues = set()
     for m in matches:
         num_str = m[0] or m[1]

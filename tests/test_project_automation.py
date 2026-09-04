@@ -28,6 +28,19 @@ def test_extract_bound_issues_various_formats():
     assert extract_bound_issues(None) == []
 
 
+def test_extract_bound_issues_ignores_code_blocks_and_quotes():
+    body = """
+    Example syntax: `Closes #123`, `Fixes #456`, or 'Resolves #789'.
+    ```
+    Closes #999
+    ```
+    <!-- Closes #888 -->
+    Actual fix:
+    Closes #42
+    """
+    assert extract_bound_issues(body) == [42]
+
+
 def test_determine_status_from_labels():
     assert determine_status_from_labels(["bug", "Blocked"]) == "Blocked"
     assert determine_status_from_labels(["enhancement", "In Progress"]) == "In Progress"

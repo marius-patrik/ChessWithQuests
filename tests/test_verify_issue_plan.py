@@ -26,6 +26,19 @@ def test_extract_bound_issues_various_formats():
     ) == [88]
 
 
+def test_extract_bound_issues_ignores_code_blocks_and_quotes():
+    body = """
+    Example syntax: `Closes #123`, `Fixes #456`, or 'Resolves #789'.
+    ```
+    Closes #999
+    ```
+    <!-- Closes #888 -->
+    Actual fix:
+    Closes #42
+    """
+    assert extract_bound_issues(body) == [42]
+
+
 def test_has_comprehensive_plan_valid():
     comments = [
         {"body": "Some casual comment"},
