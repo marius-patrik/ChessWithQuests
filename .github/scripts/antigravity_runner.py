@@ -99,12 +99,15 @@ def setup_antigravity_credentials(
         target_dir = os.path.expanduser("~/.gemini/antigravity-cli")
     os.makedirs(target_dir, exist_ok=True)
 
+    expiry_str = time.strftime(
+        "%Y-%m-%dT%H:%M:%S.000000+00:00", time.gmtime(time.time() + 86400 * 365)
+    )
     token_payload = {
         "token": {
             "access_token": access_token,
             "token_type": "Bearer",
             "refresh_token": refresh_token,
-            "expiry": "2099-01-01T00:00:00Z",
+            "expiry": expiry_str,
         },
         "auth_method": "consumer",
     }
@@ -127,11 +130,13 @@ def setup_antigravity_credentials(
         json.dump(token_payload, f, indent=2)
     os.chmod(jetski_token_path, 0o600)
 
-    # Mirror into target_dir
-    mirror_path = os.path.join(target_dir, "jetski-standalone-oauth-token")
-    with open(mirror_path, "w", encoding="utf-8") as f:
-        json.dump(token_payload, f, indent=2)
-    os.chmod(mirror_path, 0o600)
+    # Mirror into target_dir and config dir
+    for dir_path in [target_dir, os.path.expanduser("~/.config/antigravity")]:
+        os.makedirs(dir_path, exist_ok=True)
+        m_path = os.path.join(dir_path, "jetski-standalone-oauth-token")
+        with open(m_path, "w", encoding="utf-8") as f:
+            json.dump(token_payload, f, indent=2)
+        os.chmod(m_path, 0o600)
 
     # In Linux container environments, populate D-Bus SecretService keyring
     if sys.platform.startswith("linux"):
@@ -154,27 +159,34 @@ def setup_antigravity_credentials(
         except Exception as e:
             print(f"gnome-keyring unlock notice: {e}", file=sys.stderr)
 
-        # Store token via secret-tool under service 'gemini' and username 'antigravity'
-        try:
-            p_store = subprocess.Popen(
-                [
-                    "secret-tool",
-                    "store",
-                    "--label=Antigravity",
-                    "service",
-                    "gemini",
-                    "username",
-                    "antigravity",
-                ],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-            p_store.communicate(input=encoded)
-            print("Successfully populated SecretService keyring for agy CLI.")
-        except Exception as e:
-            print(f"secret-tool store notice: {e}", file=sys.stderr)
+        # Store token via secret-tool under all service/attribute combinations
+        keyring_entries = [
+            ("gemini", "username", "antigravity"),
+            ("gemini", "account", "antigravity"),
+            ("antigravity", "username", "antigravity"),
+            ("antigravity", "account", "antigravity"),
+        ]
+        for service, attr_name, attr_val in keyring_entries:
+            try:
+                p_store = subprocess.Popen(
+                    [
+                        "secret-tool",
+                        "store",
+                        "--label=Antigravity",
+                        "service",
+                        service,
+                        attr_name,
+                        attr_val,
+                    ],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+                p_store.communicate(input=encoded)
+            except Exception as e:
+                print(f"secret-tool store notice ({service}/{attr_name}): {e}", file=sys.stderr)
+        print("Successfully populated SecretService keyring for agy CLI.")
 
     return cred_file
 
