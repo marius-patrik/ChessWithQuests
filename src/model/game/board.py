@@ -1,3 +1,5 @@
+"""Chessboard representation managing piece layout, bounds, and piece movements."""
+
 from typing import Optional, List, Tuple
 
 try:
@@ -19,7 +21,15 @@ except ImportError:
 
 
 class Board:
+    """Represents a chessboard and tracks piece positions and captures."""
+
     def __init__(self, dimensions: Tuple[int, int] = (8, 8), setup_pieces: bool = True):
+        """Initialize a chessboard.
+
+        Args:
+            dimensions: Board dimensions as (rows, cols) tuple (default: (8, 8)).
+            setup_pieces: Whether to initialize pieces in standard positions (default: True).
+        """
         self.dimensions = dimensions
         self.rows, self.cols = dimensions
         self.board: List[List[Optional[Piece]]] = [
@@ -32,20 +42,52 @@ class Board:
             self.setup_default_board()
 
     def is_within_bounds(self, row: int, col: int) -> bool:
+        """Check if coordinates lie within the board boundaries.
+
+        Args:
+            row: 0-indexed board row.
+            col: 0-indexed board column.
+
+        Returns:
+            True if (row, col) is within bounds, False otherwise.
+        """
         return 0 <= row < self.rows and 0 <= col < self.cols
 
     def get_piece_at(self, position: Tuple[int, int]) -> Optional[Piece]:
+        """Retrieve the piece located at the specified board position.
+
+        Args:
+            position: Tuple of (row, col) coordinates.
+
+        Returns:
+            Piece instance at the position, or None if empty or out of bounds.
+        """
         row, col = position
         if not self.is_within_bounds(row, col):
             return None
         return self.board[row][col]
 
     def set_piece_at(self, position: Tuple[int, int], piece: Optional[Piece]) -> None:
+        """Place or remove a piece at a specified position.
+
+        Args:
+            position: Tuple of (row, col) coordinates.
+            piece: Piece instance to place, or None to clear square.
+        """
         row, col = position
         if self.is_within_bounds(row, col):
             self.board[row][col] = piece
 
     def move_piece(self, start_pos: Tuple[int, int], end_pos: Tuple[int, int]) -> bool:
+        """Move a piece from start_pos to end_pos, tracking captured pieces.
+
+        Args:
+            start_pos: Source (row, col) coordinates.
+            end_pos: Target (row, col) coordinates.
+
+        Returns:
+            True if the piece was successfully moved, False if invalid or empty start.
+        """
         piece = self.get_piece_at(start_pos)
         if piece is None:
             return False
@@ -66,9 +108,16 @@ class Board:
         return True
 
     def replace_piece(self, position: Tuple[int, int], new_piece: Piece) -> None:
+        """Replace a piece at the given position (e.g. during pawn promotion).
+
+        Args:
+            position: Target (row, col) coordinate.
+            new_piece: Replacement Piece instance.
+        """
         self.set_piece_at(position, new_piece)
 
     def setup_default_board(self) -> None:
+        """Initialize the board with standard 8x8 chess starting positions."""
         self.board = [[None for _ in range(self.cols)] for _ in range(self.rows)]
         self.captured_white.clear()
         self.captured_black.clear()

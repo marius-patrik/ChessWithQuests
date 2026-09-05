@@ -1,3 +1,5 @@
+"""Move validation engine enforcing chess rules, checks, pins, and terminal conditions."""
+
 from typing import List, Tuple, Optional, Any
 
 try:
@@ -15,17 +17,44 @@ except ImportError:
 
 
 class MoveValidator:
+    """Validates piece movement legality, checks, checkmates, and stalemates."""
+
     def __init__(self, board: Optional[Board] = None, move: Optional[Move] = None):
+        """Initialize a MoveValidator instance.
+
+        Args:
+            board: Optional Board instance to validate moves on.
+            move: Optional Move instance being inspected.
+        """
         self.board = board
         self.move = move
 
     def set_board(self, board: Board) -> None:
+        """Assign the active chessboard.
+
+        Args:
+            board: Board instance.
+        """
         self.board = board
 
     def set_move(self, move: Move) -> None:
+        """Assign the active move to evaluate.
+
+        Args:
+            move: Move instance.
+        """
         self.move = move
 
     def find_king(self, color: int, board: Optional[Board] = None) -> Optional[Tuple[int, int]]:
+        """Find the coordinates of a specified player's king.
+
+        Args:
+            color: King's color (1 for White, -1 for Black).
+            board: Optional Board instance (defaults to self.board).
+
+        Returns:
+            Tuple of (row, col) coordinates or None if king is missing.
+        """
         b = board or self.board
         if b is None:
             return None
@@ -39,6 +68,16 @@ class MoveValidator:
     def is_square_attacked(
         self, target_square: Tuple[int, int], by_color: int, board: Optional[Board] = None
     ) -> bool:
+        """Determine whether a given square is under attack by pieces of a given color.
+
+        Args:
+            target_square: (row, col) target coordinates.
+            by_color: Color of the attacking side (1 for White, -1 for Black).
+            board: Optional Board instance (defaults to self.board).
+
+        Returns:
+            True if target_square is attacked by by_color pieces, False otherwise.
+        """
         b = board or self.board
         if b is None:
             return False
@@ -76,6 +115,15 @@ class MoveValidator:
         return False
 
     def is_check(self, color: int, board: Optional[Board] = None) -> bool:
+        """Check if the king of the given color is currently under attack.
+
+        Args:
+            color: Player color to check (1 for White, -1 for Black).
+            board: Optional Board instance (defaults to self.board).
+
+        Returns:
+            True if the king is attacked, False otherwise.
+        """
         b = board or self.board
         if b is None:
             return False
@@ -88,6 +136,15 @@ class MoveValidator:
     def get_pseudo_legal_moves(
         self, start_pos: Tuple[int, int], board: Optional[Board] = None
     ) -> List[Tuple[int, int]]:
+        """Compute candidate move destinations ignoring check constraints.
+
+        Args:
+            start_pos: (row, col) origin coordinates.
+            board: Optional Board instance (defaults to self.board).
+
+        Returns:
+            List of valid geometric destination squares.
+        """
         b = board or self.board
         if b is None:
             return []
@@ -148,6 +205,15 @@ class MoveValidator:
     def get_valid_moves(
         self, start_pos: Tuple[int, int], board: Optional[Board] = None
     ) -> List[Tuple[int, int]]:
+        """Get strictly legal move destinations ensuring the friendly king is safe from check.
+
+        Args:
+            start_pos: (row, col) origin coordinates.
+            board: Optional Board instance (defaults to self.board).
+
+        Returns:
+            List of strictly legal destination squares.
+        """
         b = board or self.board
         if b is None:
             return []
@@ -178,6 +244,15 @@ class MoveValidator:
         return legal_moves
 
     def get_all_valid_moves(self, color: int, board: Optional[Board] = None) -> List[Move]:
+        """Compute all strictly legal moves for all pieces belonging to a color.
+
+        Args:
+            color: Player color (1 for White, -1 for Black).
+            board: Optional Board instance (defaults to self.board).
+
+        Returns:
+            List of all strictly legal Move instances.
+        """
         b = board or self.board
         if b is None:
             return []
@@ -195,6 +270,15 @@ class MoveValidator:
         return all_moves
 
     def is_valid_move(self, move: Move, board: Optional[Board] = None) -> bool:
+        """Verify whether a specific Move is strictly legal.
+
+        Args:
+            move: Move instance to evaluate.
+            board: Optional Board instance (defaults to self.board).
+
+        Returns:
+            True if the move is legal, False otherwise.
+        """
         b = board or self.board
         if b is None or not move.validate():
             return False
@@ -202,12 +286,30 @@ class MoveValidator:
         return move.end_pos in valid_destinations
 
     def is_checkmate(self, color: int, board: Optional[Board] = None) -> bool:
+        """Check if the given player is in checkmate.
+
+        Args:
+            color: Player color (1 for White, -1 for Black).
+            board: Optional Board instance (defaults to self.board).
+
+        Returns:
+            True if player is in check with zero legal responses, False otherwise.
+        """
         b = board or self.board
         if not self.is_check(color, b):
             return False
         return len(self.get_all_valid_moves(color, b)) == 0
 
     def is_stalemate(self, color: int, board: Optional[Board] = None) -> bool:
+        """Check if the given player is stalemated (not in check, but no legal moves).
+
+        Args:
+            color: Player color (1 for White, -1 for Black).
+            board: Optional Board instance (defaults to self.board).
+
+        Returns:
+            True if stalemate condition holds, False otherwise.
+        """
         b = board or self.board
         if self.is_check(color, b):
             return False
@@ -216,6 +318,14 @@ class MoveValidator:
     def simulate_move(
         self, move: Optional[Move] = None
     ) -> List[Tuple[Tuple[int, int], Optional[Piece]]]:
+        """Simulate move execution and return previous state for rollback.
+
+        Args:
+            move: Optional Move instance (defaults to self.move).
+
+        Returns:
+            List of ((row, col), previous_piece) tuples for restoration.
+        """
         m = move or self.move
         b = self.board
         if m is None or b is None:
