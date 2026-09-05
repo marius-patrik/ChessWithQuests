@@ -1,3 +1,5 @@
+"""Tower chess piece module (alias for Rook in Czech chess terminology)."""
+
 try:
     from .rook import Rook
 except ImportError:

@@ -1,3 +1,5 @@
+"""Bishop chess piece implementation with diagonal move vectors."""
+
 try:
     from .piece import Piece
 except ImportError:
@@ -8,7 +10,15 @@ except ImportError:
 
 
 class Bishop(Piece):
-    def __init__(self, color, piece_type="bishop"):
+    """Bishop chess piece that moves and attacks along diagonals."""
+
+    def __init__(self, color: int, piece_type: str = "bishop"):
+        """Initialize a Bishop piece.
+
+        Args:
+            color: Color identifier (1 for White, -1 for Black).
+            piece_type: Piece type name (default: "bishop").
+        """
         vectors = [(1, 1), (1, -1), (-1, 1), (-1, -1)]
         super().__init__(
             color=color,

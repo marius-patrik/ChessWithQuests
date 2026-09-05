@@ -1,3 +1,5 @@
+"""Queen chess piece implementation combining orthogonal and diagonal ray movements."""
+
 try:
     from .piece import Piece
 except ImportError:
@@ -8,7 +10,15 @@ except ImportError:
 
 
 class Queen(Piece):
-    def __init__(self, color, piece_type="queen"):
+    """Queen chess piece with 8-direction ray movement (orthogonal and diagonal)."""
+
+    def __init__(self, color: int, piece_type: str = "queen"):
+        """Initialize a Queen piece.
+
+        Args:
+            color: Color identifier (1 for White, -1 for Black).
+            piece_type: Piece descriptor (default: "queen").
+        """
         vectors = [
             (0, 1),
             (0, -1),
