@@ -32,3 +32,13 @@ jobs:
       - name: Run unit tests with pytest
         run: |
           pytest -v
+
+  verify-docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker Container
+        run: |
+          docker build -t antigravity-agent -f docker/Dockerfile.antigravity .

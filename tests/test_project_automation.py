@@ -13,6 +13,7 @@ from project_automation import (
     determine_status_from_labels,
     process_event,
     STATUS_OPTIONS,
+    reconcile_unassigned_statuses,
 )
 
 
@@ -55,6 +56,9 @@ class MockGitHubProjectClient:
         self.added_items = []
         self.edited_statuses = []
         self.added_labels = []
+        self.project_number = 14
+        self.owner = "marius-patrik"
+        self.gh_responses = {}
 
     def add_item(self, url):
         item_id = f"item-{len(self.added_items) + 1}"
@@ -67,6 +71,13 @@ class MockGitHubProjectClient:
 
     def add_issue_label(self, repo, issue_number, label):
         self.added_labels.append((repo, issue_number, label))
+
+    def run_gh(self, args):
+        cmd = " ".join(args)
+        for pattern, resp in self.gh_responses.items():
+            if pattern in cmd:
+                return resp
+        return "{}"
 
 
 def test_process_event_issue_opened():
@@ -148,3 +159,57 @@ def test_workflow_files_exist():
 
     assert os.path.isfile(verify_pr_file), "verify-pr-issue.yml must exist"
     assert os.path.isfile(project_auto_file), "project-automation.yml must exist"
+
+
+def test_reconcile_unassigned_statuses():
+    import json
+
+    client = MockGitHubProjectClient()
+    items_data = {
+        "items": [
+            {
+                "id": "item-open-unassigned",
+                "status": None,
+                "content": {"closed": False, "title": "Request: Doc updates"},
+            },
+            {
+                "id": "item-done",
+                "status": "Done",
+                "content": {"closed": True, "title": "Request: Old feature"},
+            },
+            {
+                "id": "item-closed-unassigned",
+                "status": None,
+                "content": {"closed": True, "title": "Dropped request"},
+            },
+            {
+                "id": "item-in-prog",
+                "status": "In Progress",
+                "content": {"closed": False, "title": "Active feature"},
+            },
+        ]
+    }
+    client.gh_responses["project item-list"] = json.dumps(items_data)
+
+    reconcile_unassigned_statuses(client)
+    assert ("item-open-unassigned", "ToDo") in client.edited_statuses
+    assert len(client.edited_statuses) == 1
+
+
+def test_process_event_workflow_dispatch_reconciles():
+    import json
+
+    client = MockGitHubProjectClient()
+    items_data = {
+        "items": [
+            {
+                "id": "item-10",
+                "status": None,
+                "content": {"closed": False, "title": "Unassigned Issue"},
+            }
+        ]
+    }
+    client.gh_responses["project item-list"] = json.dumps(items_data)
+
+    process_event("workflow_dispatch", {}, client=client)
+    assert client.edited_statuses == [("item-10", "ToDo")]

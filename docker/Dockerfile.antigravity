@@ -26,7 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 2. Setup project workspace and install Python test / build dependencies
 WORKDIR /workspace
-COPY pyproject.toml requirements.txt requirements-dev.txt /workspace/
+COPY pyproject.toml requirements-dev.txt /workspace/
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements-dev.txt
 
