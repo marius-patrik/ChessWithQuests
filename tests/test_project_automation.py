@@ -34,8 +34,20 @@ def test_determine_status_from_labels():
     assert determine_status_from_labels(["Backlog"]) == "Backlog"
     assert determine_status_from_labels(["ToDo"]) == "ToDo"
     assert determine_status_from_labels(["Done"]) == "Done"
+    assert determine_status_from_labels(["Superseded"]) == "Superseded"
+    assert determine_status_from_labels(["Dropped"]) == "Dropped"
     assert determine_status_from_labels(["random", "label"]) == "ToDo"
     assert determine_status_from_labels([]) == "ToDo"
+
+
+def test_status_options_taxonomy():
+    assert STATUS_OPTIONS["Backlog"] == "8dbcec6a"
+    assert STATUS_OPTIONS["ToDo"] == "fc671069"
+    assert STATUS_OPTIONS["In Progress"] == "5879826b"
+    assert STATUS_OPTIONS["Blocked"] == "dd704e81"
+    assert STATUS_OPTIONS["Done"] == "db1d3578"
+    assert STATUS_OPTIONS["Superseded"] == "1ea57ba8"
+    assert STATUS_OPTIONS["Dropped"] == "7d7814ed"
 
 
 class MockGitHubProjectClient:

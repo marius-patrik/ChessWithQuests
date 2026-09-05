@@ -44,3 +44,33 @@ Every incoming user prompt or task must immediately be converted into one or mor
 - **Interpretation Section**: Below the verbatim wording, each `Request` issue must include an `### Interpretation` section clearly specifying how the request is understood and the intended scope of work.
 - **Confirmation Gate**: The interpretation requires explicit user confirmation before any implementation plan gets made.
 - **Child Plan Issues**: Once the interpretation is confirmed by the user, a separate child issue is created with the `Plan` label (linked via GitHub sub-issues `--parent <request_id>`), containing the detailed implementation plan. All subsequent code branches and pull requests bind to the plan issue.
+
+### 13. Containerized Antigravity Agent & Conversational CI Lifecycle
+An autonomous AI agent runs containerized in GitHub Actions CI using Docker (`docker/Dockerfile.antigravity`), Google Antigravity CLI (`agy`), and Gemini 3.8 Flash (`gemini-3.8-flash-high`) authenticated under Google user `plskynech@gmail.com`:
+- **Authentication**: Long-lived Google OAuth refresh token stored in repository secret `ANTIGRAVITY_REFRESH_TOKEN`. The CI runner performs a pre-flight exchange against Google's OAuth2 endpoint (`https://oauth2.googleapis.com/token`) to generate a fresh access token on every run.
+- **Auto-Detection & Interpretation**: Incoming unlabelled issues are automatically tagged with the `Request` label, classified with appropriate type and area labels, and greeted with an agent interpretation comment.
+- **Conversational Feedback Loop**: The agent actively monitors comments on Request issues, Plan issues, and Pull Requests, responding directly to human feedback and executing requested adjustments.
+- **Autonomous Implementation & Review**: Upon plan approval (`approve`), the agent drafts the feature branch, implements code and tests, opens a bot-authored Draft PR, and conducts an autonomous code review loop.
+
+### 14. Conventional Commits & Taxonomy Enforcement
+All commits must strictly adhere to the Conventional Commits specification:
+- **Format**: `<type>(<scope>): <description>` (e.g. `feat(ci): add dockerized antigravity agent`).
+- **Allowed Types**: `feat`, `fix` (mapped from `bug`), `chore`, `docs`, `refactor`, `test`, `ci`.
+- **Allowed Area Scopes & Labels**:
+  - `area:model`: Core domain model, board representation, piece logic, quest rules.
+  - `area:view`: GUI rendering, display, windows, visual assets.
+  - `area:controller`: Input handling, event routing, game state controller.
+  - `area:ci`: GitHub Actions workflows, Docker containers, runner scripts.
+  - `area:docs`: Documentation, MkDocs configuration, docstrings.
+
+### 15. Protected Upstream Base Branch, Project Board Taxonomy & Branch Auto-Deletion
+- **Protected Upstream-Base Branch**: The repository maintains a protected `upstream-base` branch permanently pinned to upstream fork base commit `a98e36d` (`docekalgjkt/ChessWithQuests:main`) with branch protection locking it against deletion and force pushes. This provides a perpetual comparison point to view the exact diff from the upstream repository.
+- **Project Board Status Taxonomy**: Project 14 supports 7 single-select states:
+  - `Backlog`: Staged items planned for future consideration.
+  - `ToDo`: Approved requests or plans ready for implementation.
+  - `In Progress`: Active branches, pull requests, or ongoing development.
+  - `Blocked`: Items impeded by external dependencies or blockers.
+  - `Done`: Completed and merged pull requests and resolved issues.
+  - `Superseded`: Items rendered obsolete or outranked by subsequent architectural decisions.
+  - `Dropped`: Items closed without implementation or cancelled.
+- **Branch Auto-Deletion**: Merging pull requests automatically triggers branch deletion (`delete_branch_on_merge: true` and `--delete-branch`), and stale remote branches are promptly purged.
