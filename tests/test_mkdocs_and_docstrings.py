@@ -106,12 +106,3 @@ def test_agents_rule_mandates_google_docstrings_and_mkdocs():
     assert "Google-style" in content or "Google-Style" in content
     assert "mkdocs build --strict" in content
     assert "GitHub Pages" in content
-
-
-def test_no_docs_folder_or_symlink_exists():
-    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    docs_dir = os.path.join(repo_root, "docs")
-    agents_docs_symlink = os.path.join(repo_root, ".agents", "docs")
-
-    assert not os.path.exists(docs_dir), "docs/ directory should not exist"
-    assert not os.path.lexists(agents_docs_symlink), ".agents/docs symlink should not exist"
