@@ -139,6 +139,28 @@ def test_is_quota_exhausted_empty_and_unrelated():
     assert is_quota_exhausted("fatal: not a git repository") is False
 
 
+def test_is_quota_exhausted_rate_limit_and_quota_false_positives():
+    """Verify non-error headers, configuration flags, and unexhausted limits are ignored."""
+    assert is_quota_exhausted("x-ratelimit-remaining: 99") is False
+    assert is_quota_exhausted("rate_limit=100") is False
+    assert is_quota_exhausted("Config: max_rate_limit: 50") is False
+    assert is_quota_exhausted("Quota limit is 1000") is False
+    assert is_quota_exhausted("Daily quota limit: 500 requests remaining") is False
+
+    # Distant "quota" on line 1 and "limit" on subsequent lines without failure keywords
+    distant_log = "Quota: OK\n" + "processing record\n" * 30 + "Recursion limit reached"
+    assert is_quota_exhausted(distant_log) is False
+
+
+def test_is_quota_exhausted_tightened_rate_limit_matches():
+    """Verify rate limit errors with explicit failure keywords are matched."""
+    assert is_quota_exhausted("Rate limit exceeded") is True
+    assert is_quota_exhausted("API rate-limit exceeded: 15 RPM") is True
+    assert is_quota_exhausted("Rate limit reached for gemini-3.8-flash-high") is True
+    assert is_quota_exhausted("Quota limit exceeded") is True
+    assert is_quota_exhausted("quota limit has been reached") is True
+
+
 # ============================================================================
 # 2. calculate_backoff Constraints & Overflow (Findings 4 & 5)
 # ============================================================================
@@ -192,6 +214,41 @@ def test_calculate_backoff_negative_attempt_handled_safely():
     """Verify negative attempt count is treated as attempt 0."""
     val = calculate_backoff(attempt=-5, base_delay=1.5, jitter=False)
     assert val == 1.5
+
+
+def test_calculate_backoff_exponential_scaling_deterministic():
+    """Verify deterministic exponential scaling progression without jitter."""
+    delays = [
+        calculate_backoff(attempt=i, base_delay=1.0, backoff_factor=2.0, jitter=False)
+        for i in range(5)
+    ]
+    assert delays == [1.0, 2.0, 4.0, 8.0, 16.0]
+
+
+def test_calculate_backoff_nonzero_jitter_at_max_delay():
+    """Verify non-zero jitter at ceiling to prevent thundering herd in concurrent retries."""
+    max_delay = 60.0
+    jitter_factor = 0.5
+    # High attempt count where raw delay (1024.0) exceeds max_delay (60.0)
+    samples = [
+        calculate_backoff(
+            attempt=10,
+            base_delay=1.0,
+            backoff_factor=2.0,
+            max_delay=max_delay,
+            jitter=True,
+            jitter_factor=jitter_factor,
+        )
+        for _ in range(30)
+    ]
+    # 1. No sample should exceed max_delay
+    assert all(s <= max_delay for s in samples)
+    # 2. Ceiling should not clamp to a constant 60.0; jitter must produce variation
+    assert len(set(samples)) > 1
+    # 3. Spread should fall within the expected ceiling jitter window [max_delay / (1 + jitter_factor), max_delay]
+    min_expected = max_delay / (1.0 + jitter_factor)
+    assert all(s >= min_expected - 1e-6 for s in samples)
+    assert min(samples) < max_delay  # Not all clamped to 60.0
 
 
 # ============================================================================
@@ -330,6 +387,90 @@ def test_git_exclude_checkpoint():
         with open(exclude_path, "r", encoding="utf-8") as f:
             content_after = f.read()
         assert content_after.count(CHECKPOINT_FILENAME) == 1
+
+
+def test_save_checkpoint_invokes_git_exclude():
+    """Verify save_checkpoint automatically ensures CHECKPOINT_FILENAME is excluded in .git/info/exclude."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        git_info = os.path.join(tmpdir, ".git", "info")
+        os.makedirs(git_info)
+
+        save_checkpoint({"status": "blocked"}, cwd=tmpdir)
+        exclude_path = os.path.join(git_info, "exclude")
+        assert os.path.isfile(exclude_path)
+        with open(exclude_path, "r", encoding="utf-8") as f:
+            assert CHECKPOINT_FILENAME in f.read()
+
+
+def test_git_exclude_checkpoint_worktree_support():
+    """Verify _exclude_checkpoint_from_git correctly resolves gitdir file pointers in worktrees."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        main_git_dir = os.path.join(tmpdir, "main_repo", ".git", "worktrees", "wt1")
+        worktree_dir = os.path.join(tmpdir, "wt1_workdir")
+        os.makedirs(main_git_dir)
+        os.makedirs(worktree_dir)
+
+        # .git in worktree is a pointer file
+        git_pointer = os.path.join(worktree_dir, ".git")
+        with open(git_pointer, "w", encoding="utf-8") as f:
+            f.write(f"gitdir: {main_git_dir}\n")
+
+        _exclude_checkpoint_from_git(worktree_dir)
+
+        exclude_file = os.path.join(main_git_dir, "info", "exclude")
+        assert os.path.isfile(exclude_file)
+        with open(exclude_file, "r", encoding="utf-8") as f:
+            assert CHECKPOINT_FILENAME in f.read()
+
+
+def test_git_exclude_checkpoint_relative_worktree_support():
+    """Verify _exclude_checkpoint_from_git handles relative gitdir paths in worktrees."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        main_git = os.path.join(tmpdir, "repo", ".git", "worktrees", "wt2")
+        workdir = os.path.join(tmpdir, "repo", "wt2")
+        os.makedirs(main_git)
+        os.makedirs(workdir)
+
+        git_pointer = os.path.join(workdir, ".git")
+        rel_path = os.path.relpath(main_git, workdir)
+        with open(git_pointer, "w", encoding="utf-8") as f:
+            f.write(f"gitdir: {rel_path}\n")
+
+        _exclude_checkpoint_from_git(workdir)
+
+        exclude_file = os.path.join(main_git, "info", "exclude")
+        assert os.path.isfile(exclude_file)
+        with open(exclude_file, "r", encoding="utf-8") as f:
+            assert CHECKPOINT_FILENAME in f.read()
+
+
+def test_save_checkpoint_serializes_non_primitive_objects():
+    """Verify save_checkpoint handles non-JSON-serializable objects (sets, exceptions) via default=str."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        payload = {
+            "tags": {"alpha", "beta"},
+            "error": RuntimeError("Model unavailable"),
+            "count": 42,
+        }
+        path = save_checkpoint(payload, cwd=tmpdir)
+        assert os.path.isfile(path)
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        assert data["count"] == 42
+        assert "Model unavailable" in data["error"]
+        assert isinstance(data["tags"], str)
+
+
+def test_save_checkpoint_error_logging_on_failure(capsys):
+    """Verify save_checkpoint logs error to sys.stderr before bubbling."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Patch json.dump to raise an IOError
+        with patch("json.dump", side_effect=IOError("Simulated disk full")):
+            with pytest.raises(IOError):
+                save_checkpoint({"key": "val"}, cwd=tmpdir)
+
+        captured = capsys.readouterr()
+        assert "Notice: Failed to save checkpoint file: Simulated disk full" in captured.err
 
 
 # ============================================================================

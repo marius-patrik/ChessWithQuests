@@ -43,21 +43,34 @@ DEFAULT_MODEL_FALLBACK_CHAIN: List[str] = [
     "claude-sonnet-4-6",
 ]
 
-QUOTA_EXHAUSTION_PATTERNS: List[str] = [
-    r"(?:status[_\s]*(?:code)?|http|error|code)\s*[:=]?\s*429\b",
-    r"\b429\s*[:=\-]?\s*(?:too\s*many\s*requests|resource[_\s]*exhausted|quota|rate\s*limit)",
-    r"\bresource[_\s]*exhausted\b",
-    r"quota[\s\S]*?exhaust(?:ed|ion)?",
-    r"exhaust(?:ed|ion)?[\s\S]*?quota",
-    r"quota[\s\S]*?exceeded",
-    r"exceeded[\s\S]*?quota",
-    r"quota[\s\S]*?limit",
-    r"insufficient\s*quota",
-    r"out\s*of\s*quota",
-    r"rate\s*[-_]?limit",
-    r"too\s*many\s*requests",
-    r"(?:model|service|endpoint)\s*(?:is\s*)?unavailable",
-    r"(?:model|server|service)\s*(?:is\s*)?overloaded",
+QUOTA_EXHAUSTION_PATTERNS: List[re.Pattern] = [
+    re.compile(r"(?:status[_\s]*(?:code)?|http|error|code)\s*[:=]?\s*429\b", re.IGNORECASE),
+    re.compile(
+        r"\b429\s*[:=\-]?\s*(?:too\s*many\s*requests|resource[_\s]*exhausted|quota|rate\s*limit)",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bresource[_\s]*exhausted\b", re.IGNORECASE),
+    re.compile(
+        r"\bquota\b(?:\s+\S+){0,6}\s+\b(?:exceeded|exhausted|exhaustion|reached|hit)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:exceeded|exhausted|exhaustion|reached|hit)\b(?:\s+\S+){0,6}\s+\bquota\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\binsufficient\s*quota\b", re.IGNORECASE),
+    re.compile(r"\bout\s*of\s*quota\b", re.IGNORECASE),
+    re.compile(
+        r"\brate\s*[-_]?limit\b(?:\s+\S+){0,6}\s+\b(?:exceeded|exhausted|exhaustion|reached|hit)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:exceeded|exhausted|exhaustion|reached|hit)\b(?:\s+\S+){0,6}\s+\brate\s*[-_]?limit\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\btoo\s*many\s*requests\b", re.IGNORECASE),
+    re.compile(r"\b(?:model|service|endpoint)\s*(?:is\s*)?unavailable\b", re.IGNORECASE),
+    re.compile(r"\b(?:model|server|service)\s*(?:is\s*)?overloaded\b", re.IGNORECASE),
 ]
 
 TYPE_LABELS = ["feat", "bug", "chore", "refactor", "test", "ci", "docs"]
@@ -363,7 +376,11 @@ def is_quota_exhausted(error_message: str) -> bool:
     if not error_message:
         return False
     for pattern in QUOTA_EXHAUSTION_PATTERNS:
-        if re.search(pattern, error_message, re.IGNORECASE | re.DOTALL):
+        if (
+            pattern.search(error_message)
+            if hasattr(pattern, "search")
+            else re.search(pattern, error_message, re.IGNORECASE)
+        ):
             return True
     return False
 
@@ -389,11 +406,17 @@ def calculate_backoff(
     Returns:
         Delay in seconds.
     """
+    if max_delay <= 0:
+        return 0.0
     safe_attempt = max(0, min(attempt, 30))
     raw_delay = base_delay * (backoff_factor**safe_attempt)
-    if jitter:
-        raw_delay += random.uniform(0.0, raw_delay * jitter_factor)
-    return min(max_delay, raw_delay)
+    if not jitter or jitter_factor <= 0:
+        return min(max_delay, raw_delay)
+
+    max_base = max_delay / (1.0 + jitter_factor)
+    effective_base = min(raw_delay, max_base)
+    delay = effective_base + random.uniform(0.0, effective_base * jitter_factor)
+    return min(max_delay, delay)
 
 
 def get_model_fallback_chain(
@@ -430,17 +453,40 @@ def get_model_fallback_chain(
 
 
 def _exclude_checkpoint_from_git(git_dir: str) -> None:
-    """Appends CHECKPOINT_FILENAME to .git/info/exclude if not already present."""
-    exclude_file = os.path.join(git_dir, ".git", "info", "exclude")
-    if os.path.isdir(os.path.join(git_dir, ".git", "info")):
+    """Appends CHECKPOINT_FILENAME to .git/info/exclude if not already present.
+
+    Handles standard git repositories, git worktrees, and submodules where .git
+    may be a file containing a gitdir pointer.
+    """
+    git_entry = os.path.join(git_dir, ".git")
+    git_info_dir = None
+    if os.path.isdir(git_entry):
+        git_info_dir = os.path.join(git_entry, "info")
+    elif os.path.isfile(git_entry):
         try:
+            with open(git_entry, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+            if content.startswith("gitdir:"):
+                gitdir_path = content.split(":", 1)[1].strip()
+                if not os.path.isabs(gitdir_path):
+                    gitdir_path = os.path.normpath(os.path.join(git_dir, gitdir_path))
+                git_info_dir = os.path.join(gitdir_path, "info")
+        except Exception:
+            pass
+
+    if git_info_dir:
+        exclude_file = os.path.join(git_info_dir, "exclude")
+        try:
+            os.makedirs(os.path.dirname(exclude_file), exist_ok=True)
             content = ""
             if os.path.isfile(exclude_file):
                 with open(exclude_file, "r", encoding="utf-8") as f:
                     content = f.read()
             if CHECKPOINT_FILENAME not in content:
                 with open(exclude_file, "a", encoding="utf-8") as f:
-                    f.write(f"\n{CHECKPOINT_FILENAME}\n")
+                    if content and not content.endswith("\n"):
+                        f.write("\n")
+                    f.write(f"{CHECKPOINT_FILENAME}\n")
         except Exception:
             pass
 
@@ -457,12 +503,16 @@ def save_checkpoint(checkpoint_data: Dict[str, Any], cwd: Optional[str] = None) 
     """
     target_dir = cwd or STATE_DIR
     os.makedirs(target_dir, exist_ok=True)
+    _exclude_checkpoint_from_git(target_dir)
     checkpoint_file = os.path.join(target_dir, CHECKPOINT_FILENAME)
     tmp_file = f"{checkpoint_file}.tmp.{uuid.uuid4().hex}"
     try:
         with open(tmp_file, "w", encoding="utf-8") as f:
-            json.dump(checkpoint_data, f, indent=2)
+            json.dump(checkpoint_data, f, indent=2, default=str)
         os.replace(tmp_file, checkpoint_file)
+    except Exception as e:
+        print(f"Notice: Failed to save checkpoint file: {e}", file=sys.stderr)
+        raise
     finally:
         if os.path.exists(tmp_file):
             try:
