@@ -156,6 +156,28 @@ def test_dispatch_event_unlabelled_issue():
             os.remove(temp_path)
 
 
+def test_create_child_plan_issue():
+    from antigravity_runner import create_child_plan_issue
+
+    with patch("antigravity_runner.run_gh") as mock_gh:
+        # First call views the parent request
+        # Second call creates the child plan issue
+        mock_gh.side_effect = [
+            json.dumps({"title": "Request: Implement Queen logic", "body": "Add queen movements"}),
+            "https://github.com/marius-patrik/ChessWithQuests/issues/105",
+        ]
+        plan_num = create_child_plan_issue(100, "marius-patrik/ChessWithQuests")
+        assert plan_num == 105
+
+        create_call = mock_gh.call_args_list[1][0][0]
+        assert "issue" in create_call
+        assert "create" in create_call
+        assert "--parent" in create_call
+        assert "100" in create_call
+        assert "--label" in create_call
+        assert "Plan" in create_call
+
+
 def test_antigravity_files_exist():
     dockerfile = os.path.join(repo_root, "docker", "Dockerfile.antigravity")
     workflow = os.path.join(repo_root, ".github", "workflows", "antigravity-ci-agent.yml")

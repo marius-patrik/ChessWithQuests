@@ -252,6 +252,61 @@ def handle_interpret(issue_number: int, repo: str):
     print(f"Interpretation posted on issue #{issue_number}")
 
 
+def create_child_plan_issue(request_number: int, repo: str) -> int:
+    """Creates a child Plan issue natively linked via --parent to the Request issue."""
+    req_data = json.loads(
+        run_gh(["issue", "view", str(request_number), "--json", "title,body"], repo=repo)
+    )
+    raw_title = req_data.get("title", "")
+    plan_title = f"Plan: {raw_title.removeprefix('Request: ').strip()}"
+    initial_body = f"Implementation plan for Parent Request #{request_number}.\n\nLinked Parent: #{request_number}"
+
+    # Try creating directly with --parent flag
+    create_args = [
+        "issue",
+        "create",
+        "--title",
+        plan_title,
+        "--body",
+        initial_body,
+        "--label",
+        "Plan",
+        "--parent",
+        str(request_number),
+    ]
+    try:
+        out = run_gh(create_args, repo=repo)
+        match = re.search(r"/issues/(\d+)", out)
+        if match:
+            plan_num = int(match.group(1))
+            print(f"Created child Plan issue #{plan_num} with parent #{request_number}")
+            return plan_num
+    except Exception as e:
+        print(
+            f"Notice: creating with --parent failed ({e}); falling back to create then edit...",
+            file=sys.stderr,
+        )
+
+    # Fallback: create then link parent
+    out = run_gh(
+        ["issue", "create", "--title", plan_title, "--body", initial_body, "--label", "Plan"],
+        repo=repo,
+    )
+    match = re.search(r"/issues/(\d+)", out)
+    if not match:
+        raise RuntimeError(f"Could not parse created issue number from output: {out}")
+    plan_num = int(match.group(1))
+    try:
+        run_gh(["issue", "edit", str(plan_num), "--parent", str(request_number)], repo=repo)
+        print(f"Linked parent #{request_number} to child Plan issue #{plan_num} via edit")
+    except Exception as e:
+        print(
+            f"Warning: could not link parent issue #{request_number} to #{plan_num}: {e}",
+            file=sys.stderr,
+        )
+    return plan_num
+
+
 def handle_plan(request_number: int, plan_number: int, repo: str):
     """Generates and posts an implementation plan on the child Plan issue."""
     req_data = json.loads(
@@ -334,8 +389,15 @@ def dispatch_event(event_path: str, event_name: str):
 
         # Only process human comments from owner/collaborators, ignore bot comments
         if action == "created" and issue_num and not comment_user.endswith("[bot]"):
+            labels = [
+                l.get("name") if isinstance(l, dict) else str(l) for l in issue.get("labels", [])
+            ]
+            is_request = any(l.lower() == "request" for l in labels)
             if re.search(r"(?i)^\s*(?:/approve|approve|good|lgtm)\s*$", comment_body):
                 print(f"Approval comment on #{issue_num} from @{comment_user}.")
+                if is_request:
+                    plan_num = create_child_plan_issue(issue_num, repo)
+                    handle_plan(issue_num, plan_num, repo)
             else:
                 handle_respond(issue_num, comment_body, repo=repo, is_pr=is_pr)
 
