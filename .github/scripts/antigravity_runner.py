@@ -512,9 +512,7 @@ WORKSPACE_DIR = os.environ.get("GITHUB_WORKSPACE", "/workspace")
 
 
 def find_parent_request_number(plan_number: int, repo: str) -> Optional[int]:
-    """Finds the parent Request issue number from a Plan issue body.
-
-    Parses the Plan issue body for a 'Parent Request: #N' reference.
+    """Finds the parent Request issue number from a Plan issue body or GitHub metadata.
 
     Args:
         plan_number: The Plan issue number.
@@ -523,11 +521,31 @@ def find_parent_request_number(plan_number: int, repo: str) -> Optional[int]:
     Returns:
         Parent Request issue number, or None if not found.
     """
-    raw = run_gh(["issue", "view", str(plan_number), "--json", "body"], repo=repo)
-    body = json.loads(raw).get("body", "")
-    match = re.search(r"Parent Request:\s*#(\d+)", body)
+    raw = run_gh(["issue", "view", str(plan_number), "--json", "body,parent,comments"], repo=repo)
+    data = json.loads(raw)
+
+    # 1. Native GitHub sub-issue parent metadata
+    parent_obj = data.get("parent")
+    if isinstance(parent_obj, dict) and parent_obj.get("number"):
+        return int(parent_obj["number"])
+
+    # 2. Regex search in body (supports "Parent Request #N", "Parent Request: #N", "Linked Parent: #N")
+    body = data.get("body", "")
+    match = re.search(r"(?:Parent Request|Linked Parent):?\s*#(\d+)", body, re.IGNORECASE)
     if match:
         return int(match.group(1))
+
+    # 3. Search in comments
+    for c in data.get("comments", []):
+        c_body = c.get("body", "") if isinstance(c, dict) else str(c)
+        m = re.search(
+            r"(?:Parent Request|Linked Parent|\*\*Parent Request\*\*):?\s*#(\d+)",
+            c_body,
+            re.IGNORECASE,
+        )
+        if m:
+            return int(m.group(1))
+
     return None
 
 
