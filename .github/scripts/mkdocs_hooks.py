@@ -10,9 +10,8 @@ def on_files(files, config):
     if not hasattr(config.plugins, "_current_plugin"):
         config.plugins._current_plugin = None
 
-    docs_dir = config["docs_dir"]
-    repo_root = os.path.abspath(os.path.join(docs_dir, ".."))
-    src_dir = os.path.join(repo_root, "src")
+    src_dir = config["docs_dir"]
+    repo_root = os.path.abspath(os.path.join(src_dir, ".."))
 
     # Generate virtual index.md overview from README.md if no index.md on disk
     if not files.get_file_from_path("index.md"):

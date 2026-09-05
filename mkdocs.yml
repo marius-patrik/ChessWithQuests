@@ -4,6 +4,15 @@ site_author: marius-patrik
 repo_name: marius-patrik/ChessWithQuests
 repo_url: https://github.com/marius-patrik/ChessWithQuests
 
+docs_dir: src
+exclude_docs: |
+  *.py
+  */*.py
+  */*/*.py
+  */*/*/*.py
+  __pycache__
+  __pycache__/*
+
 theme:
   name: material
   palette:
