@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.error
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, ANY
 import pytest
 
 # Add .github/scripts to path
@@ -29,6 +29,16 @@ from antigravity_runner import (
     handle_implement,
     handle_self_review,
     handle_plan_alignment,
+    is_quota_exhausted,
+    calculate_backoff,
+    get_model_fallback_chain,
+    save_checkpoint,
+    load_checkpoint,
+    clear_checkpoint,
+    update_project_status_blocked,
+    checkpoint_and_notify_exhaustion,
+    DEFAULT_MODEL_FALLBACK_CHAIN,
+    CHECKPOINT_FILENAME,
 )
 
 
@@ -608,3 +618,393 @@ def test_handle_plan_alignment_divergence():
             ],
             repo="test/repo",
         )
+
+
+def test_is_quota_exhausted_detection():
+    # Quota and rate limit errors
+    assert is_quota_exhausted("Error: 429 Too Many Requests") is True
+    assert is_quota_exhausted("Status code: 429") is True
+    assert (
+        is_quota_exhausted("google.api_core.exceptions.ResourceExhausted: 429 Resource exhausted")
+        is True
+    )
+    assert is_quota_exhausted("RESOURCE_EXHAUSTED: Quota exceeded for metric") is True
+    assert is_quota_exhausted("You have exceeded your current quota.") is True
+    assert is_quota_exhausted("Quota exceeded for quota metric 'GenerateContent'") is True
+    assert is_quota_exhausted("insufficient quota for model execution") is True
+    assert is_quota_exhausted("Out of quota. Please check your billing plan.") is True
+    assert is_quota_exhausted("Rate limit reached for gemini-3.8-flash-high") is True
+    assert is_quota_exhausted("Rate-limit exceeded: 15 RPM") is True
+    assert is_quota_exhausted("Hit ratelimit, please slow down") is True
+    assert is_quota_exhausted("Too many requests sent to backend") is True
+    assert is_quota_exhausted("The requested model is unavailable") is True
+    assert is_quota_exhausted("model unavailable at this time") is True
+    assert is_quota_exhausted("Model overloaded. Please try again shortly.") is True
+    assert is_quota_exhausted("Server is overloaded.") is True
+
+    # Non-quota errors must return False
+    assert is_quota_exhausted("Keyring authorization denied.") is False
+    assert (
+        is_quota_exhausted(
+            "[Antigravity Agent Execution Error]: `agy` CLI binary not found in PATH."
+        )
+        is False
+    )
+    assert is_quota_exhausted("SyntaxError: invalid syntax in file.py") is False
+    assert (
+        is_quota_exhausted("fatal: not a git repository (or any of the parent directories)")
+        is False
+    )
+    assert is_quota_exhausted("Unrecognized argument: --invalid-flag") is False
+    assert is_quota_exhausted("") is False
+
+
+def test_calculate_backoff_exponential_and_jitter():
+    # Deterministic exponential delays without jitter
+    assert calculate_backoff(0, base_delay=1.0, backoff_factor=2.0, jitter=False) == 1.0
+    assert calculate_backoff(1, base_delay=1.0, backoff_factor=2.0, jitter=False) == 2.0
+    assert calculate_backoff(2, base_delay=1.0, backoff_factor=2.0, jitter=False) == 4.0
+    assert calculate_backoff(3, base_delay=1.0, backoff_factor=2.0, jitter=False) == 8.0
+
+    # Max delay cap
+    assert (
+        calculate_backoff(10, base_delay=1.0, backoff_factor=2.0, max_delay=15.0, jitter=False)
+        == 15.0
+    )
+
+    # Jitter range
+    for attempt in range(4):
+        base = 1.0 * (2.0**attempt)
+        val = calculate_backoff(
+            attempt, base_delay=1.0, backoff_factor=2.0, jitter=True, jitter_factor=0.5
+        )
+        assert val >= base
+        assert val <= base * 1.5 + 0.001
+
+
+def test_run_agy_prompt_transient_retry_and_backoff():
+    # Model fails with 429 on first attempt, succeeds on second attempt
+    err_429 = subprocess.CalledProcessError(
+        returncode=1, cmd=["agy"], stderr="429 ResourceExhausted: Quota limit hit"
+    )
+    success_mock = MagicMock(stdout="Recovered response after transient 429")
+
+    with (
+        patch("subprocess.run", side_effect=[err_429, success_mock]) as mock_subproc,
+        patch("time.sleep") as mock_sleep,
+    ):
+        result = run_agy_prompt(
+            "Test prompt",
+            model="gemini-3.8-flash-high",
+            max_retries=2,
+            base_delay=0.1,
+            backoff_factor=2.0,
+        )
+        assert result == "Recovered response after transient 429"
+        assert mock_subproc.call_count == 2
+        assert mock_sleep.call_count == 1
+        # Both attempts should use the primary model without escalating
+        for call_args in mock_subproc.call_args_list:
+            cmd = call_args[0][0]
+            assert "--model" in cmd
+            model_idx = cmd.index("--model")
+            assert cmd[model_idx + 1] == "gemini-3.8-flash-high"
+
+
+def test_get_model_fallback_chain():
+    # Default fallback chain
+    chain = get_model_fallback_chain()
+    assert chain == [
+        "gemini-3.8-flash-high",
+        "gemini-3.8-flash-medium",
+        "gemini-3.7-flash-high",
+        "gemini-3.6-flash-high",
+        "claude-sonnet-4-6",
+    ]
+
+    # Starting with a specific tier from the chain
+    chain_mid = get_model_fallback_chain("gemini-3.7-flash-high")
+    assert chain_mid[0] == "gemini-3.7-flash-high"
+    assert "gemini-3.6-flash-high" in chain_mid
+    assert "claude-sonnet-4-6" in chain_mid
+
+    # Custom chain override
+    custom = ["custom-model-1", "custom-model-2"]
+    assert get_model_fallback_chain(custom_chain=custom) == custom
+
+
+def test_run_agy_prompt_model_fallback_escalation():
+    # Primary model (gemini-3.8-flash-high) exhausts retries with 429,
+    # then fallback model (gemini-3.8-flash-medium) succeeds
+    err_exhausted = subprocess.CalledProcessError(
+        returncode=1, cmd=["agy"], stderr="429 Quota exceeded for gemini-3.8-flash-high"
+    )
+    success_fallback = MagicMock(stdout="Output generated by fallback model")
+
+    # Primary attempts: 2 (attempt 0, attempt 1 with max_retries=1)
+    # Secondary attempt: 1 (succeeds)
+    with (
+        patch(
+            "subprocess.run",
+            side_effect=[err_exhausted, err_exhausted, success_fallback],
+        ) as mock_subproc,
+        patch("time.sleep"),
+    ):
+        result = run_agy_prompt(
+            "Implement feature",
+            model="gemini-3.8-flash-high",
+            max_retries=1,
+            base_delay=0.001,
+        )
+        assert result == "Output generated by fallback model"
+        assert mock_subproc.call_count == 3
+
+        # Verify models used in call sequence
+        calls = mock_subproc.call_args_list
+        model_1 = calls[0][0][0][calls[0][0][0].index("--model") + 1]
+        model_2 = calls[1][0][0][calls[1][0][0].index("--model") + 1]
+        model_3 = calls[2][0][0][calls[2][0][0].index("--model") + 1]
+
+        assert model_1 == "gemini-3.8-flash-high"
+        assert model_2 == "gemini-3.8-flash-high"
+        assert model_3 == "gemini-3.8-flash-medium"
+
+
+def test_run_agy_prompt_non_quota_error_no_fallback():
+    # Non-quota error should abort immediately without retrying or falling back
+    err_syntax = subprocess.CalledProcessError(
+        returncode=2, cmd=["agy"], stderr="Unrecognized argument: --bogus"
+    )
+    with (
+        patch("subprocess.run", side_effect=err_syntax) as mock_subproc,
+        patch("time.sleep") as mock_sleep,
+    ):
+        result = run_agy_prompt("Test prompt", model="gemini-3.8-flash-high", max_retries=2)
+        assert result.startswith("[Antigravity Agent Execution Error]")
+        assert "Unrecognized argument: --bogus" in result
+        assert mock_subproc.call_count == 1
+        assert mock_sleep.call_count == 0
+
+
+def test_save_load_clear_checkpoint():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Load from empty directory
+        assert load_checkpoint(cwd=tmpdir) is None
+
+        # Save checkpoint
+        payload = {
+            "issue_number": 42,
+            "status": "Blocked",
+            "completed_steps": ["Step 1", "Step 2"],
+        }
+        path = save_checkpoint(payload, cwd=tmpdir)
+        assert os.path.isfile(path)
+
+        # Load checkpoint
+        loaded = load_checkpoint(cwd=tmpdir)
+        assert loaded is not None
+        assert loaded["issue_number"] == 42
+        assert loaded["status"] == "Blocked"
+        assert loaded["completed_steps"] == ["Step 1", "Step 2"]
+
+        # Clear checkpoint
+        clear_checkpoint(cwd=tmpdir)
+        assert load_checkpoint(cwd=tmpdir) is None
+
+
+def test_checkpoint_and_notify_exhaustion():
+    class MockClient:
+        def __init__(self):
+            self.added_urls = []
+            self.edited_statuses = []
+
+        def add_item(self, url):
+            self.added_urls.append(url)
+            return "item-101"
+
+        def edit_status(self, item_id, status):
+            self.edited_statuses.append((item_id, status))
+            return True
+
+    mock_client = MockClient()
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with (
+            patch("antigravity_runner.run_gh") as mock_gh,
+            patch("antigravity_runner.run_git") as mock_git,
+        ):
+            mock_git.side_effect = ["", "M src/file.py", "", ""]  # add, status, commit, push
+
+            data = checkpoint_and_notify_exhaustion(
+                issue_number=67,
+                repo="marius-patrik/ChessWithQuests",
+                completed_steps=["Step A: Read request", "Step B: Created branch"],
+                branch_name="feature/test-quota",
+                is_pr=False,
+                error_detail="429 Quota exhausted on all fallback models",
+                cwd=tmpdir,
+                client=mock_client,
+            )
+
+            # 1. Verify checkpoint file
+            assert os.path.isfile(os.path.join(tmpdir, CHECKPOINT_FILENAME))
+            assert data["status"] == "Blocked"
+            assert data["issue_number"] == 67
+            assert "Step A: Read request" in data["completed_steps"]
+
+            # 2. Verify git operations
+            assert mock_git.call_count >= 2
+
+            # 3. Verify comment posted on issue #67
+            mock_gh.assert_any_call(
+                [
+                    "issue",
+                    "comment",
+                    "67",
+                    "--body",
+                    ANY,
+                ],
+                repo="marius-patrik/ChessWithQuests",
+            )
+            # Find the comment body call and inspect content
+            comment_call = [
+                c
+                for c in mock_gh.call_args_list
+                if c[0][0][0] == "issue" and c[0][0][1] == "comment"
+            ][0]
+            comment_body = comment_call[0][0][4]
+            assert "<!-- antigravity-agent -->" in comment_body
+            assert "Antigravity Agent Quota Exhaustion Notice" in comment_body
+            assert "gemini-3.8-flash-high" in comment_body
+            assert "claude-sonnet-4-6" in comment_body
+            assert "- [x] Step A: Read request" in comment_body
+            assert "Instructions to Resume" in comment_body
+            assert "Blocked" in comment_body
+
+            # 4. Verify Blocked label added
+            mock_gh.assert_any_call(
+                ["issue", "edit", "67", "--add-label", "Blocked"],
+                repo="marius-patrik/ChessWithQuests",
+            )
+
+            # 5. Verify project board updated to Blocked
+            assert len(mock_client.added_urls) == 1
+            assert (
+                "https://github.com/marius-patrik/ChessWithQuests/issues/67"
+                in mock_client.added_urls[0]
+            )
+            assert ("item-101", "Blocked") in mock_client.edited_statuses
+
+
+def test_checkpoint_and_notify_exhaustion_pr():
+    class MockClient:
+        def __init__(self):
+            self.added_urls = []
+            self.edited_statuses = []
+
+        def add_item(self, url):
+            self.added_urls.append(url)
+            return "item-202"
+
+        def edit_status(self, item_id, status):
+            self.edited_statuses.append((item_id, status))
+            return True
+
+    mock_client = MockClient()
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with patch("antigravity_runner.run_gh") as mock_gh:
+            data = checkpoint_and_notify_exhaustion(
+                issue_number=88,
+                repo="marius-patrik/ChessWithQuests",
+                completed_steps=["Self-review iteration 1"],
+                branch_name="feature/self-review",
+                is_pr=True,
+                error_detail="RESOURCE_EXHAUSTED",
+                cwd=tmpdir,
+                client=mock_client,
+            )
+
+            # Comment posted on PR
+            mock_gh.assert_any_call(
+                ["pr", "comment", "88", "--body", ANY],
+                repo="marius-patrik/ChessWithQuests",
+            )
+            # Label added to PR
+            mock_gh.assert_any_call(
+                ["pr", "edit", "88", "--add-label", "Blocked"],
+                repo="marius-patrik/ChessWithQuests",
+            )
+            # Project board URL points to PR
+            assert (
+                "https://github.com/marius-patrik/ChessWithQuests/pull/88"
+                in mock_client.added_urls[0]
+            )
+            assert ("item-202", "Blocked") in mock_client.edited_statuses
+
+
+def test_run_agy_prompt_all_models_exhausted_triggers_checkpoint():
+    err_quota = subprocess.CalledProcessError(
+        returncode=1, cmd=["agy"], stderr="429 RESOURCE_EXHAUSTED"
+    )
+    with (
+        patch("subprocess.run", side_effect=err_quota),
+        patch("time.sleep"),
+        patch("antigravity_runner.checkpoint_and_notify_exhaustion") as mock_checkpoint,
+    ):
+        ctx = {
+            "issue_number": 70,
+            "repo": "marius-patrik/ChessWithQuests",
+            "branch_name": "feature/exhaustion",
+            "completed_steps": ["Step 1", "Step 2"],
+        }
+        res = run_agy_prompt(
+            "Task prompt",
+            fallback_models=["gemini-3.8-flash-high", "gemini-3.8-flash-medium"],
+            max_retries=1,
+            checkpoint_context=ctx,
+        )
+        assert res.startswith("[Antigravity Agent Execution Error]")
+        assert "Quota exhausted across all fallback models" in res
+        mock_checkpoint.assert_called_once_with(
+            issue_number=70,
+            repo="marius-patrik/ChessWithQuests",
+            completed_steps=["Step 1", "Step 2"],
+            branch_name="feature/exhaustion",
+            is_pr=False,
+            error_detail=res,
+            cwd=None,
+            client=None,
+        )
+
+
+def test_dispatch_event_resume_comment():
+    with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
+        json.dump(
+            {
+                "action": "created",
+                "repository": {"full_name": "marius-patrik/ChessWithQuests"},
+                "issue": {
+                    "number": 70,
+                    "labels": [{"name": "Plan"}],
+                },
+                "comment": {
+                    "body": "/resume",
+                    "user": {"login": "marius-patrik"},
+                },
+            },
+            f,
+        )
+        temp_path = f.name
+
+    try:
+        with (
+            patch("antigravity_runner.find_parent_request_number", return_value=67) as mock_find,
+            patch("antigravity_runner.handle_implement") as mock_implement,
+        ):
+            dispatch_event(temp_path, "issue_comment")
+            mock_find.assert_called_once_with(70, "marius-patrik/ChessWithQuests")
+            mock_implement.assert_called_once_with(70, 67, "marius-patrik/ChessWithQuests")
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)

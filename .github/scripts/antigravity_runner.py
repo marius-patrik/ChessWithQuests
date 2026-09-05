@@ -17,12 +17,61 @@ import tempfile
 import time
 import urllib.parse
 import urllib.request
+import random
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
 ANTIGRAVITY_CLIENT_ID = os.environ.get("ANTIGRAVITY_CLIENT_ID", "")
 ANTIGRAVITY_CLIENT_SECRET = os.environ.get("ANTIGRAVITY_CLIENT_SECRET", "")
 GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
+
+_SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+
+from project_automation import PROJECT_NUMBER, PROJECT_OWNER
+
+CHECKPOINT_FILENAME = ".antigravity_checkpoint.json"
+WORKSPACE_DIR = os.environ.get("GITHUB_WORKSPACE", "/workspace")
+STATE_DIR = os.environ.get("STATE_DIR", WORKSPACE_DIR)
+
+DEFAULT_MODEL_FALLBACK_CHAIN: List[str] = [
+    "gemini-3.8-flash-high",
+    "gemini-3.8-flash-medium",
+    "gemini-3.7-flash-high",
+    "gemini-3.6-flash-high",
+    "claude-sonnet-4-6",
+]
+
+QUOTA_EXHAUSTION_PATTERNS: List[re.Pattern] = [
+    re.compile(r"(?:status[_\s]*(?:code)?|http|error|code)\s*[:=]?\s*429\b", re.IGNORECASE),
+    re.compile(
+        r"\b429\s*[:=\-]?\s*(?:too\s*many\s*requests|resource[_\s]*exhausted|quota|rate\s*limit)",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bresource[_\s]*exhausted\b", re.IGNORECASE),
+    re.compile(
+        r"\bquota\b(?:\s+\S+){0,6}\s+\b(?:exceeded|exhausted|exhaustion|reached|hit)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:exceeded|exhausted|exhaustion|reached|hit)\b(?:\s+\S+){0,6}\s+\bquota\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\binsufficient\s*quota\b", re.IGNORECASE),
+    re.compile(r"\bout\s*of\s*quota\b", re.IGNORECASE),
+    re.compile(
+        r"\brate\s*[-_]?limit\b(?:\s+\S+){0,6}\s+\b(?:exceeded|exhausted|exhaustion|reached|hit)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:exceeded|exhausted|exhaustion|reached|hit)\b(?:\s+\S+){0,6}\s+\brate\s*[-_]?limit\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\btoo\s*many\s*requests\b", re.IGNORECASE),
+    re.compile(r"\b(?:model|service|endpoint)\s*(?:is\s*)?unavailable\b", re.IGNORECASE),
+    re.compile(r"\b(?:model|server|service)\s*(?:is\s*)?overloaded\b", re.IGNORECASE),
+]
 
 TYPE_LABELS = ["feat", "bug", "chore", "refactor", "test", "ci", "docs"]
 AREA_LABELS = ["area:model", "area:view", "area:controller", "area:ci", "area:docs"]
@@ -315,45 +364,542 @@ def is_bot_or_agent_comment(user_login: str, body: str) -> bool:
     return False
 
 
-def run_agy_prompt(prompt: str, model: str = "gemini-3.8-flash-high", timeout: str = "5m0s") -> str:
-    """Executes a prompt non-interactively using Antigravity CLI.
+def is_quota_exhausted(error_message: str) -> bool:
+    """Detects whether an error indicates quota or rate limit exhaustion.
+
+    Args:
+        error_message: Error string or subprocess stderr/stdout.
+
+    Returns:
+        True if the error message indicates quota or rate limit exhaustion, False otherwise.
+    """
+    if not error_message:
+        return False
+    for pattern in QUOTA_EXHAUSTION_PATTERNS:
+        if (
+            pattern.search(error_message)
+            if hasattr(pattern, "search")
+            else re.search(pattern, error_message, re.IGNORECASE)
+        ):
+            return True
+    return False
+
+
+def calculate_backoff(
+    attempt: int,
+    base_delay: float = 1.0,
+    backoff_factor: float = 2.0,
+    max_delay: float = 60.0,
+    jitter: bool = True,
+    jitter_factor: float = 0.5,
+) -> float:
+    """Calculates exponential backoff delay with jitter.
+
+    Args:
+        attempt: Zero-based retry attempt number.
+        base_delay: Initial delay in seconds.
+        backoff_factor: Multiplier for exponential backoff.
+        max_delay: Upper bound for backoff delay.
+        jitter: Whether to add random jitter.
+        jitter_factor: Maximum fraction of computed delay added as jitter.
+
+    Returns:
+        Delay in seconds.
+    """
+    if max_delay <= 0:
+        return 0.0
+    safe_attempt = max(0, min(attempt, 30))
+    raw_delay = base_delay * (backoff_factor**safe_attempt)
+    if not jitter or jitter_factor <= 0:
+        return min(max_delay, raw_delay)
+
+    max_base = max_delay / (1.0 + jitter_factor)
+    effective_base = min(raw_delay, max_base)
+    delay = effective_base + random.uniform(0.0, effective_base * jitter_factor)
+    return min(max_delay, delay)
+
+
+def get_model_fallback_chain(
+    initial_model: Optional[str] = None,
+    custom_chain: Optional[List[str]] = None,
+) -> List[str]:
+    """Returns the ordered model fallback chain starting with the initial model.
+
+    Args:
+        initial_model: The starting model ID or tier.
+        custom_chain: Optional explicit list of models to use.
+
+    Returns:
+        List of model identifiers to attempt in order.
+    """
+    if custom_chain is not None:
+        chain = list(custom_chain)
+        if not initial_model:
+            return chain
+        if initial_model in chain:
+            idx = chain.index(initial_model)
+            return chain[idx:]
+        else:
+            return [initial_model] + chain
+
+    if not initial_model:
+        return list(DEFAULT_MODEL_FALLBACK_CHAIN)
+
+    if initial_model in DEFAULT_MODEL_FALLBACK_CHAIN:
+        idx = DEFAULT_MODEL_FALLBACK_CHAIN.index(initial_model)
+        return list(DEFAULT_MODEL_FALLBACK_CHAIN[idx:])
+    else:
+        return [initial_model] + list(DEFAULT_MODEL_FALLBACK_CHAIN)
+
+
+def _exclude_checkpoint_from_git(git_dir: str) -> None:
+    """Appends CHECKPOINT_FILENAME to .git/info/exclude if not already present.
+
+    Handles standard git repositories, git worktrees, and submodules where .git
+    may be a file containing a gitdir pointer.
+    """
+    git_entry = os.path.join(git_dir, ".git")
+    git_info_dir = None
+    if os.path.isdir(git_entry):
+        git_info_dir = os.path.join(git_entry, "info")
+    elif os.path.isfile(git_entry):
+        try:
+            with open(git_entry, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+            if content.startswith("gitdir:"):
+                gitdir_path = content.split(":", 1)[1].strip()
+                if not os.path.isabs(gitdir_path):
+                    gitdir_path = os.path.normpath(os.path.join(git_dir, gitdir_path))
+                git_info_dir = os.path.join(gitdir_path, "info")
+        except Exception:
+            pass
+
+    if git_info_dir:
+        exclude_file = os.path.join(git_info_dir, "exclude")
+        try:
+            os.makedirs(os.path.dirname(exclude_file), exist_ok=True)
+            content = ""
+            if os.path.isfile(exclude_file):
+                with open(exclude_file, "r", encoding="utf-8") as f:
+                    content = f.read()
+            if CHECKPOINT_FILENAME not in content:
+                with open(exclude_file, "a", encoding="utf-8") as f:
+                    if content and not content.endswith("\n"):
+                        f.write("\n")
+                    f.write(f"{CHECKPOINT_FILENAME}\n")
+        except Exception:
+            pass
+
+
+def save_checkpoint(checkpoint_data: Dict[str, Any], cwd: Optional[str] = None) -> str:
+    """Saves checkpoint data to a JSON file in the target workspace directory.
+
+    Args:
+        checkpoint_data: Checkpoint payload dictionary.
+        cwd: Directory where checkpoint file should be written (defaults to STATE_DIR).
+
+    Returns:
+        Absolute path to the saved checkpoint file.
+    """
+    target_dir = cwd or STATE_DIR
+    os.makedirs(target_dir, exist_ok=True)
+    _exclude_checkpoint_from_git(target_dir)
+    checkpoint_file = os.path.join(target_dir, CHECKPOINT_FILENAME)
+    tmp_file = f"{checkpoint_file}.tmp.{uuid.uuid4().hex}"
+    try:
+        with open(tmp_file, "w", encoding="utf-8") as f:
+            json.dump(checkpoint_data, f, indent=2, default=str)
+        os.replace(tmp_file, checkpoint_file)
+    except Exception as e:
+        print(f"Notice: Failed to save checkpoint file: {e}", file=sys.stderr)
+        raise
+    finally:
+        if os.path.exists(tmp_file):
+            try:
+                os.remove(tmp_file)
+            except OSError:
+                pass
+    return checkpoint_file
+
+
+def load_checkpoint(cwd: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Loads checkpoint data from the workspace directory if present.
+
+    Args:
+        cwd: Directory to look for checkpoint file (defaults to STATE_DIR).
+
+    Returns:
+        Checkpoint dictionary if found and valid, None otherwise.
+    """
+    target_dir = cwd or STATE_DIR
+    checkpoint_file = os.path.join(target_dir, CHECKPOINT_FILENAME)
+    if os.path.isfile(checkpoint_file):
+        try:
+            with open(checkpoint_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data
+            print(f"Notice: Checkpoint data is not a dict: {type(data)}", file=sys.stderr)
+            return None
+        except Exception as e:
+            print(f"Notice: Failed to read checkpoint file: {e}", file=sys.stderr)
+    return None
+
+
+def clear_checkpoint(cwd: Optional[str] = None) -> None:
+    """Removes the checkpoint file from the workspace directory if present.
+
+    Args:
+        cwd: Directory to clear checkpoint from (defaults to STATE_DIR).
+    """
+    target_dir = cwd or STATE_DIR
+    checkpoint_file = os.path.join(target_dir, CHECKPOINT_FILENAME)
+    if os.path.exists(checkpoint_file):
+        try:
+            os.remove(checkpoint_file)
+        except OSError as e:
+            print(f"Notice: Failed to remove checkpoint file: {e}", file=sys.stderr)
+
+
+def run_git(args: List[str], cwd: Optional[str] = None) -> str:
+    """Executes a git command and returns stdout.
+
+    Args:
+        args: Git subcommand and arguments.
+        cwd: Working directory (defaults to WORKSPACE_DIR).
+
+    Returns:
+        Command stdout stripped.
+
+    Raises:
+        subprocess.CalledProcessError: If git command fails.
+    """
+    cmd = ["git"] + args
+    try:
+        res = subprocess.run(
+            cmd, capture_output=True, text=True, check=True, cwd=cwd or WORKSPACE_DIR
+        )
+        return res.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        print(f"Git command failed ({' '.join(cmd)}):\n{e.stderr}", file=sys.stderr)
+        raise
+
+
+def update_project_status_blocked(
+    issue_or_pr_number: int,
+    repo: str,
+    is_pr: bool = False,
+    client: Optional[Any] = None,
+) -> None:
+    """Updates the project board status to Blocked and adds the Blocked label.
+
+    Args:
+        issue_or_pr_number: GitHub issue or pull request number.
+        repo: Repository slug (owner/repo).
+        is_pr: Whether the entity is a pull request.
+        client: Optional GitHubProjectClient instance.
+    """
+    # 1. Add Blocked label to issue or PR
+    label_cmd = (
+        ["pr", "edit", str(issue_or_pr_number), "--add-label", "Blocked"]
+        if is_pr
+        else ["issue", "edit", str(issue_or_pr_number), "--add-label", "Blocked"]
+    )
+    try:
+        run_gh(label_cmd, repo=repo)
+    except Exception as e:
+        print(f"Notice: Failed to add Blocked label: {e}", file=sys.stderr)
+
+    # 2. Update Project status to Blocked
+    owner = repo.split("/")[0] if "/" in repo else PROJECT_OWNER
+    entity_url = (
+        f"https://github.com/{repo}/pull/{issue_or_pr_number}"
+        if is_pr
+        else f"https://github.com/{repo}/issues/{issue_or_pr_number}"
+    )
+
+    if client is None:
+        try:
+            from project_automation import GitHubProjectClient
+
+            client = GitHubProjectClient(owner=owner, project_number=PROJECT_NUMBER)
+        except Exception as e:
+            print(f"Notice: Failed to instantiate GitHubProjectClient: {e}", file=sys.stderr)
+            client = None
+
+    if client is not None:
+        try:
+            if hasattr(client, "set_status"):
+                client.set_status(entity_url, "Blocked")
+            else:
+                item_id = client.add_item(entity_url)
+                if item_id:
+                    client.edit_status(item_id, "Blocked")
+                    print(f"Updated project board status to Blocked for {entity_url}")
+        except Exception as e:
+            print(f"Notice: Failed to update project status: {e}", file=sys.stderr)
+
+
+def unblock_entity(
+    issue_or_pr_number: int,
+    repo: str,
+    is_pr: bool = False,
+    client: Optional[Any] = None,
+    target_status: str = "In Progress",
+) -> None:
+    """Removes the Blocked label and updates the project board status.
+
+    Args:
+        issue_or_pr_number: GitHub issue or pull request number.
+        repo: Repository slug (owner/repo).
+        is_pr: Whether the entity is a pull request.
+        client: Optional GitHubProjectClient instance.
+        target_status: Target status to set on the project board (defaults to "In Progress").
+    """
+    # 1. Remove Blocked label from issue or PR
+    label_cmd = (
+        ["pr", "edit", str(issue_or_pr_number), "--remove-label", "Blocked"]
+        if is_pr
+        else ["issue", "edit", str(issue_or_pr_number), "--remove-label", "Blocked"]
+    )
+    try:
+        run_gh(label_cmd, repo=repo)
+    except Exception as e:
+        print(f"Notice: Failed to remove Blocked label: {e}", file=sys.stderr)
+
+    # 2. Update Project status
+    owner = repo.split("/")[0] if "/" in repo else PROJECT_OWNER
+    entity_url = (
+        f"https://github.com/{repo}/pull/{issue_or_pr_number}"
+        if is_pr
+        else f"https://github.com/{repo}/issues/{issue_or_pr_number}"
+    )
+
+    if client is None:
+        try:
+            from project_automation import GitHubProjectClient
+
+            client = GitHubProjectClient(owner=owner, project_number=PROJECT_NUMBER)
+        except Exception as e:
+            print(f"Notice: Failed to instantiate GitHubProjectClient: {e}", file=sys.stderr)
+            client = None
+
+    if client is not None:
+        try:
+            if hasattr(client, "set_status"):
+                client.set_status(entity_url, target_status)
+            else:
+                item_id = client.add_item(entity_url)
+                if item_id:
+                    client.edit_status(item_id, target_status)
+                    print(f"Updated project board status to {target_status} for {entity_url}")
+        except Exception as e:
+            print(f"Notice: Failed to update project status: {e}", file=sys.stderr)
+
+
+def checkpoint_and_notify_exhaustion(
+    issue_number: int,
+    repo: str,
+    completed_steps: Optional[List[str]] = None,
+    branch_name: Optional[str] = None,
+    is_pr: bool = False,
+    error_detail: str = "",
+    cwd: Optional[str] = None,
+    client: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Gracefully checkpoints progress, posts user notification, and updates project status to Blocked.
+
+    Args:
+        issue_number: Target issue or PR number to notify.
+        repo: Repository slug.
+        completed_steps: List of completed pipeline steps up to exhaustion.
+        branch_name: Active git branch name if applicable.
+        is_pr: Whether target is a pull request.
+        error_detail: Detailed error message explaining exhaustion.
+        cwd: Working directory (defaults to WORKSPACE_DIR).
+        client: Optional GitHubProjectClient for project board update.
+
+    Returns:
+        Checkpoint dictionary saved.
+    """
+    work_dir = cwd or WORKSPACE_DIR
+    target_state_dir = work_dir
+    steps = completed_steps or ["Pipeline execution initiated"]
+
+    checkpoint_data: Dict[str, Any] = {
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "issue_number": issue_number,
+        "repo": repo,
+        "is_pr": is_pr,
+        "branch_name": branch_name,
+        "completed_steps": steps,
+        "status": "Blocked",
+        "error_detail": error_detail,
+    }
+
+    # 1. Save checkpoint JSON
+    save_checkpoint(checkpoint_data, cwd=target_state_dir)
+
+    # 2. Git checkpoint: stage and commit any working changes
+    if branch_name:
+        try:
+            run_git(["add", "-A"], cwd=work_dir)
+            status = run_git(["status", "--porcelain"], cwd=work_dir)
+            if status:
+                run_git(
+                    ["commit", "-m", "chore(ci): checkpoint progress on quota exhaustion"],
+                    cwd=work_dir,
+                )
+                try:
+                    run_git(["push", "origin", branch_name], cwd=work_dir)
+                except Exception as pe:
+                    print(f"Notice: Git push during checkpoint notice: {pe}", file=sys.stderr)
+        except Exception as ge:
+            print(f"Notice: Git checkpoint notice: {ge}", file=sys.stderr)
+
+    # 3. Post structured notice comment
+    steps_formatted = "\n".join([f"- [x] {s}" for s in steps])
+    models_formatted = "\n".join([f"- `{m}`" for m in DEFAULT_MODEL_FALLBACK_CHAIN])
+
+    comment_body = (
+        "<!-- antigravity-agent -->\n"
+        "### ⚠️ Antigravity Agent Quota Exhaustion Notice\n\n"
+        "Execution has paused because API quota was exhausted across all fallback model tiers:\n"
+        f"{models_formatted}\n\n"
+        "#### Completed Steps\n"
+        f"{steps_formatted}\n\n"
+        "#### Checkpoint Information\n"
+        f"- **Branch**: `{branch_name or 'N/A'}`\n"
+        "- **Checkpoint**: Progress preserved in `.antigravity_checkpoint.json`\n"
+        "- **Project Status**: Updated to `Blocked`\n\n"
+        "#### Instructions to Resume\n"
+        "When quota limits reset or additional quota is provisioned:\n"
+        "1. Verify that Gemini / LLM quota is available.\n"
+        "2. Comment `approve` or `/resume` on this issue/PR to resume execution.\n"
+        "3. The Antigravity agent will pick up from the checkpoint and complete remaining work.\n"
+    )
+    if error_detail:
+        comment_body += f"\n<details><summary>Error Details</summary>\n\n```\n{error_detail.strip()}\n```\n</details>\n"
+
+    try:
+        if is_pr:
+            run_gh(["pr", "comment", str(issue_number), "--body", comment_body], repo=repo)
+        else:
+            run_gh(["issue", "comment", str(issue_number), "--body", comment_body], repo=repo)
+    except Exception as e:
+        print(f"Notice: Failed to post quota exhaustion notice comment: {e}", file=sys.stderr)
+
+    # 4. Update Project Board Status to Blocked
+    update_project_status_blocked(issue_number, repo=repo, is_pr=is_pr, client=client)
+
+    return checkpoint_data
+
+
+def run_agy_prompt(
+    prompt: str,
+    model: str = "gemini-3.8-flash-high",
+    timeout: str = "5m0s",
+    max_retries: int = 2,
+    base_delay: float = 1.0,
+    backoff_factor: float = 2.0,
+    fallback_models: Optional[List[str]] = None,
+    checkpoint_context: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Executes a prompt non-interactively using Antigravity CLI with backoff and model fallback.
 
     Args:
         prompt: Instruction prompt to execute.
-        model: Model tier or ID to use.
+        model: Primary model tier or ID to use.
         timeout: Print mode timeout (default 5m0s, use longer for implementation).
+        max_retries: Maximum transient retry attempts per model before escalating.
+        base_delay: Initial retry delay in seconds for exponential backoff.
+        backoff_factor: Multiplier for exponential backoff.
+        fallback_models: Optional explicit list of fallback models.
+        checkpoint_context: Optional dictionary for automatic checkpointing if all tiers exhaust.
 
     Returns:
         Agent text output or explicit error description.
     """
-    cmd = [
-        "agy",
-        "--print",
-        prompt,
-        "--model",
-        model,
-        "--dangerously-skip-permissions",
-        "--print-timeout",
-        timeout,
-    ]
+    model_chain = get_model_fallback_chain(model, fallback_models)
     env = os.environ.copy()
     env.setdefault("TERM", "xterm-256color")
-    try:
-        res = subprocess.run(cmd, capture_output=True, text=True, check=True, env=env)
-        return res.stdout.strip()
-    except FileNotFoundError:
-        err = "[Antigravity Agent Execution Error]: `agy` CLI binary not found in PATH."
-        print(err, file=sys.stderr)
-        return err
-    except subprocess.CalledProcessError as e:
-        detail = e.stderr.strip() or e.stdout.strip() or str(e)
-        err = f"[Antigravity Agent Execution Error]: `agy` invocation failed (exit code {e.returncode}): {detail}"
-        print(err, file=sys.stderr)
-        return err
-    except Exception as e:
-        err = f"[Antigravity Agent Execution Error]: Unexpected failure executing `agy`: {e}"
-        print(err, file=sys.stderr)
-        return err
+    last_error_detail = ""
+
+    for current_model in model_chain:
+        for attempt in range(max_retries + 1):
+            cmd = [
+                "agy",
+                "--print",
+                prompt,
+                "--model",
+                current_model,
+                "--dangerously-skip-permissions",
+                "--print-timeout",
+                timeout,
+            ]
+            try:
+                res = subprocess.run(cmd, capture_output=True, text=True, check=True, env=env)
+                return res.stdout.strip()
+            except FileNotFoundError:
+                err = "[Antigravity Agent Execution Error]: `agy` CLI binary not found in PATH."
+                print(err, file=sys.stderr)
+                return err
+            except subprocess.CalledProcessError as e:
+                stderr_part = (e.stderr or "").strip()
+                stdout_part = (e.stdout or "").strip()
+                detail = f"{stderr_part}\n{stdout_part}".strip() or str(e)
+                last_error_detail = detail
+                if is_quota_exhausted(detail):
+                    if attempt < max_retries:
+                        delay = calculate_backoff(
+                            attempt, base_delay=base_delay, backoff_factor=backoff_factor
+                        )
+                        print(
+                            f"Transient rate limit/quota error on model '{current_model}' "
+                            f"(attempt {attempt + 1}/{max_retries + 1}): {detail}. "
+                            f"Retrying in {delay:.2f}s...",
+                            file=sys.stderr,
+                        )
+                        time.sleep(delay)
+                        continue
+                    else:
+                        print(
+                            f"Quota exhausted for model '{current_model}' after {max_retries + 1} attempts. "
+                            f"Escalating to next fallback model in chain...",
+                            file=sys.stderr,
+                        )
+                        break
+                else:
+                    err = f"[Antigravity Agent Execution Error]: `agy` invocation failed (exit code {e.returncode}): {detail}"
+                    print(err, file=sys.stderr)
+                    return err
+            except Exception as e:
+                err = (
+                    f"[Antigravity Agent Execution Error]: Unexpected failure executing `agy`: {e}"
+                )
+                print(err, file=sys.stderr)
+                return err
+
+    # All model tiers in fallback chain exhausted
+    err = (
+        f"[Antigravity Agent Execution Error]: Quota exhausted across all fallback models "
+        f"({', '.join(model_chain)}): {last_error_detail}"
+    )
+    print(err, file=sys.stderr)
+
+    if checkpoint_context:
+        checkpoint_and_notify_exhaustion(
+            issue_number=checkpoint_context.get("issue_number", 0),
+            repo=checkpoint_context.get("repo", "marius-patrik/ChessWithQuests"),
+            completed_steps=checkpoint_context.get("completed_steps"),
+            branch_name=checkpoint_context.get("branch_name"),
+            is_pr=checkpoint_context.get("is_pr", False),
+            error_detail=err,
+            cwd=checkpoint_context.get("cwd"),
+            client=checkpoint_context.get("client"),
+        )
+
+    return err
 
 
 def handle_interpret(issue_number: int, repo: str):
@@ -376,7 +922,19 @@ def handle_interpret(issue_number: int, repo: str):
         "3. Proposed Verification Plan\n"
         "Keep it concise and clear."
     )
-    interpretation = run_agy_prompt(prompt)
+    checkpoint_ctx = {
+        "issue_number": issue_number,
+        "repo": repo,
+        "completed_steps": [
+            f"Read Request issue #{issue_number}",
+            f"Classified labels as `{t_label}`, `{a_label}`",
+        ],
+        "is_pr": False,
+    }
+    interpretation = run_agy_prompt(prompt, checkpoint_context=checkpoint_ctx)
+
+    if is_quota_exhausted(interpretation):
+        return
 
     if interpretation.startswith("[Antigravity Agent Execution Error]"):
         comment = (
@@ -466,7 +1024,19 @@ def handle_plan(request_number: int, plan_number: int, repo: str):
         f"Title: {req_data.get('title')}\nDetails: {req_data.get('body')}\n\n"
         "Include Scope, Architectural & Code Changes, and Verification Steps."
     )
-    plan_body = run_agy_prompt(prompt)
+    checkpoint_ctx = {
+        "issue_number": plan_number,
+        "repo": repo,
+        "completed_steps": [
+            f"Reviewed Parent Request #{request_number}",
+            f"Created child Plan issue #{plan_number}",
+        ],
+        "is_pr": False,
+    }
+    plan_body = run_agy_prompt(prompt, checkpoint_context=checkpoint_ctx)
+
+    if is_quota_exhausted(plan_body):
+        return
 
     if plan_body.startswith("[Antigravity Agent Execution Error]"):
         comment = (
@@ -489,12 +1059,23 @@ def handle_plan(request_number: int, plan_number: int, repo: str):
 
 def handle_respond(issue_or_pr_num: int, comment_text: str, repo: str, is_pr: bool = False):
     """Generates a contextual agent response to human feedback."""
+    checkpoint_ctx = {
+        "issue_number": issue_or_pr_num,
+        "repo": repo,
+        "completed_steps": [
+            f"Received user comment on {'PR' if is_pr else 'Issue'} #{issue_or_pr_num}"
+        ],
+        "is_pr": is_pr,
+    }
     prompt = (
         f"User posted the following feedback on {'PR' if is_pr else 'Issue'} #{issue_or_pr_num}:\n"
         f'"{comment_text}"\n\n'
         "Provide a direct, helpful, and concise response addressing the feedback and detailing next actions."
     )
-    response = run_agy_prompt(prompt)
+    response = run_agy_prompt(prompt, checkpoint_context=checkpoint_ctx)
+    if is_quota_exhausted(response):
+        return
+
     if response.startswith("[Antigravity Agent Execution Error]"):
         body = f"<!-- antigravity-agent -->\n### Antigravity Agent Execution Error\n\n{response}"
     else:
@@ -508,7 +1089,6 @@ def handle_respond(issue_or_pr_num: int, comment_text: str, repo: str, is_pr: bo
 
 
 MAX_REVIEW_ITERATIONS = 3
-WORKSPACE_DIR = os.environ.get("GITHUB_WORKSPACE", "/workspace")
 
 
 def find_parent_request_number(plan_number: int, repo: str) -> Optional[int]:
@@ -549,6 +1129,82 @@ def find_parent_request_number(plan_number: int, repo: str) -> Optional[int]:
     return None
 
 
+def find_plan_issue_for_pr(pr_number: int, repo: str) -> Optional[int]:
+    """Finds the associated Plan issue number for a PR from PR body, metadata, or comments.
+
+    Args:
+        pr_number: The pull request number.
+        repo: Repository slug (owner/name).
+
+    Returns:
+        Plan issue number, or None if not found.
+    """
+    try:
+        raw = run_gh(
+            ["pr", "view", str(pr_number), "--json", "body,closingIssuesReferences,comments"],
+            repo=repo,
+        )
+        data = json.loads(raw)
+    except Exception as e:
+        print(f"Warning: Failed to fetch PR #{pr_number} metadata: {e}", file=sys.stderr)
+        data = {}
+
+    # 1. Native closingIssuesReferences
+    for item in data.get("closingIssuesReferences", []):
+        if isinstance(item, dict):
+            num = item.get("number")
+            labels = [
+                l.get("name", "").lower() if isinstance(l, dict) else str(l).lower()
+                for l in item.get("labels", [])
+            ]
+            title = item.get("title", "").lower()
+            if ("plan" in labels or title.startswith("plan:")) and num:
+                return int(num)
+
+    # 2. Check PR body for explicit Plan reference (e.g. "Plan: #N", "Child Plan: #N", "Plan #N")
+    body = data.get("body", "")
+    plan_match = re.search(r"(?:Plan|Child Plan):?\s*#(\d+)", body, re.IGNORECASE)
+    if plan_match:
+        return int(plan_match.group(1))
+
+    # 3. Check comments for Plan reference
+    for c in data.get("comments", []):
+        c_body = c.get("body", "") if isinstance(c, dict) else str(c)
+        m = re.search(r"(?:Plan|Child Plan|\*\*Plan\*\*):?\s*#(\d+)", c_body, re.IGNORECASE)
+        if m:
+            return int(m.group(1))
+
+    # 4. Check closing issue references in PR body: Closes #123, Fixes #456
+    matches = re.findall(
+        r"(?i)\b(?:close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)\s+(?:#(\d+)|https://github\.com/[^/\s]+/[^/\s]+/issues/(\d+))\b",
+        body,
+    )
+    candidates = []
+    for m1, m2 in matches:
+        num_str = m1 or m2
+        if num_str:
+            candidates.append(int(num_str))
+
+    for num in reversed(candidates):
+        try:
+            issue_raw = run_gh(["issue", "view", str(num), "--json", "labels,title"], repo=repo)
+            issue_data = json.loads(issue_raw)
+            labels = [
+                l.get("name", "").lower() if isinstance(l, dict) else str(l).lower()
+                for l in issue_data.get("labels", [])
+            ]
+            title = issue_data.get("title", "").lower()
+            if "plan" in labels or title.startswith("plan:"):
+                return num
+        except Exception:
+            continue
+
+    if candidates:
+        return candidates[-1]
+
+    return None
+
+
 def generate_branch_name(title: str) -> str:
     """Generates a feature branch name from a plan or request title.
 
@@ -568,24 +1224,6 @@ def generate_branch_name(title: str) -> str:
     if len(slug) > 50:
         slug = slug[:50].rstrip("-")
     return f"feature/{slug}"
-
-
-def run_git(args: List[str], cwd: Optional[str] = None) -> str:
-    """Executes a git command and returns stdout.
-
-    Args:
-        args: Git subcommand and arguments.
-        cwd: Working directory (defaults to WORKSPACE_DIR).
-
-    Returns:
-        Command stdout stripped.
-
-    Raises:
-        subprocess.CalledProcessError: If git command fails.
-    """
-    cmd = ["git"] + args
-    res = subprocess.run(cmd, capture_output=True, text=True, check=True, cwd=cwd or WORKSPACE_DIR)
-    return res.stdout.strip()
 
 
 def handle_implement(plan_number: int, request_number: int, repo: str):
@@ -645,12 +1283,25 @@ def handle_implement(plan_number: int, request_number: int, repo: str):
     except Exception as e:
         print(f"Git config notice: {e}", file=sys.stderr)
 
-    # 4. Create feature branch from main
+    # 4. Create feature branch from main or track existing remote branch
     try:
-        run_git(["fetch", "origin", "main"], cwd=cwd)
-        run_git(["checkout", "-b", branch_name, "origin/main"], cwd=cwd)
+        run_git(["fetch", "origin"], cwd=cwd)
+        remote_branches = run_git(["branch", "-r"], cwd=cwd)
+        if f"origin/{branch_name}" in remote_branches:
+            local_branches = [b.strip("* ") for b in run_git(["branch"], cwd=cwd).splitlines()]
+            if branch_name in local_branches:
+                run_git(["checkout", branch_name], cwd=cwd)
+            else:
+                run_git(["checkout", "-b", branch_name, f"origin/{branch_name}"], cwd=cwd)
+            run_git(["pull", "--ff-only", "origin", branch_name], cwd=cwd)
+        else:
+            local_branches = [b.strip("* ") for b in run_git(["branch"], cwd=cwd).splitlines()]
+            if branch_name in local_branches:
+                run_git(["checkout", branch_name], cwd=cwd)
+            else:
+                run_git(["checkout", "-b", branch_name, "origin/main"], cwd=cwd)
     except subprocess.CalledProcessError as e:
-        err_msg = f"Failed to create branch {branch_name}: {e.stderr or e.stdout}"
+        err_msg = f"Failed to create/checkout branch {branch_name}: {e.stderr or e.stdout}"
         print(err_msg, file=sys.stderr)
         run_gh(
             [
@@ -664,36 +1315,98 @@ def handle_implement(plan_number: int, request_number: int, repo: str):
         )
         return
 
-    # 5. Run agy to implement the plan (longer timeout for implementation)
-    implement_prompt = (
-        f"You are implementing a plan for a code repository.\n\n"
-        f"## Parent Request (#{request_number})\n"
-        f"Title: {request_title}\n{request_body}\n\n"
-        f"## Implementation Plan (#{plan_number})\n"
-        f"Title: {plan_title}\n{plan_body}\n\n"
-        f"## Instructions\n"
-        f"Implement ALL changes described in the plan above. "
-        f"Write production code and corresponding unit tests. "
-        f"Follow existing project conventions (Google-style docstrings, PEP 484 type annotations). "
-        f"Do NOT create or modify files outside the scope of the plan."
+    # Check for saved checkpoint on the branch or workspace
+    checkpoint = load_checkpoint(cwd=cwd)
+    completed_steps = (
+        list(checkpoint.get("completed_steps", []))
+        if checkpoint
+        else [
+            f"Loaded Plan #{plan_number} and Parent Request #{request_number}",
+            f"Created and checked out feature branch '{branch_name}'",
+        ]
     )
-    impl_result = run_agy_prompt(implement_prompt, timeout="15m0s")
-    if impl_result.startswith("[Antigravity Agent Execution Error]"):
-        run_gh(
+
+    # Check if open PR already exists for branch (e.g. from previous run)
+    pr_number = None
+    try:
+        pr_list = run_gh(
             [
-                "issue",
-                "comment",
-                str(plan_number),
-                "--body",
-                f"<!-- antigravity-agent -->\n### Antigravity Agent Execution Error\n\n{impl_result}",
+                "pr",
+                "list",
+                "--head",
+                branch_name,
+                "--base",
+                "main",
+                "--state",
+                "open",
+                "--json",
+                "number",
             ],
             repo=repo,
         )
+        prs = json.loads(pr_list)
+        if prs:
+            pr_number = prs[0]["number"]
+    except Exception:
+        pass
+
+    if pr_number:
+        print(
+            f"Found existing open PR #{pr_number} for branch {branch_name}, skipping implementation."
+        )
+        handle_self_review(pr_number, plan_number, repo)
+        handle_plan_alignment(pr_number, plan_number, request_number, repo)
         return
-    print(f"Implementation complete. Agent output:\n{impl_result[:500]}")
+
+    # 5. Run agy to implement the plan (longer timeout for implementation)
+    already_implemented = any("Implemented code and test changes" in s for s in completed_steps)
+    if already_implemented:
+        print("Implementation already completed according to checkpoint; resuming pipeline.")
+        impl_result = "Implementation resumed from checkpoint."
+    else:
+        implement_prompt = (
+            f"You are implementing a plan for a code repository.\n\n"
+            f"## Parent Request (#{request_number})\n"
+            f"Title: {request_title}\n{request_body}\n\n"
+            f"## Implementation Plan (#{plan_number})\n"
+            f"Title: {plan_title}\n{plan_body}\n\n"
+            f"## Instructions\n"
+            f"Implement ALL changes described in the plan above. "
+            f"Write production code and corresponding unit tests. "
+            f"Follow existing project conventions (Google-style docstrings, PEP 484 type annotations). "
+            f"Do NOT create or modify files outside the scope of the plan."
+        )
+        checkpoint_ctx = {
+            "issue_number": plan_number,
+            "repo": repo,
+            "branch_name": branch_name,
+            "completed_steps": list(completed_steps),
+            "cwd": cwd,
+        }
+        impl_result = run_agy_prompt(
+            implement_prompt, timeout="15m0s", checkpoint_context=checkpoint_ctx
+        )
+        if is_quota_exhausted(impl_result):
+            return
+
+        if impl_result.startswith("[Antigravity Agent Execution Error]"):
+            run_gh(
+                [
+                    "issue",
+                    "comment",
+                    str(plan_number),
+                    "--body",
+                    f"<!-- antigravity-agent -->\n### Antigravity Agent Execution Error\n\n{impl_result}",
+                ],
+                repo=repo,
+            )
+            return
+        print(f"Implementation complete. Agent output:\n{impl_result[:500]}")
+        completed_steps.append("Implemented code and test changes according to plan")
 
     # 6. Auto-format with black
     subprocess.run(["black", "."], cwd=cwd, capture_output=True, text=True)
+    completed_steps.append("Formatted code with black")
 
     # 7. Run pytest; if failures, ask agent to fix once
     test_res = subprocess.run(
@@ -709,9 +1422,15 @@ def handle_implement(plan_number: int, request_number: int, repo: str):
             f"```\n{test_res.stdout[-2000:]}\n{test_res.stderr[-1000:]}\n```\n\n"
             f"Fix the failures while staying within the plan scope."
         )
-        fix_result = run_agy_prompt(fix_prompt, timeout="10m0s")
+        checkpoint_ctx["completed_steps"] = list(completed_steps) + [
+            "Executed test suite (failures detected; attempting automated fix)"
+        ]
+        fix_result = run_agy_prompt(fix_prompt, timeout="10m0s", checkpoint_context=checkpoint_ctx)
+        if is_quota_exhausted(fix_result):
+            return
         if not fix_result.startswith("[Antigravity Agent Execution Error]"):
             subprocess.run(["black", "."], cwd=cwd, capture_output=True, text=True)
+            completed_steps.append("Resolved automated test fixes")
 
     # 8. Classify and commit
     t_label, a_label = classify_type_and_area(f"{plan_title} {plan_body}")
@@ -886,7 +1605,20 @@ def handle_self_review(pr_number: int, plan_number: int, repo: str):
             f"If you find issues, list each finding with a description and suggested fix. "
             f"For each finding, mark it WITHIN_SCOPE or OUT_OF_SCOPE relative to the plan."
         )
-        review_result = run_agy_prompt(review_prompt)
+        checkpoint_ctx = {
+            "issue_number": pr_number,
+            "repo": repo,
+            "is_pr": True,
+            "completed_steps": [
+                f"Completed implementation and opened PR #{pr_number}",
+                f"Self-review iteration {iteration}/{MAX_REVIEW_ITERATIONS}",
+            ],
+            "cwd": cwd,
+        }
+        review_result = run_agy_prompt(review_prompt, checkpoint_context=checkpoint_ctx)
+
+        if is_quota_exhausted(review_result):
+            return
 
         if review_result.startswith("[Antigravity Agent Execution Error]"):
             run_gh(
@@ -939,7 +1671,9 @@ def handle_self_review(pr_number: int, plan_number: int, repo: str):
                     f"to change and WHY it is necessary (justification), based on:\n\n"
                     f"{review_result}"
                 )
-                deviation_text = run_agy_prompt(deviation_prompt)
+                deviation_text = run_agy_prompt(deviation_prompt, checkpoint_context=checkpoint_ctx)
+                if is_quota_exhausted(deviation_text):
+                    return
                 if not deviation_text.startswith("[Antigravity Agent Execution Error]"):
                     run_gh(
                         [
@@ -967,7 +1701,10 @@ def handle_self_review(pr_number: int, plan_number: int, repo: str):
             f"Fix the following code review findings in the workspace:\n\n"
             f"{review_result}\n\nMake the necessary changes to resolve all findings."
         )
-        fix_result = run_agy_prompt(fix_prompt, timeout="10m0s")
+        fix_result = run_agy_prompt(fix_prompt, timeout="10m0s", checkpoint_context=checkpoint_ctx)
+
+        if is_quota_exhausted(fix_result):
+            return
 
         if fix_result.startswith("[Antigravity Agent Execution Error]"):
             run_gh(
@@ -1064,7 +1801,19 @@ def handle_plan_alignment(pr_number: int, plan_number: int, request_number: int,
         f"If it matches, respond starting with: MATCHES_PLAN_YES\n"
         f"If there are divergences, list each divergence with details."
     )
-    alignment_result = run_agy_prompt(alignment_prompt)
+    checkpoint_ctx = {
+        "issue_number": plan_number,
+        "repo": repo,
+        "is_pr": False,
+        "completed_steps": [
+            f"Completed implementation and PR #{pr_number}",
+            "Evaluating plan alignment",
+        ],
+    }
+    alignment_result = run_agy_prompt(alignment_prompt, checkpoint_context=checkpoint_ctx)
+
+    if is_quota_exhausted(alignment_result):
+        return
 
     if alignment_result.startswith("[Antigravity Agent Execution Error]"):
         run_gh(
@@ -1098,6 +1847,15 @@ def handle_plan_alignment(pr_number: int, plan_number: int, request_number: int,
             print(f"PR #{pr_number} marked ready for review")
         except Exception as e:
             print(f"Failed to mark PR ready: {e}", file=sys.stderr)
+
+        # Unblock entities and move status to Done
+        unblock_entity(pr_number, repo, is_pr=True, target_status="Done")
+        unblock_entity(plan_number, repo, is_pr=False, target_status="Done")
+        if request_number:
+            unblock_entity(request_number, repo, is_pr=False, target_status="Done")
+
+        # Clear checkpoint on successful completion
+        clear_checkpoint(cwd=WORKSPACE_DIR)
     else:
         # Post alignment divergence on Request issue with justification
         run_gh(
@@ -1178,17 +1936,32 @@ def dispatch_event(event_path: str, event_name: str):
             ]
             is_request = any(l.lower() == "request" for l in labels)
             is_plan = any(l.lower() == "plan" for l in labels)
-            if re.search(r"(?i)^\s*(?:/approve|approve|good|lgtm)\s*$", comment_body):
+            if re.search(
+                r"(?i)^\s*(?:/approve|approve|good|lgtm|/resume|resume)\s*$", comment_body
+            ):
                 print(f"Approval comment on #{issue_num} from @{comment_user}.")
+                load_checkpoint(cwd=WORKSPACE_DIR)
                 if is_request:
+                    unblock_entity(issue_num, repo, is_pr=False, target_status="In Progress")
                     plan_num = create_child_plan_issue(issue_num, repo)
                     handle_plan(issue_num, plan_num, repo)
                 elif is_plan:
+                    unblock_entity(issue_num, repo, is_pr=False, target_status="In Progress")
                     request_num = find_parent_request_number(issue_num, repo)
                     if request_num:
+                        unblock_entity(request_num, repo, is_pr=False, target_status="In Progress")
                         handle_implement(issue_num, request_num, repo)
                     else:
                         print(f"Could not find parent Request for Plan #{issue_num}")
+                elif is_pr:
+                    unblock_entity(issue_num, repo, is_pr=True, target_status="In Progress")
+                    # Retrieve linked plan issue and resume self-review or plan alignment
+                    plan_num = find_plan_issue_for_pr(issue_num, repo)
+                    if plan_num:
+                        unblock_entity(plan_num, repo, is_pr=False, target_status="In Progress")
+                        handle_self_review(issue_num, plan_num, repo)
+                    else:
+                        print(f"Could not find linked Plan for PR #{issue_num}")
             else:
                 handle_respond(issue_num, comment_body, repo=repo, is_pr=is_pr)
 
@@ -1206,6 +1979,15 @@ def dispatch_event(event_path: str, event_name: str):
                     f"Skipping PR review comment on #{pr_num} authored by bot/agent ({comment_user})."
                 )
                 return
+            if re.search(
+                r"(?i)^\s*(?:/approve|approve|good|lgtm|/resume|resume)\s*$", comment_body
+            ):
+                unblock_entity(pr_num, repo, is_pr=True, target_status="In Progress")
+                plan_num = find_plan_issue_for_pr(pr_num, repo)
+                if plan_num:
+                    unblock_entity(plan_num, repo, is_pr=False, target_status="In Progress")
+                    handle_self_review(pr_num, plan_num, repo)
+                    return
             print(f"PR review comment on #{pr_num} from @{comment_user}: {comment_body[:80]}...")
             handle_respond(pr_num, comment_body, repo=repo, is_pr=True)
 

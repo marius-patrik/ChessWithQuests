@@ -5,8 +5,13 @@ import subprocess
 import sys
 from typing import List, Optional, Dict, Any
 
-PROJECT_OWNER = "marius-patrik"
-PROJECT_NUMBER = 14
+PROJECT_OWNER = os.environ.get(
+    "PROJECT_OWNER", os.environ.get("GITHUB_REPOSITORY_OWNER", "marius-patrik")
+)
+try:
+    PROJECT_NUMBER = int(os.environ.get("PROJECT_NUMBER", "14"))
+except (ValueError, TypeError):
+    PROJECT_NUMBER = 14
 STATUS_FIELD_ID = "PVTSSF_lAHOBCXFy84BidGlzhhVH8o"
 
 STATUS_OPTIONS = {
