@@ -185,7 +185,7 @@ def process_event(
         bound_issues = extract_bound_issues(pr_body)
         print(f"PR event {action}: detected bound issues {bound_issues}")
 
-        if action == "opened":
+        if action in ("opened", "edited", "synchronize"):
             for issue_num in bound_issues:
                 issue_url = f"https://github.com/{repo_full_name}/issues/{issue_num}"
                 client.add_issue_label(repo_full_name, issue_num, "In Progress")
