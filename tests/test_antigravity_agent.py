@@ -132,6 +132,19 @@ def test_setup_antigravity_credentials():
         assert os.path.isfile(os.path.join(tmpdir, "tokens.json"))
         assert os.path.isfile(os.path.join(tmpdir, "token.json"))
 
+        # Check canonical antigravity-oauth-token file
+        canon_path = os.path.join(tmpdir, "antigravity-oauth-token")
+        assert os.path.isfile(canon_path)
+        with open(canon_path, "r", encoding="utf-8") as f:
+            c_data = json.load(f)
+        assert c_data["auth_method"] == "consumer"
+        assert c_data["token"]["access_token"] == "test_acc"
+        assert c_data["token"]["refresh_token"] == "test_ref"
+
+        # Check settings.json initialized
+        settings_path = os.path.join(tmpdir, "settings.json")
+        assert os.path.isfile(settings_path)
+
 
 def test_setup_antigravity_credentials_linux_keyring():
     with (
