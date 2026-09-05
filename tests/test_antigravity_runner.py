@@ -22,15 +22,25 @@ if scripts_dir not in sys.path:
 from antigravity_runner import (
     CHECKPOINT_FILENAME,
     DEFAULT_MODEL_FALLBACK_CHAIN,
+    PROJECT_NUMBER,
+    PROJECT_OWNER,
     QUOTA_EXHAUSTION_PATTERNS,
     STATE_DIR,
+    WORKSPACE_DIR,
     calculate_backoff,
     clear_checkpoint,
+    dispatch_event,
+    find_plan_issue_for_pr,
     get_model_fallback_chain,
+    handle_implement,
+    handle_plan_alignment,
+    handle_self_review,
     is_quota_exhausted,
     load_checkpoint,
+    run_agy_prompt,
     run_git,
     save_checkpoint,
+    unblock_entity,
     update_project_status_blocked,
     _exclude_checkpoint_from_git,
 )
@@ -98,6 +108,26 @@ def test_is_quota_exhausted_service_overloaded_and_unavailable():
     assert is_quota_exhausted("The requested model is unavailable") is True
     assert is_quota_exhausted("service unavailable") is True
     assert is_quota_exhausted("endpoint is unavailable") is True
+
+
+def test_is_quota_exhausted_exhaustion_and_quota_limit_phrases():
+    """Verify 'quota exhausted', 'quota limit', and runner sentinel error string match."""
+    assert is_quota_exhausted("quota exhausted") is True
+    assert (
+        is_quota_exhausted("Quota exhausted across all fallback models (gemini-3.8-flash-high): ")
+        is True
+    )
+    assert (
+        is_quota_exhausted(
+            "[Antigravity Agent Execution Error]: Quota exhausted across all fallback models (gemini-3.8-flash-high): "
+        )
+        is True
+    )
+    assert is_quota_exhausted("API quota limit reached for project") is True
+    assert is_quota_exhausted("Current quota limit has been hit") is True
+    assert is_quota_exhausted("exhaustion of quota for model") is True
+    assert is_quota_exhausted("exhausted API quota") is True
+    assert is_quota_exhausted("out of quota") is True
 
 
 def test_is_quota_exhausted_empty_and_unrelated():
@@ -414,3 +444,401 @@ def test_update_project_status_blocked_client_exception_suppressed(capsys):
 
     captured = capsys.readouterr()
     assert "Notice: Failed to update project status: API timeout" in captured.err
+
+
+# ============================================================================
+# 7. unblock_entity & Project Board Transitions (Finding 6)
+# ============================================================================
+
+
+def test_unblock_entity_with_set_status_client():
+    """Verify unblock_entity removes Blocked label and sets project status to In Progress."""
+
+    class ClientWithSetStatus:
+        def __init__(self):
+            self.calls = []
+
+        def set_status(self, entity_url: str, status: str):
+            self.calls.append((entity_url, status))
+
+    mock_client = ClientWithSetStatus()
+    with patch("antigravity_runner.run_gh") as mock_gh:
+        unblock_entity(
+            issue_or_pr_number=42,
+            repo="test-owner/test-repo",
+            is_pr=False,
+            client=mock_client,
+            target_status="In Progress",
+        )
+        mock_gh.assert_called_once_with(
+            ["issue", "edit", "42", "--remove-label", "Blocked"],
+            repo="test-owner/test-repo",
+        )
+        assert mock_client.calls == [
+            ("https://github.com/test-owner/test-repo/issues/42", "In Progress")
+        ]
+
+
+def test_unblock_entity_pr_with_done_status():
+    """Verify unblock_entity removes Blocked label from PR and sets project status to Done."""
+
+    class ClientWithAddAndEdit:
+        def __init__(self):
+            self.added = []
+            self.edited = []
+
+        def add_item(self, url: str):
+            self.added.append(url)
+            return "item-node-88"
+
+        def edit_status(self, item_id: str, status: str):
+            self.edited.append((item_id, status))
+
+    mock_client = ClientWithAddAndEdit()
+    with patch("antigravity_runner.run_gh") as mock_gh:
+        unblock_entity(
+            issue_or_pr_number=99,
+            repo="test-owner/test-repo",
+            is_pr=True,
+            client=mock_client,
+            target_status="Done",
+        )
+        mock_gh.assert_called_once_with(
+            ["pr", "edit", "99", "--remove-label", "Blocked"],
+            repo="test-owner/test-repo",
+        )
+        assert mock_client.added == ["https://github.com/test-owner/test-repo/pull/99"]
+        assert mock_client.edited == [("item-node-88", "Done")]
+
+
+def test_unblock_entity_client_exception_suppressed(capsys):
+    """Verify unblock_entity suppresses client exceptions and logs notice."""
+
+    class FailingClient:
+        def set_status(self, entity_url: str, status: str):
+            raise RuntimeError("Project board connection error")
+
+    with patch("antigravity_runner.run_gh"):
+        unblock_entity(
+            issue_or_pr_number=50,
+            repo="test-owner/test-repo",
+            is_pr=False,
+            client=FailingClient(),
+        )
+
+    captured = capsys.readouterr()
+    assert "Notice: Failed to update project status: Project board connection error" in captured.err
+
+
+# ============================================================================
+# 8. find_plan_issue_for_pr (Finding 2)
+# ============================================================================
+
+
+def test_find_plan_issue_for_pr_from_closing_issues_references():
+    """Verify find_plan_issue_for_pr detects plan issue from closingIssuesReferences."""
+    pr_meta = {
+        "body": "Fixes something",
+        "closingIssuesReferences": [
+            {"number": 10, "labels": [{"name": "Request"}]},
+            {"number": 11, "labels": [{"name": "Plan"}]},
+        ],
+        "comments": [],
+    }
+    with patch("antigravity_runner.run_gh", return_value=json.dumps(pr_meta)):
+        assert find_plan_issue_for_pr(50, "test-owner/test-repo") == 11
+
+
+def test_find_plan_issue_for_pr_from_body_plan_syntax():
+    """Verify find_plan_issue_for_pr detects explicit Plan: #N in PR body."""
+    pr_meta = {
+        "body": "## Summary\nImplemented changes.\nPlan: #77\nCloses #76",
+        "closingIssuesReferences": [],
+        "comments": [],
+    }
+    with patch("antigravity_runner.run_gh", return_value=json.dumps(pr_meta)):
+        assert find_plan_issue_for_pr(50, "test-owner/test-repo") == 77
+
+
+def test_find_plan_issue_for_pr_from_comments():
+    """Verify find_plan_issue_for_pr detects Plan in PR comments."""
+    pr_meta = {
+        "body": "Summary without plan mention",
+        "closingIssuesReferences": [],
+        "comments": [{"body": "Child Plan: #84"}],
+    }
+    with patch("antigravity_runner.run_gh", return_value=json.dumps(pr_meta)):
+        assert find_plan_issue_for_pr(50, "test-owner/test-repo") == 84
+
+
+def test_find_plan_issue_for_pr_from_closing_keyword():
+    """Verify find_plan_issue_for_pr checks referenced issue labels to select the Plan issue."""
+    pr_meta = {
+        "body": "Closes #20\nCloses #21",
+        "closingIssuesReferences": [],
+        "comments": [],
+    }
+
+    def gh_side_effect(args, repo=""):
+        if args[:2] == ["pr", "view"]:
+            return json.dumps(pr_meta)
+        if args[:2] == ["issue", "view"] and args[2] == "21":
+            return json.dumps({"labels": [{"name": "Plan"}], "title": "Plan: Fix issue"})
+        if args[:2] == ["issue", "view"] and args[2] == "20":
+            return json.dumps({"labels": [{"name": "Request"}], "title": "Request: Fix issue"})
+        return "{}"
+
+    with patch("antigravity_runner.run_gh", side_effect=gh_side_effect):
+        assert find_plan_issue_for_pr(50, "test-owner/test-repo") == 21
+
+
+def test_find_plan_issue_for_pr_not_found():
+    """Verify find_plan_issue_for_pr returns None when no plan is linked."""
+    pr_meta = {
+        "body": "Just some PR with no closing references",
+        "closingIssuesReferences": [],
+        "comments": [],
+    }
+    with patch("antigravity_runner.run_gh", return_value=json.dumps(pr_meta)):
+        assert find_plan_issue_for_pr(50, "test-owner/test-repo") is None
+
+
+# ============================================================================
+# 9. run_agy_prompt Stderr + Stdout Quota Detection (Finding 9)
+# ============================================================================
+
+
+def test_run_agy_prompt_combines_stderr_and_stdout_for_quota():
+    """Verify run_agy_prompt detects quota exhaustion in stdout even if stderr has text."""
+    error = subprocess.CalledProcessError(
+        returncode=1,
+        cmd=["agy"],
+        output="429 Resource exhausted: Quota limit hit",
+        stderr="DeprecationWarning: something is deprecated in environment",
+    )
+    with (
+        patch("subprocess.run", side_effect=error),
+        patch("time.sleep") as mock_sleep,
+    ):
+        result = run_agy_prompt("Test prompt", max_retries=1, base_delay=0.01)
+        assert "Quota exhausted across all fallback models" in result
+        assert mock_sleep.called
+
+
+# ============================================================================
+# 10. Resuming Feature Branch & Checkpoint Skip (Findings 3 & 4)
+# ============================================================================
+
+
+def test_handle_implement_tracks_existing_remote_branch():
+    """Verify handle_implement checks out existing remote branch instead of recreating from origin/main."""
+    plan_data = json.dumps({"title": "Plan: Test Feature", "body": "Plan details"})
+
+    git_calls = []
+
+    def mock_run_git(args, cwd=None):
+        git_calls.append(list(args))
+        if args == ["branch", "-r"]:
+            return "origin/main\norigin/feature/test-feature"
+        if args == ["branch"]:
+            return "main"
+        if args == ["status", "--porcelain"]:
+            return "M test.py"
+        return ""
+
+    with (
+        patch("antigravity_runner.run_gh") as mock_gh,
+        patch("antigravity_runner.run_git", side_effect=mock_run_git),
+        patch("antigravity_runner.load_checkpoint", return_value=None),
+        patch("antigravity_runner.run_agy_prompt", return_value="Implemented successfully"),
+        patch("subprocess.run", return_value=MagicMock(returncode=0)),
+        patch("antigravity_runner.handle_self_review"),
+        patch("antigravity_runner.handle_plan_alignment"),
+    ):
+
+        def gh_side_effect(args, repo=""):
+            if args[:2] == ["issue", "view"]:
+                return plan_data
+            if args[:2] == ["pr", "list"]:
+                return json.dumps([{"number": 99}])
+            return ""
+
+        mock_gh.side_effect = gh_side_effect
+
+        handle_implement(plan_number=2, request_number=1, repo="test-owner/test-repo")
+
+        # Verify git checkout used existing remote tracking branch, NOT -b from origin/main
+        checkout_call = [c for c in git_calls if c[:2] == ["checkout", "-b"]]
+        assert len(checkout_call) == 1
+        assert checkout_call[0] == [
+            "checkout",
+            "-b",
+            "feature/test-feature",
+            "origin/feature/test-feature",
+        ]
+
+
+def test_handle_implement_skips_when_pr_already_exists():
+    """Verify handle_implement skips implementation step when open PR already exists for branch."""
+    plan_data = json.dumps({"title": "Plan: Existing PR", "body": "Plan details"})
+
+    with (
+        patch("antigravity_runner.run_gh") as mock_gh,
+        patch("antigravity_runner.run_git", return_value=""),
+        patch("antigravity_runner.load_checkpoint", return_value={"completed_steps": ["Step 1"]}),
+        patch("antigravity_runner.run_agy_prompt") as mock_agy,
+        patch("antigravity_runner.handle_self_review") as mock_review,
+        patch("antigravity_runner.handle_plan_alignment") as mock_align,
+    ):
+
+        def gh_side_effect(args, repo=""):
+            if args[:2] == ["issue", "view"]:
+                return plan_data
+            if args[:2] == ["pr", "list"]:
+                return json.dumps([{"number": 123}])
+            return ""
+
+        mock_gh.side_effect = gh_side_effect
+
+        handle_implement(plan_number=2, request_number=1, repo="test-owner/test-repo")
+
+        # run_agy_prompt should not be called to implement
+        mock_agy.assert_not_called()
+        # review and alignment should be resumed directly
+        mock_review.assert_called_once_with(123, 2, "test-owner/test-repo")
+        mock_align.assert_called_once_with(123, 2, 1, "test-owner/test-repo")
+
+
+# ============================================================================
+# 11. handle_plan_alignment Checkpoint Cleanup & Unblock (Findings 4 & 6)
+# ============================================================================
+
+
+def test_handle_plan_alignment_matching_clears_checkpoint_and_unblocks():
+    """Verify handle_plan_alignment clears checkpoint and unblocks entities with status Done on match."""
+    plan_meta = json.dumps({"body": "Scope content", "comments": []})
+
+    with (
+        patch("antigravity_runner.run_gh") as mock_gh,
+        patch("antigravity_runner.run_agy_prompt", return_value="MATCHES_PLAN_YES: All aligned"),
+        patch("antigravity_runner.clear_checkpoint") as mock_clear,
+        patch("antigravity_runner.unblock_entity") as mock_unblock,
+    ):
+
+        def gh_side_effect(args, repo=""):
+            if args[:2] == ["pr", "diff"]:
+                return "diff content"
+            if args[:2] == ["issue", "view"]:
+                return plan_meta
+            return ""
+
+        mock_gh.side_effect = gh_side_effect
+
+        handle_plan_alignment(
+            pr_number=50, plan_number=43, request_number=42, repo="test-owner/test-repo"
+        )
+
+        mock_clear.assert_called_once_with(cwd=WORKSPACE_DIR)
+        assert mock_unblock.call_count == 3
+        mock_unblock.assert_any_call(50, "test-owner/test-repo", is_pr=True, target_status="Done")
+        mock_unblock.assert_any_call(43, "test-owner/test-repo", is_pr=False, target_status="Done")
+        mock_unblock.assert_any_call(42, "test-owner/test-repo", is_pr=False, target_status="Done")
+
+
+# ============================================================================
+# 12. handle_self_review Plan Deviation Quota Handling (Finding 8)
+# ============================================================================
+
+
+def test_handle_self_review_deviation_quota_exhausted_halts():
+    """Verify handle_self_review halts when deviation prompt encounters quota exhaustion."""
+    plan_meta = json.dumps({"body": "Scope content"})
+
+    with (
+        patch("antigravity_runner.run_gh") as mock_gh,
+        patch("antigravity_runner.find_parent_request_number", return_value=42),
+        patch("antigravity_runner.run_agy_prompt") as mock_agy,
+    ):
+
+        def gh_side_effect(args, repo=""):
+            if args[:2] == ["pr", "diff"]:
+                return "diff content"
+            if args[:2] == ["issue", "view"]:
+                return plan_meta
+            return ""
+
+        mock_gh.side_effect = gh_side_effect
+
+        # 1st call: review findings with OUT_OF_SCOPE
+        # 2nd call: deviation prompt returns quota exhausted error
+        mock_agy.side_effect = [
+            "OUT_OF_SCOPE: Database schema modification needed.",
+            "[Antigravity Agent Execution Error]: Quota exhausted across all fallback models (gemini-3.8-flash-high): 429",
+        ]
+
+        handle_self_review(pr_number=50, plan_number=43, repo="test-owner/test-repo")
+
+        # After deviation prompt exhausted quota, fix_prompt should NOT be called (only 2 calls to agy)
+        assert mock_agy.call_count == 2
+
+
+# ============================================================================
+# 13. dispatch_event Resume on PR (Finding 2)
+# ============================================================================
+
+
+def test_dispatch_event_pr_issue_comment_resume():
+    """Verify commenting /resume on a PR invokes handle_self_review."""
+    with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
+        json.dump(
+            {
+                "action": "created",
+                "repository": {"full_name": "test-owner/test-repo"},
+                "issue": {
+                    "number": 55,
+                    "pull_request": {
+                        "url": "https://api.github.com/repos/test-owner/test-repo/pulls/55"
+                    },
+                    "labels": [],
+                },
+                "comment": {
+                    "body": "/resume",
+                    "user": {"login": "human-reviewer"},
+                },
+            },
+            f,
+        )
+        temp_path = f.name
+
+    try:
+        with (
+            patch("antigravity_runner.find_plan_issue_for_pr", return_value=40) as mock_find_plan,
+            patch("antigravity_runner.handle_self_review") as mock_self_review,
+            patch("antigravity_runner.unblock_entity") as mock_unblock,
+        ):
+            dispatch_event(temp_path, "issue_comment")
+
+            mock_find_plan.assert_called_once_with(55, "test-owner/test-repo")
+            mock_self_review.assert_called_once_with(55, 40, "test-owner/test-repo")
+            mock_unblock.assert_any_call(
+                55, "test-owner/test-repo", is_pr=True, target_status="In Progress"
+            )
+            mock_unblock.assert_any_call(
+                40, "test-owner/test-repo", is_pr=False, target_status="In Progress"
+            )
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
+# ============================================================================
+# 14. Project Constants DRY (Finding 10)
+# ============================================================================
+
+
+def test_project_constants_imported_from_project_automation():
+    """Verify PROJECT_OWNER and PROJECT_NUMBER are imported from project_automation."""
+    import project_automation
+
+    assert PROJECT_OWNER == project_automation.PROJECT_OWNER
+    assert PROJECT_NUMBER == project_automation.PROJECT_NUMBER
