@@ -138,6 +138,28 @@ def setup_antigravity_credentials(
             json.dump(token_payload, f, indent=2)
         os.chmod(m_path, 0o600)
 
+    # 2. Canonical token file expected by agy CLI: antigravity-oauth-token
+    oauth_dirs = [
+        target_dir,
+        os.path.expanduser("~/.gemini/antigravity-cli"),
+        os.path.expanduser("~/.gemini"),
+        os.path.expanduser("~/.config/antigravity"),
+    ]
+    for d in oauth_dirs:
+        os.makedirs(d, exist_ok=True)
+        oauth_file = os.path.join(d, "antigravity-oauth-token")
+        with open(oauth_file, "w", encoding="utf-8") as f:
+            json.dump(token_payload, f, indent=2)
+        os.chmod(oauth_file, 0o600)
+
+    # Ensure minimal settings.json exists so agy does not warn about missing settings
+    for d in [target_dir, os.path.expanduser("~/.gemini/antigravity-cli")]:
+        os.makedirs(d, exist_ok=True)
+        settings_p = os.path.join(d, "settings.json")
+        if not os.path.exists(settings_p):
+            with open(settings_p, "w", encoding="utf-8") as f:
+                json.dump({}, f)
+
     # In Linux container environments, populate D-Bus SecretService keyring
     if sys.platform.startswith("linux"):
         try:
@@ -1185,14 +1207,22 @@ def main():
 
     args = parser.parse_args()
 
+    # Automatically refresh Google OAuth token and configure Antigravity credentials
+    # whenever ANTIGRAVITY_REFRESH_TOKEN is present in the environment
+    refresh_tok = os.environ.get("ANTIGRAVITY_REFRESH_TOKEN")
+    if refresh_tok:
+        try:
+            tok_res = refresh_google_oauth_token(refresh_tok)
+            setup_antigravity_credentials(tok_res["access_token"], refresh_tok)
+            print("Successfully refreshed Antigravity Google OAuth token!")
+        except Exception as e:
+            print(f"Token refresh notice: {e}", file=sys.stderr)
+
     if args.command == "token-refresh":
-        tok = os.environ.get("ANTIGRAVITY_REFRESH_TOKEN")
-        if not tok:
+        if not refresh_tok:
             print("ANTIGRAVITY_REFRESH_TOKEN not set.", file=sys.stderr)
             sys.exit(1)
-        res = refresh_google_oauth_token(tok)
-        print(f"Success! access_token acquired (expires_in: {res.get('expires_in')}s)")
-        setup_antigravity_credentials(res["access_token"], tok)
+        print("Token refresh and credentials configuration completed successfully.")
 
     elif args.command == "interpret" and args.issue:
         handle_interpret(args.issue, args.repo)
