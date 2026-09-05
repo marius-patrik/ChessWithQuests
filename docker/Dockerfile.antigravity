@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     dbus-x11 \
     gnome-keyring \
     libsecret-tools \
+    tmux \
     && mkdir -p -m 755 /etc/apt/keyrings \
     && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
     && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
