@@ -12,9 +12,9 @@ def test_documentation_mirrors_code_structure():
     source_count = sum(1 for root, _, files in os.walk(src_dir) for f in files if f.endswith(".py"))
     assert source_count >= 28, f"Expected at least 28 Python modules, found {source_count}"
 
-    # Verify docs/ contains only index.md and no static boilerplate files
+    # Verify docs/ contains zero static markdown boilerplate files
     doc_files = [f for root, _, files in os.walk(docs_dir) for f in files if f.endswith(".md")]
-    assert doc_files == ["index.md"], f"Expected only index.md in docs/, found: {doc_files}"
+    assert doc_files == [], f"Expected zero markdown files in docs/, found: {doc_files}"
 
 
 def test_verify_docs_workflow_exists():

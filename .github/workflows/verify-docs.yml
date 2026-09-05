@@ -36,7 +36,7 @@ jobs:
           docs_dir = os.path.join(repo_root, "docs")
           site_dir = os.path.join(repo_root, "site")
           assert os.path.isdir(src_dir), "src directory missing"
-          assert os.path.isfile(os.path.join(docs_dir, "index.md")), "docs/index.md missing"
+          assert os.path.isdir(docs_dir), "docs directory missing"
           assert os.path.isfile(os.path.join(site_dir, "index.html")), "site/index.html missing"
           assert os.path.isfile(os.path.join(site_dir, "controller/controller/index.html")), "controller docs missing"
           assert os.path.isfile(os.path.join(site_dir, "model/game/board/index.html")), "model docs missing"

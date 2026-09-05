@@ -64,7 +64,8 @@ def test_all_docs_use_mkdocstrings_directives():
         len(generated_files) >= 25
     ), f"Expected dynamic files generated, found {len(generated_files)}"
     for f in generated_files:
-        assert ":::" in f._content, f"Generated file {f.src_uri} missing ':::' directive"
+        if f.src_uri != "index.md":
+            assert ":::" in f._content, f"Generated file {f.src_uri} missing ':::' directive"
 
 
 def test_mkdocs_config_and_strict_build():
