@@ -389,12 +389,36 @@ def test_generate_branch_name():
 
 
 def test_find_parent_request_number():
+    # 1. Classic "Parent Request: #42"
     with patch("antigravity_runner.run_gh") as mock_gh:
         mock_gh.return_value = json.dumps(
             {"body": "Implementation plan.\n\nParent Request: #42\nDetails..."}
         )
         assert find_parent_request_number(43, "test/repo") == 42
 
+    # 2. Native GitHub sub-issue parent metadata
+    with patch("antigravity_runner.run_gh") as mock_gh:
+        mock_gh.return_value = json.dumps({"body": "Plan body", "parent": {"number": 99}})
+        assert find_parent_request_number(43, "test/repo") == 99
+
+    # 3. "Linked Parent: #55" or "Parent Request #55" (no colon)
+    with patch("antigravity_runner.run_gh") as mock_gh:
+        mock_gh.return_value = json.dumps(
+            {"body": "Implementation plan for Parent Request #55.\n\nLinked Parent: #55"}
+        )
+        assert find_parent_request_number(43, "test/repo") == 55
+
+    # 4. In comments
+    with patch("antigravity_runner.run_gh") as mock_gh:
+        mock_gh.return_value = json.dumps(
+            {
+                "body": "Plan body",
+                "comments": [{"body": "- **Parent Request**: #77"}],
+            }
+        )
+        assert find_parent_request_number(43, "test/repo") == 77
+
+    # 5. No parent reference
     with patch("antigravity_runner.run_gh") as mock_gh:
         mock_gh.return_value = json.dumps({"body": "Plan with no parent reference."})
         assert find_parent_request_number(43, "test/repo") is None
