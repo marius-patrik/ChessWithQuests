@@ -43,6 +43,6 @@ jobs:
           print("✅ Dynamic documentation build verified successfully!")
           '
 
-      - name: Run docs mirror tests
+      - name: Run documentation tests
         run: |
-          pytest -v tests/test_docs_mirror.py
+          pytest -v tests/test_mkdocs_and_docstrings.py
