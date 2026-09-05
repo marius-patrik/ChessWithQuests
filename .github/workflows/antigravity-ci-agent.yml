@@ -22,24 +22,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
+      - name: Build Antigravity Agent Container
         run: |
-          pip install --upgrade pip
-          pip install -r requirements-dev.txt
+          docker build -t antigravity-agent -f docker/Dockerfile.antigravity .
 
-      - name: Dispatch Antigravity Agent
+      - name: Dispatch Antigravity Agent in Container
         run: |
-          python3 .github/scripts/antigravity_runner.py dispatch
-        env:
-          ANTIGRAVITY_REFRESH_TOKEN: ${{ secrets.ANTIGRAVITY_REFRESH_TOKEN }}
-          ANTIGRAVITY_CLIENT_ID: ${{ secrets.ANTIGRAVITY_CLIENT_ID }}
-          ANTIGRAVITY_CLIENT_SECRET: ${{ secrets.ANTIGRAVITY_CLIENT_SECRET }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_EVENT_PATH: ${{ github.event_path }}
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
+          docker run --rm \
+            -e ANTIGRAVITY_REFRESH_TOKEN="${{ secrets.ANTIGRAVITY_REFRESH_TOKEN }}" \
+            -e ANTIGRAVITY_CLIENT_ID="${{ secrets.ANTIGRAVITY_CLIENT_ID }}" \
+            -e ANTIGRAVITY_CLIENT_SECRET="${{ secrets.ANTIGRAVITY_CLIENT_SECRET }}" \
+            -e GH_TOKEN="${{ secrets.GITHUB_TOKEN }}" \
+            -e GITHUB_EVENT_PATH="/workspace/event.json" \
+            -e GITHUB_EVENT_NAME="${{ github.event_name }}" \
+            -e GITHUB_REPOSITORY="${{ github.repository }}" \
+            -v "${{ github.event_path }}:/workspace/event.json:ro" \
+            -v "${{ github.workspace }}:/workspace" \
+            antigravity-agent dispatch
+

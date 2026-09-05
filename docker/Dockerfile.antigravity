@@ -24,8 +24,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Setup project workspace and install Python test / build dependencies
+# 2. Install Google Antigravity CLI
+RUN curl -fsSL https://antigravity.google/cli/install.sh | bash -s -- --dir /usr/local/bin \
+    && agy --version
+
+# 3. Setup project workspace and install Python test / build dependencies
 WORKDIR /workspace
+
 COPY pyproject.toml requirements-dev.txt /workspace/
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements-dev.txt
