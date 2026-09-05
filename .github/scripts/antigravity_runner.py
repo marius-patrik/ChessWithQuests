@@ -9,11 +9,15 @@ import base64
 import json
 import os
 import re
+import shlex
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.parse
 import urllib.request
+import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
 ANTIGRAVITY_CLIENT_ID = os.environ.get("ANTIGRAVITY_CLIENT_ID", "")
@@ -114,8 +118,29 @@ def setup_antigravity_credentials(
         with open(p, "w", encoding="utf-8") as f:
             json.dump({"raw": encoded, "payload": token_payload}, f, indent=2)
 
+    # 1. Primary standalone file token store for Antigravity in container environments
+    # (~/.gemini/jetski-standalone-oauth-token)
+    gemini_base = os.path.expanduser("~/.gemini")
+    os.makedirs(gemini_base, exist_ok=True)
+    jetski_token_path = os.path.join(gemini_base, "jetski-standalone-oauth-token")
+    with open(jetski_token_path, "w", encoding="utf-8") as f:
+        json.dump(token_payload, f, indent=2)
+    os.chmod(jetski_token_path, 0o600)
+
+    # Mirror into target_dir
+    mirror_path = os.path.join(target_dir, "jetski-standalone-oauth-token")
+    with open(mirror_path, "w", encoding="utf-8") as f:
+        json.dump(token_payload, f, indent=2)
+    os.chmod(mirror_path, 0o600)
+
     # In Linux container environments, populate D-Bus SecretService keyring
     if sys.platform.startswith("linux"):
+        try:
+            if os.path.exists("/.dockerenv"):
+                os.remove("/.dockerenv")
+        except OSError:
+            pass
+
         # Unlock gnome-keyring
         try:
             p_unlock = subprocess.Popen(
@@ -277,8 +302,10 @@ def run_agy_prompt(prompt: str, model: str = "gemini-3.8-flash-high", timeout: s
         "--print-timeout",
         timeout,
     ]
+    env = os.environ.copy()
+    env.setdefault("TERM", "xterm-256color")
     try:
-        res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        res = subprocess.run(cmd, capture_output=True, text=True, check=True, env=env)
         return res.stdout.strip()
     except FileNotFoundError:
         err = "[Antigravity Agent Execution Error]: `agy` CLI binary not found in PATH."
