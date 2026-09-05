@@ -281,6 +281,40 @@ def process_event(
                         )
                     except Exception as e:
                         pass
+            reconcile_unassigned_statuses(client)
+
+    elif event_name == "workflow_dispatch":
+        reconcile_unassigned_statuses(client)
+
+
+def reconcile_unassigned_statuses(client: GitHubProjectClient) -> None:
+    """Scans Project items and ensures open items with no status are assigned ToDo."""
+    try:
+        raw_items = client.run_gh(
+            [
+                "project",
+                "item-list",
+                str(client.project_number),
+                "--owner",
+                client.owner,
+                "--format",
+                "json",
+                "--limit",
+                "100",
+            ]
+        )
+        data = json.loads(raw_items)
+        items = data.get("items", [])
+        for item in items:
+            status = item.get("status")
+            item_id = item.get("id")
+            content = item.get("content", {})
+            is_closed = content.get("closed", False)
+            if not status and item_id and not is_closed:
+                client.edit_status(item_id, "ToDo")
+                print(f"Self-healed item {item_id} ({content.get('title')}) to ToDo")
+    except Exception as e:
+        print(f"Status reconciliation notice: {e}", file=sys.stderr)
 
 
 def main():
