@@ -617,8 +617,22 @@ def handle_implement(plan_number: int, request_number: int, repo: str):
     branch_name = generate_branch_name(plan_title)
     print(f"Creating branch: {branch_name}")
 
-    # 3. Configure git identity
+    # 3. Configure git identity and safe directory
     try:
+        subprocess.run(["git", "config", "--global", "--add", "safe.directory", "*"], check=False)
+        subprocess.run(
+            ["git", "config", "--global", "user.name", "github-actions[bot]"], check=False
+        )
+        subprocess.run(
+            [
+                "git",
+                "config",
+                "--global",
+                "user.email",
+                "41898282+github-actions[bot]@users.noreply.github.com",
+            ],
+            check=False,
+        )
         run_git(["config", "user.name", "github-actions[bot]"], cwd=cwd)
         run_git(
             [
