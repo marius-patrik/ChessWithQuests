@@ -185,7 +185,7 @@ def test_agents_rule_mandates_conventional_commits_and_taxonomy():
     assert "area:docs" in lower_content
 
 
-def test_agents_rule_mandates_protected_upstream_base_and_statuses():
+def test_agents_rule_mandates_project_board_statuses_and_autodeletion():
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     agents_file = os.path.join(repo_root, "AGENTS.md")
 
@@ -193,7 +193,6 @@ def test_agents_rule_mandates_protected_upstream_base_and_statuses():
         content = f.read()
 
     lower_content = content.lower()
-    assert "upstream-base" in lower_content
     assert "superseded" in lower_content
     assert "dropped" in lower_content
     assert "auto-deletion" in lower_content or "delete_branch_on_merge" in lower_content

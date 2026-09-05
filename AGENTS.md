@@ -81,6 +81,3 @@ All commits must strictly adhere to the Conventional Commits specification:
   - `area:controller`: Input handling, event routing, game state controller.
   - `area:ci`: GitHub Actions workflows, Docker containers, runner scripts.
   - `area:docs`: Documentation, MkDocs configuration, docstrings.
-
-### 15. Protected Upstream Base Branch & Fork Diff
-- **Protected Upstream-Base Branch**: The repository maintains a protected `upstream-base` branch permanently pinned to upstream fork base commit `a98e36d` (`docekalgjkt/ChessWithQuests:main`) with branch protection locking it against deletion and force pushes. This provides a perpetual comparison point to view the exact diff from the upstream repository without affecting the `main` branch.
