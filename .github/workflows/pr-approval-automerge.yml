@@ -9,6 +9,8 @@ on:
 permissions:
   pull-requests: write
   contents: write
+  issues: write
+  repository-projects: write
 
 jobs:
   on-approval:
@@ -20,7 +22,7 @@ jobs:
       - name: Handle Approval and Auto-Merge
         run: python3 .github/scripts/handle_pr_approval.py
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PROJECT_TOKEN || secrets.GITHUB_TOKEN }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GITHUB_ACTOR: ${{ github.actor }}
           REPO_OWNER: ${{ github.repository_owner }}

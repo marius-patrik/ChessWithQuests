@@ -1,0 +1,66 @@
+name: "User Request"
+description: "File a user request for new features, bug fixes, or enhancements."
+title: "Request: "
+labels: ["Request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for submitting a request!
+        This repository uses an autonomous agent workflow. New requests are automatically analyzed, classified, and planned upon approval.
+
+  - type: textarea
+    id: verbatim_request
+    attributes:
+      label: "Verbatim User Request"
+      description: "Enter the exact user request or problem description."
+      placeholder: "e.g. Add support for move validation highlights on the GUI chessboard."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: "Area / Component"
+      description: "Select the primary area of the codebase affected."
+      options:
+        - "model (area:model)"
+        - "view (area:view)"
+        - "controller (area:controller)"
+        - "ci (area:ci)"
+        - "docs (area:docs)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: "Request Type"
+      description: "Select the type of change."
+      options:
+        - "feat (new feature)"
+        - "bug (bug fix)"
+        - "refactor (refactoring / code health)"
+        - "docs (documentation)"
+        - "chore (maintenance / dependencies)"
+        - "test (test improvements)"
+        - "ci (pipeline / automation)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: "Proposed Acceptance Criteria"
+      description: "What conditions must be satisfied for this request to be considered complete?"
+      placeholder: "- [ ] Feature behaves as specified\n- [ ] Unit tests added in tests/\n- [ ] MkDocs build passes with --strict"
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: "Additional Context"
+      description: "Any other details, error traces, or references."
+    validations:
+      required: false

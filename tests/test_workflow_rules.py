@@ -153,3 +153,57 @@ def test_pr_approval_automerge_workflow_exists():
     assert "pull_request_review" in content
     assert "issue_comment" in content
     assert "handle_pr_approval.py" in content
+
+
+def test_agents_rule_mandates_containerized_antigravity_agent():
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    agents_file = os.path.join(repo_root, "AGENTS.md")
+
+    with open(agents_file, encoding="utf-8") as f:
+        content = f.read()
+
+    lower_content = content.lower()
+    assert "antigravity" in lower_content
+    assert "gemini-3.8-flash" in lower_content
+    assert "plskynech@gmail.com" in lower_content
+    assert "oauth" in lower_content or "token" in lower_content
+
+
+def test_agents_rule_mandates_conventional_commits_and_taxonomy():
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    agents_file = os.path.join(repo_root, "AGENTS.md")
+
+    with open(agents_file, encoding="utf-8") as f:
+        content = f.read()
+
+    lower_content = content.lower()
+    assert "conventional commits" in lower_content
+    assert "area:model" in lower_content
+    assert "area:view" in lower_content
+    assert "area:controller" in lower_content
+    assert "area:ci" in lower_content
+    assert "area:docs" in lower_content
+
+
+def test_agents_rule_mandates_project_board_statuses_and_autodeletion():
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    agents_file = os.path.join(repo_root, "AGENTS.md")
+
+    with open(agents_file, encoding="utf-8") as f:
+        content = f.read()
+
+    lower_content = content.lower()
+    assert "superseded" in lower_content
+    assert "dropped" in lower_content
+    assert "auto-deletion" in lower_content or "delete_branch_on_merge" in lower_content
+
+
+def test_antigravity_workflow_and_dockerfile_exist():
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    workflow_path = os.path.join(repo_root, ".github", "workflows", "antigravity-ci-agent.yml")
+    docker_path = os.path.join(repo_root, "docker", "Dockerfile.antigravity")
+    runner_path = os.path.join(repo_root, ".github", "scripts", "antigravity_runner.py")
+
+    assert os.path.isfile(workflow_path), "antigravity-ci-agent.yml must exist"
+    assert os.path.isfile(docker_path), "Dockerfile.antigravity must exist"
+    assert os.path.isfile(runner_path), "antigravity_runner.py must exist"

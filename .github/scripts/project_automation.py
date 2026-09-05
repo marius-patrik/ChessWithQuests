@@ -10,11 +10,13 @@ PROJECT_NUMBER = 14
 STATUS_FIELD_ID = "PVTSSF_lAHOBCXFy84BidGlzhhVH8o"
 
 STATUS_OPTIONS = {
-    "Backlog": "e779dd67",
-    "ToDo": "9b2525b6",
-    "In Progress": "7508a487",
-    "Blocked": "ca3ddd1a",
-    "Done": "93aba873",
+    "Backlog": "8dbcec6a",
+    "ToDo": "fc671069",
+    "In Progress": "5879826b",
+    "Blocked": "dd704e81",
+    "Done": "db1d3578",
+    "Superseded": "1ea57ba8",
+    "Dropped": "7d7814ed",
 }
 
 CLOSING_PATTERN = re.compile(
@@ -38,6 +40,10 @@ def extract_bound_issues(pr_body: Optional[str]) -> List[int]:
 def determine_status_from_labels(labels: List[str]) -> str:
     """Determine project board status from issue labels."""
     normalized = {lbl.strip().lower(): lbl for lbl in labels}
+    if "superseded" in normalized:
+        return "Superseded"
+    if "dropped" in normalized:
+        return "Dropped"
     if "done" in normalized:
         return "Done"
     if "blocked" in normalized:
@@ -163,29 +169,45 @@ def process_event(
 
         elif action == "closed":
             item_id = client.add_item(issue_url)
+            status = determine_status_from_labels(labels)
+            if status == "ToDo":
+                status = "Done"
             if item_id:
-                client.edit_status(item_id, "Done")
-                print(f"Issue {issue_url} status updated to Done")
+                client.edit_status(item_id, status)
+                print(f"Issue {issue_url} status updated to {status}")
             issue_number = issue.get("number")
             repo_full_name = payload.get("repository", {}).get(
                 "full_name", "marius-patrik/ChessWithQuests"
             )
-            if issue_number:
+            if issue_number and status == "Done":
                 client.add_issue_label(repo_full_name, issue_number, "Done")
 
     elif event_name == "pull_request":
         action = payload.get("action")
         pr = payload.get("pull_request", {})
+        pr_url = pr.get("html_url")
         repo_full_name = payload.get("repository", {}).get(
             "full_name", "marius-patrik/ChessWithQuests"
         )
         pr_body = pr.get("body", "")
         merged = pr.get("merged", False)
+        labels = [
+            lbl.get("name") if isinstance(lbl, dict) else str(lbl) for lbl in pr.get("labels", [])
+        ]
 
         bound_issues = extract_bound_issues(pr_body)
         print(f"PR event {action}: detected bound issues {bound_issues}")
 
-        if action in ("opened", "edited", "synchronize"):
+        if action in ("opened", "edited", "synchronize", "ready_for_review"):
+            if pr_url:
+                pr_item_id = client.add_item(pr_url)
+                if pr_item_id:
+                    status = determine_status_from_labels(labels)
+                    if status == "ToDo":
+                        status = "In Progress"
+                    client.edit_status(pr_item_id, status)
+                    print(f"PR {pr_url} tracked on board with status {status}")
+
             for issue_num in bound_issues:
                 issue_url = f"https://github.com/{repo_full_name}/issues/{issue_num}"
                 client.add_issue_label(repo_full_name, issue_num, "In Progress")
@@ -194,14 +216,71 @@ def process_event(
                     client.edit_status(item_id, "In Progress")
                     print(f"Issue #{issue_num} moved to In Progress")
 
-        elif action == "closed" and merged:
-            for issue_num in bound_issues:
-                issue_url = f"https://github.com/{repo_full_name}/issues/{issue_num}"
-                client.add_issue_label(repo_full_name, issue_num, "Done")
-                item_id = client.add_item(issue_url)
-                if item_id:
-                    client.edit_status(item_id, "Done")
-                    print(f"Issue #{issue_num} moved to Done")
+        elif action == "closed":
+            pr_status = "Done" if merged else determine_status_from_labels(labels)
+            if not merged and pr_status == "ToDo":
+                pr_status = "Dropped"
+
+            if pr_url:
+                pr_item_id = client.add_item(pr_url)
+                if pr_item_id:
+                    client.edit_status(pr_item_id, pr_status)
+                    print(f"PR {pr_url} updated to {pr_status}")
+
+            if merged:
+                for issue_num in bound_issues:
+                    issue_url = f"https://github.com/{repo_full_name}/issues/{issue_num}"
+                    client.add_issue_label(repo_full_name, issue_num, "Done")
+                    item_id = client.add_item(issue_url)
+                    if item_id:
+                        client.edit_status(item_id, "Done")
+                        print(f"Issue #{issue_num} moved to Done")
+                    try:
+                        client.run_gh(
+                            [
+                                "issue",
+                                "close",
+                                str(issue_num),
+                                "--repo",
+                                repo_full_name,
+                                "--reason",
+                                "completed",
+                            ]
+                        )
+                    except Exception as e:
+                        print(f"Notice: issue #{issue_num} close attempt: {e}", file=sys.stderr)
+
+    elif event_name == "push":
+        ref = payload.get("ref", "")
+        repo_full_name = payload.get("repository", {}).get(
+            "full_name", "marius-patrik/ChessWithQuests"
+        )
+        if ref == "refs/heads/main":
+            commits = payload.get("commits", [])
+            for c in commits:
+                msg = c.get("message", "")
+                bound = extract_bound_issues(msg)
+                for issue_num in bound:
+                    issue_url = f"https://github.com/{repo_full_name}/issues/{issue_num}"
+                    client.add_issue_label(repo_full_name, issue_num, "Done")
+                    item_id = client.add_item(issue_url)
+                    if item_id:
+                        client.edit_status(item_id, "Done")
+                        print(f"Push on main: issue #{issue_num} marked Done")
+                    try:
+                        client.run_gh(
+                            [
+                                "issue",
+                                "close",
+                                str(issue_num),
+                                "--repo",
+                                repo_full_name,
+                                "--reason",
+                                "completed",
+                            ]
+                        )
+                    except Exception as e:
+                        pass
 
 
 def main():

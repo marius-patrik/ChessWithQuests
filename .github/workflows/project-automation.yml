@@ -4,8 +4,16 @@ on:
   issues:
     types: [opened, labeled, unlabeled, closed, reopened]
   pull_request:
-    types: [opened, edited, closed]
+    types: [opened, edited, closed, ready_for_review, reopened]
+  push:
+    branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  repository-projects: write
 
 jobs:
   automate-project:
