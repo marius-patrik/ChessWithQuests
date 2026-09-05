@@ -96,11 +96,22 @@ def has_valid_review_or_alignment(comments: List[Dict[str, Any]]) -> Tuple[bool,
 
 
 def fetch_issue_comments(repo: str, issue_number: int) -> List[Dict[str, Any]]:
-    """Fetch comments for an issue using gh CLI."""
-    endpoint = f"repos/{repo}/issues/{issue_number}/comments"
-    cmd = ["gh", "api", endpoint]
-    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-    return json.loads(result.stdout)
+    """Fetch issue details and comments using gh CLI, including issue body."""
+    items = []
+    try:
+        issue_cmd = ["gh", "api", f"repos/{repo}/issues/{issue_number}"]
+        issue_res = subprocess.run(issue_cmd, capture_output=True, text=True, check=True)
+        issue_data = json.loads(issue_res.stdout)
+        if issue_data.get("body"):
+            items.append({"body": issue_data["body"]})
+    except Exception:
+        pass
+
+    comments_cmd = ["gh", "api", f"repos/{repo}/issues/{issue_number}/comments"]
+    comments_res = subprocess.run(comments_cmd, capture_output=True, text=True, check=True)
+    comments = json.loads(comments_res.stdout)
+    items.extend(comments)
+    return items
 
 
 def verify_issue_plan_and_review(
