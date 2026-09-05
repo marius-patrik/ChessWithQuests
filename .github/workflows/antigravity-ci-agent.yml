@@ -39,7 +39,7 @@ jobs:
           ANTIGRAVITY_REFRESH_TOKEN: ${{ secrets.ANTIGRAVITY_REFRESH_TOKEN }}
           ANTIGRAVITY_CLIENT_ID: ${{ secrets.ANTIGRAVITY_CLIENT_ID }}
           ANTIGRAVITY_CLIENT_SECRET: ${{ secrets.ANTIGRAVITY_CLIENT_SECRET }}
-          GH_TOKEN: ${{ secrets.GH_PROJECT_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_EVENT_PATH: ${{ github.event_path }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GITHUB_REPOSITORY: ${{ github.repository }}
