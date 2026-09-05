@@ -9,13 +9,16 @@ LABEL description="Containerized Google Antigravity Agent environment with Pytho
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 
-# 1. Install base utilities and GitHub CLI
+# 1. Install base utilities, D-Bus, Secret Service, and GitHub CLI
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
     jq \
     ca-certificates \
     gnupg \
+    dbus-x11 \
+    gnome-keyring \
+    libsecret-tools \
     && mkdir -p -m 755 /etc/apt/keyrings \
     && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
     && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
@@ -42,4 +45,4 @@ RUN mkdir -p /root/.gemini/antigravity-cli
 COPY .github/scripts/antigravity_runner.py /usr/local/bin/antigravity-runner
 RUN chmod +x /usr/local/bin/antigravity-runner
 
-ENTRYPOINT ["python3", "/usr/local/bin/antigravity-runner"]
+ENTRYPOINT ["dbus-run-session", "--", "python3", "/usr/local/bin/antigravity-runner"]
