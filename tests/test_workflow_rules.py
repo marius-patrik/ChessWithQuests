@@ -60,7 +60,7 @@ def test_agents_rule_mandates_pr_review_approval_and_automerge():
     assert "review approval" in lower_content or "approving review" in lower_content
     assert "marius-patrik" in content
     assert "last pusher" in lower_content
-    assert "proxy" in lower_content or "auto-merge" in lower_content
+    assert "auto-merge" in lower_content
 
 
 def test_agents_rule_mandates_draft_prs_and_latest_main():
@@ -73,6 +73,21 @@ def test_agents_rule_mandates_draft_prs_and_latest_main():
     lower_content = content.lower()
     assert "draft" in lower_content
     assert "latest main" in lower_content or "latest `main`" in lower_content
+
+
+def test_agents_rule_mandates_bot_authored_prs():
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    agents_file = os.path.join(repo_root, "AGENTS.md")
+
+    with open(agents_file, encoding="utf-8") as f:
+        content = f.read()
+
+    lower_content = content.lower()
+    assert (
+        "github-actions[bot]" in lower_content
+        or "actions bot" in lower_content
+        or "open-pr.yml" in lower_content
+    )
 
 
 def test_agents_rule_mandates_user_request_issue_and_verbatim_prompt():
@@ -104,18 +119,36 @@ def test_agents_rule_mandates_request_plan_hierarchy_and_confirmation_gate():
     assert "decomposed" in lower_content or "decomposition" in lower_content
 
 
-def test_proxy_approval_workflow_file_exists_and_configured():
+def test_open_pr_workflow_and_script_exist():
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    workflow_path = os.path.join(repo_root, ".github", "workflows", "proxy-approval.yml")
+    workflow_path = os.path.join(repo_root, ".github", "workflows", "open-pr.yml")
+    script_path = os.path.join(repo_root, ".github", "scripts", "open_pr.py")
 
-    assert os.path.isfile(workflow_path), "proxy-approval.yml must exist"
+    assert os.path.isfile(workflow_path), "open-pr.yml must exist"
+    assert os.path.isfile(script_path), "open_pr.py must exist"
+
+    with open(workflow_path, encoding="utf-8") as f:
+        wf_content = f.read()
+
+    assert "workflow_dispatch" in wf_content
+    assert "gh pr create" in wf_content
+
+    with open(script_path, encoding="utf-8") as f:
+        py_content = f.read()
+
+    assert "open_pr_as_bot" in py_content
+
+
+def test_pr_approval_automerge_workflow_exists():
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    workflow_path = os.path.join(repo_root, ".github", "workflows", "pr-approval-automerge.yml")
+
+    assert os.path.isfile(workflow_path), "pr-approval-automerge.yml must exist"
 
     with open(workflow_path, encoding="utf-8") as f:
         content = f.read()
 
     assert "pull_request_review" in content
     assert "issue_comment" in content
-    assert '"gh"' in content and '"review"' in content
-    assert '"--approve"' in content
-    assert '"merge"' in content
-    assert '"--auto"' in content
+    assert "gh pr ready" in content or '"ready"' in content
+    assert "gh pr merge" in content or '"merge"' in content
