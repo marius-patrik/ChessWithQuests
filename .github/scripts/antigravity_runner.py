@@ -102,15 +102,54 @@ def setup_antigravity_credentials(
             "refresh_token": refresh_token,
             "expiry": "2099-01-01T00:00:00Z",
         },
-        "auth_method": "oauth",
+        "auth_method": "consumer",
     }
     encoded = "go-keyring-base64:" + base64.b64encode(
         json.dumps(token_payload).encode("utf-8")
     ).decode("utf-8")
 
     cred_file = os.path.join(target_dir, "antigravity_token.json")
-    with open(cred_file, "w", encoding="utf-8") as f:
-        json.dump({"raw": encoded, "payload": token_payload}, f, indent=2)
+    for fname in ["antigravity_token.json", "token.json", "tokens.json"]:
+        p = os.path.join(target_dir, fname)
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump({"raw": encoded, "payload": token_payload}, f, indent=2)
+
+    # In Linux container environments, populate D-Bus SecretService keyring
+    if sys.platform.startswith("linux"):
+        # Unlock gnome-keyring
+        try:
+            p_unlock = subprocess.Popen(
+                ["gnome-keyring-daemon", "--unlock"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            p_unlock.communicate(input="\n")
+        except Exception as e:
+            print(f"gnome-keyring unlock notice: {e}", file=sys.stderr)
+
+        # Store token via secret-tool under service 'gemini' and username 'antigravity'
+        try:
+            p_store = subprocess.Popen(
+                [
+                    "secret-tool",
+                    "store",
+                    "--label=Antigravity",
+                    "service",
+                    "gemini",
+                    "username",
+                    "antigravity",
+                ],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            p_store.communicate(input=encoded)
+            print("Successfully populated SecretService keyring for agy CLI.")
+        except Exception as e:
+            print(f"secret-tool store notice: {e}", file=sys.stderr)
 
     return cred_file
 

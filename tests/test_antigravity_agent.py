@@ -126,7 +126,32 @@ def test_setup_antigravity_credentials():
         payload = data["payload"]
         assert payload["token"]["access_token"] == "test_acc"
         assert payload["token"]["refresh_token"] == "test_ref"
-        assert payload["auth_method"] == "oauth"
+        assert payload["auth_method"] == "consumer"
+
+        # Check that fallback files are also written
+        assert os.path.isfile(os.path.join(tmpdir, "tokens.json"))
+        assert os.path.isfile(os.path.join(tmpdir, "token.json"))
+
+
+def test_setup_antigravity_credentials_linux_keyring():
+    with (
+        tempfile.TemporaryDirectory() as tmpdir,
+        patch("sys.platform", "linux"),
+        patch("subprocess.Popen") as mock_popen,
+    ):
+        mock_proc = MagicMock()
+        mock_proc.communicate.return_value = ("", "")
+        mock_popen.return_value = mock_proc
+
+        cred_path = setup_antigravity_credentials(
+            access_token="test_acc", refresh_token="test_ref", target_dir=tmpdir
+        )
+        assert os.path.isfile(cred_path)
+        # Verify secret-tool was called with service 'gemini' and username 'antigravity'
+        calls = [call[0][0] for call in mock_popen.call_args_list]
+        assert any(
+            cmd[0] == "secret-tool" and "gemini" in cmd and "antigravity" in cmd for cmd in calls
+        )
 
 
 def test_dispatch_event_unlabelled_issue():
