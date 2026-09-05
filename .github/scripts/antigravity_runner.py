@@ -25,10 +25,16 @@ ANTIGRAVITY_CLIENT_ID = os.environ.get("ANTIGRAVITY_CLIENT_ID", "")
 ANTIGRAVITY_CLIENT_SECRET = os.environ.get("ANTIGRAVITY_CLIENT_SECRET", "")
 GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 
-PROJECT_OWNER = "marius-patrik"
-PROJECT_NUMBER = 14
+PROJECT_OWNER = os.environ.get(
+    "PROJECT_OWNER", os.environ.get("GITHUB_REPOSITORY_OWNER", "marius-patrik")
+)
+try:
+    PROJECT_NUMBER = int(os.environ.get("PROJECT_NUMBER", "14"))
+except (ValueError, TypeError):
+    PROJECT_NUMBER = 14
 CHECKPOINT_FILENAME = ".antigravity_checkpoint.json"
 WORKSPACE_DIR = os.environ.get("GITHUB_WORKSPACE", "/workspace")
+STATE_DIR = os.environ.get("RUNNER_TEMP", WORKSPACE_DIR)
 
 DEFAULT_MODEL_FALLBACK_CHAIN: List[str] = [
     "gemini-3.8-flash-high",
@@ -39,17 +45,17 @@ DEFAULT_MODEL_FALLBACK_CHAIN: List[str] = [
 ]
 
 QUOTA_EXHAUSTION_PATTERNS: List[str] = [
-    r"\b429\b",
-    r"\bresource_exhausted\b",
-    r"quota.*exceeded",
-    r"exceeded.*quota",
+    r"(?:status[_\s]*(?:code)?|http|error|code)\s*[:=]?\s*429\b",
+    r"\b429\s*[:=\-]?\s*(?:too\s*many\s*requests|resource[_\s]*exhausted|quota|rate\s*limit)",
+    r"\bresource[_\s]*exhausted\b",
+    r"quota[\s\S]*?exceeded",
+    r"exceeded[\s\S]*?quota",
     r"insufficient\s*quota",
     r"out\s*of\s*quota",
     r"rate\s*[-_]?limit",
     r"too\s*many\s*requests",
-    r"model\s*(?:is\s*)?unavailable",
-    r"model\s*(?:is\s*)?overloaded",
-    r"\boverloaded\b",
+    r"(?:model|service|endpoint)\s*(?:is\s*)?unavailable",
+    r"(?:model|server|service)\s*(?:is\s*)?overloaded",
 ]
 
 TYPE_LABELS = ["feat", "bug", "chore", "refactor", "test", "ci", "docs"]
@@ -354,9 +360,8 @@ def is_quota_exhausted(error_message: str) -> bool:
     """
     if not error_message:
         return False
-    lower_msg = error_message.lower()
     for pattern in QUOTA_EXHAUSTION_PATTERNS:
-        if re.search(pattern, lower_msg, re.IGNORECASE):
+        if re.search(pattern, error_message, re.IGNORECASE | re.DOTALL):
             return True
     return False
 
@@ -382,10 +387,11 @@ def calculate_backoff(
     Returns:
         Delay in seconds.
     """
-    delay = min(max_delay, base_delay * (backoff_factor**attempt))
+    safe_attempt = max(0, min(attempt, 30))
+    raw_delay = base_delay * (backoff_factor**safe_attempt)
     if jitter:
-        delay += random.uniform(0.0, delay * jitter_factor)
-    return delay
+        raw_delay += random.uniform(0.0, raw_delay * jitter_factor)
+    return min(max_delay, raw_delay)
 
 
 def get_model_fallback_chain(
@@ -401,23 +407,40 @@ def get_model_fallback_chain(
     Returns:
         List of model identifiers to attempt in order.
     """
-    if custom_chain:
+    if custom_chain is not None:
         chain = list(custom_chain)
-        if initial_model and initial_model not in chain:
-            chain.insert(0, initial_model)
-        elif initial_model and chain[0] != initial_model:
-            chain.remove(initial_model)
-            chain.insert(0, initial_model)
-        return chain
+        if not initial_model:
+            return chain
+        if initial_model in chain:
+            idx = chain.index(initial_model)
+            return chain[idx:]
+        else:
+            return [initial_model] + chain
 
     if not initial_model:
         return list(DEFAULT_MODEL_FALLBACK_CHAIN)
 
     if initial_model in DEFAULT_MODEL_FALLBACK_CHAIN:
         idx = DEFAULT_MODEL_FALLBACK_CHAIN.index(initial_model)
-        return DEFAULT_MODEL_FALLBACK_CHAIN[idx:] + DEFAULT_MODEL_FALLBACK_CHAIN[:idx]
+        return list(DEFAULT_MODEL_FALLBACK_CHAIN[idx:])
     else:
-        return [initial_model] + [m for m in DEFAULT_MODEL_FALLBACK_CHAIN if m != initial_model]
+        return [initial_model] + list(DEFAULT_MODEL_FALLBACK_CHAIN)
+
+
+def _exclude_checkpoint_from_git(git_dir: str) -> None:
+    """Appends CHECKPOINT_FILENAME to .git/info/exclude if not already present."""
+    exclude_file = os.path.join(git_dir, ".git", "info", "exclude")
+    if os.path.isdir(os.path.join(git_dir, ".git", "info")):
+        try:
+            content = ""
+            if os.path.isfile(exclude_file):
+                with open(exclude_file, "r", encoding="utf-8") as f:
+                    content = f.read()
+            if CHECKPOINT_FILENAME not in content:
+                with open(exclude_file, "a", encoding="utf-8") as f:
+                    f.write(f"\n{CHECKPOINT_FILENAME}\n")
+        except Exception:
+            pass
 
 
 def save_checkpoint(checkpoint_data: Dict[str, Any], cwd: Optional[str] = None) -> str:
@@ -425,16 +448,25 @@ def save_checkpoint(checkpoint_data: Dict[str, Any], cwd: Optional[str] = None) 
 
     Args:
         checkpoint_data: Checkpoint payload dictionary.
-        cwd: Directory where checkpoint file should be written (defaults to WORKSPACE_DIR).
+        cwd: Directory where checkpoint file should be written (defaults to STATE_DIR).
 
     Returns:
         Absolute path to the saved checkpoint file.
     """
-    target_dir = cwd or WORKSPACE_DIR
+    target_dir = cwd or STATE_DIR
     os.makedirs(target_dir, exist_ok=True)
     checkpoint_file = os.path.join(target_dir, CHECKPOINT_FILENAME)
-    with open(checkpoint_file, "w", encoding="utf-8") as f:
-        json.dump(checkpoint_data, f, indent=2)
+    tmp_file = f"{checkpoint_file}.tmp.{uuid.uuid4().hex}"
+    try:
+        with open(tmp_file, "w", encoding="utf-8") as f:
+            json.dump(checkpoint_data, f, indent=2)
+        os.replace(tmp_file, checkpoint_file)
+    finally:
+        if os.path.exists(tmp_file):
+            try:
+                os.remove(tmp_file)
+            except OSError:
+                pass
     return checkpoint_file
 
 
@@ -442,17 +474,21 @@ def load_checkpoint(cwd: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Loads checkpoint data from the workspace directory if present.
 
     Args:
-        cwd: Directory to look for checkpoint file (defaults to WORKSPACE_DIR).
+        cwd: Directory to look for checkpoint file (defaults to STATE_DIR).
 
     Returns:
         Checkpoint dictionary if found and valid, None otherwise.
     """
-    target_dir = cwd or WORKSPACE_DIR
+    target_dir = cwd or STATE_DIR
     checkpoint_file = os.path.join(target_dir, CHECKPOINT_FILENAME)
     if os.path.isfile(checkpoint_file):
         try:
             with open(checkpoint_file, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data
+            print(f"Notice: Checkpoint data is not a dict: {type(data)}", file=sys.stderr)
+            return None
         except Exception as e:
             print(f"Notice: Failed to read checkpoint file: {e}", file=sys.stderr)
     return None
@@ -462,9 +498,9 @@ def clear_checkpoint(cwd: Optional[str] = None) -> None:
     """Removes the checkpoint file from the workspace directory if present.
 
     Args:
-        cwd: Directory to clear checkpoint from (defaults to WORKSPACE_DIR).
+        cwd: Directory to clear checkpoint from (defaults to STATE_DIR).
     """
-    target_dir = cwd or WORKSPACE_DIR
+    target_dir = cwd or STATE_DIR
     checkpoint_file = os.path.join(target_dir, CHECKPOINT_FILENAME)
     if os.path.exists(checkpoint_file):
         try:
@@ -487,8 +523,14 @@ def run_git(args: List[str], cwd: Optional[str] = None) -> str:
         subprocess.CalledProcessError: If git command fails.
     """
     cmd = ["git"] + args
-    res = subprocess.run(cmd, capture_output=True, text=True, check=True, cwd=cwd or WORKSPACE_DIR)
-    return res.stdout.strip()
+    try:
+        res = subprocess.run(
+            cmd, capture_output=True, text=True, check=True, cwd=cwd or WORKSPACE_DIR
+        )
+        return res.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        print(f"Git command failed ({' '.join(cmd)}):\n{e.stderr}", file=sys.stderr)
+        raise
 
 
 def update_project_status_blocked(
@@ -516,7 +558,7 @@ def update_project_status_blocked(
     except Exception as e:
         print(f"Notice: Failed to add Blocked label: {e}", file=sys.stderr)
 
-    # 2. Update Project 14 status to Blocked
+    # 2. Update Project status to Blocked
     owner = repo.split("/")[0] if "/" in repo else PROJECT_OWNER
     entity_url = (
         f"https://github.com/{repo}/pull/{issue_or_pr_number}"
@@ -535,12 +577,15 @@ def update_project_status_blocked(
 
     if client is not None:
         try:
-            item_id = client.add_item(entity_url)
-            if item_id:
-                client.edit_status(item_id, "Blocked")
-                print(f"Updated project board status to Blocked for {entity_url}")
+            if hasattr(client, "set_status"):
+                client.set_status(entity_url, "Blocked")
+            else:
+                item_id = client.add_item(entity_url)
+                if item_id:
+                    client.edit_status(item_id, "Blocked")
+                    print(f"Updated project board status to Blocked for {entity_url}")
         except Exception as e:
-            print(f"Notice: Failed to update project board status to Blocked: {e}", file=sys.stderr)
+            print(f"Notice: Failed to update project status: {e}", file=sys.stderr)
 
 
 def checkpoint_and_notify_exhaustion(
@@ -569,6 +614,7 @@ def checkpoint_and_notify_exhaustion(
         Checkpoint dictionary saved.
     """
     work_dir = cwd or WORKSPACE_DIR
+    target_state_dir = cwd or STATE_DIR
     steps = completed_steps or ["Pipeline execution initiated"]
 
     checkpoint_data: Dict[str, Any] = {
@@ -583,11 +629,12 @@ def checkpoint_and_notify_exhaustion(
     }
 
     # 1. Save checkpoint JSON
-    save_checkpoint(checkpoint_data, cwd=work_dir)
+    save_checkpoint(checkpoint_data, cwd=target_state_dir)
 
     # 2. Git checkpoint: stage and commit any working changes
     if branch_name:
         try:
+            _exclude_checkpoint_from_git(work_dir)
             run_git(["add", "-A"], cwd=work_dir)
             status = run_git(["status", "--porcelain"], cwd=work_dir)
             if status:
