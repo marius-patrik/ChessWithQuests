@@ -3,6 +3,7 @@
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import urllib.error
@@ -22,7 +23,7 @@ from antigravity_runner import (
     setup_antigravity_credentials,
     dispatch_event,
     is_bot_or_agent_comment,
-    generate_structured_response,
+    run_agy_prompt,
 )
 
 
@@ -216,24 +217,27 @@ def test_is_bot_or_agent_comment():
     assert is_bot_or_agent_comment("other-dev", "Looks good to me!") is False
 
 
-def test_generate_structured_response():
-    # Interpretation prompt
-    resp_interp = generate_structured_response(
-        "Please provide an interpretation of this user request"
+def test_run_agy_prompt_error_handling():
+    # FileNotFoundError (binary missing)
+    with patch("subprocess.run", side_effect=FileNotFoundError):
+        res = run_agy_prompt("test prompt")
+        assert res.startswith("[Antigravity Agent Execution Error]")
+        assert "not found in PATH" in res
+
+    # CalledProcessError (binary failed)
+    err = subprocess.CalledProcessError(
+        returncode=1, cmd=["agy"], stderr="Keyring authorization denied."
     )
-    assert "Verbatim Request Summary" in resp_interp
-    assert "Architectural Scope & Breakdown" in resp_interp
-    assert "Proposed Verification Plan" in resp_interp
+    with patch("subprocess.run", side_effect=err):
+        res = run_agy_prompt("test prompt")
+        assert res.startswith("[Antigravity Agent Execution Error]")
+        assert "Keyring authorization denied" in res
 
-    # Implementation plan prompt
-    resp_plan = generate_structured_response("Generate implementation plan for issue #10")
-    assert "Objectives & Scope" in resp_plan
-    assert "Architectural & Code Changes" in resp_plan
-    assert "Verification Steps" in resp_plan
-
-    # General feedback
-    resp_general = generate_structured_response("Change function signature")
-    assert "Acknowledged feedback" in resp_general
+    # Success
+    mock_res = MagicMock(stdout="Valid generated response\n")
+    with patch("subprocess.run", return_value=mock_res):
+        res = run_agy_prompt("test prompt")
+        assert res == "Valid generated response"
 
 
 def test_dispatch_event_pull_request_review_comment_human():
