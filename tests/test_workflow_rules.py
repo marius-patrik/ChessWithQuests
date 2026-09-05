@@ -142,13 +142,14 @@ def test_open_pr_workflow_and_script_exist():
 def test_pr_approval_automerge_workflow_exists():
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     workflow_path = os.path.join(repo_root, ".github", "workflows", "pr-approval-automerge.yml")
+    script_path = os.path.join(repo_root, ".github", "scripts", "handle_pr_approval.py")
 
     assert os.path.isfile(workflow_path), "pr-approval-automerge.yml must exist"
+    assert os.path.isfile(script_path), "handle_pr_approval.py must exist"
 
     with open(workflow_path, encoding="utf-8") as f:
         content = f.read()
 
     assert "pull_request_review" in content
     assert "issue_comment" in content
-    assert "gh pr ready" in content or '"ready"' in content
-    assert "gh pr merge" in content or '"merge"' in content
+    assert "handle_pr_approval.py" in content
