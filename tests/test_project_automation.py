@@ -101,6 +101,20 @@ def test_process_event_pr_opened_with_bound_issue():
     assert client.edited_statuses == [("item-1", "In Progress")]
 
 
+def test_process_event_pr_edited_with_bound_issue():
+    client = MockGitHubProjectClient()
+    payload = {
+        "action": "edited",
+        "repository": {"full_name": "marius-patrik/ChessWithQuests"},
+        "pull_request": {
+            "body": "Updated description to bind issue. Closes #25",
+        },
+    }
+    process_event("pull_request", payload, client=client)
+    assert client.added_labels == [("marius-patrik/ChessWithQuests", 25, "In Progress")]
+    assert client.edited_statuses == [("item-1", "In Progress")]
+
+
 def test_process_event_pr_merged_with_bound_issue():
     client = MockGitHubProjectClient()
     payload = {
