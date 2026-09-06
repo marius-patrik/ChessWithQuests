@@ -573,6 +573,23 @@ def clear_checkpoint(cwd: Optional[str] = None) -> None:
             print(f"Notice: Failed to remove checkpoint file: {e}", file=sys.stderr)
 
 
+def is_workflow_permission_error(error_message: str) -> bool:
+    """Detects whether a git push failure was caused by missing workflow permissions.
+
+    Args:
+        error_message: Git stderr or stdout string.
+
+    Returns:
+        True if rejected due to missing workflow write permissions.
+    """
+    if not error_message:
+        return False
+    lower = error_message.lower()
+    return "without workflows permission" in lower or (
+        "refusing to allow a github app to create or update workflow" in lower
+    )
+
+
 def run_git(args: List[str], cwd: Optional[str] = None) -> str:
     """Executes a git command and returns stdout.
 
@@ -1471,7 +1488,16 @@ def handle_implement(plan_number: int, request_number: int, repo: str):
         run_git(["push", "origin", branch_name], cwd=cwd)
         print(f"Pushed branch {branch_name}")
     except subprocess.CalledProcessError as e:
-        err_msg = f"Git commit/push failed: {e.stderr or e.stdout}"
+        raw_err = (e.stderr or e.stdout or str(e)).strip()
+        if is_workflow_permission_error(raw_err):
+            err_msg = (
+                f"Git commit/push rejected due to missing GitHub Actions workflow permissions:\n\n"
+                f"```\n{raw_err}\n```\n\n"
+                f"**Resolution**: The GitHub Actions runner token requires `workflows: write` permissions "
+                f"in `.github/workflows/antigravity-ci-agent.yml` to modify workflows under `.github/workflows/`."
+            )
+        else:
+            err_msg = f"Git commit/push failed: {raw_err}"
         print(err_msg, file=sys.stderr)
         run_gh(
             [
