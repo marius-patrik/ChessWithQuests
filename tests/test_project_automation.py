@@ -56,6 +56,7 @@ class MockGitHubProjectClient:
         self.added_items = []
         self.edited_statuses = []
         self.added_labels = []
+        self.removed_labels = []
         self.project_number = 14
         self.owner = "marius-patrik"
         self.gh_responses = {}
@@ -71,6 +72,9 @@ class MockGitHubProjectClient:
 
     def add_issue_label(self, repo, issue_number, label):
         self.added_labels.append((repo, issue_number, label))
+
+    def remove_issue_label(self, repo, issue_number, label):
+        self.removed_labels.append((repo, issue_number, label))
 
     def run_gh(self, args):
         cmd = " ".join(args)
@@ -150,6 +154,7 @@ def test_process_event_pr_merged_with_bound_issue():
     }
     process_event("pull_request", payload, client=client)
     assert client.added_labels == [("marius-patrik/ChessWithQuests", 5, "Done")]
+    assert client.removed_labels == [("marius-patrik/ChessWithQuests", 5, "In Progress")]
     assert client.edited_statuses == [("item-1", "Done")]
 
 

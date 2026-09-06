@@ -139,6 +139,12 @@ class GitHubProjectClient:
         except Exception as e:
             print(f"Error adding label to issue #{issue_number}: {e}", file=sys.stderr)
 
+    def remove_issue_label(self, repo: str, issue_number: int, label: str) -> None:
+        try:
+            self.run_gh(["issue", "edit", str(issue_number), "--repo", repo, "--remove-label", label])
+        except Exception as e:
+            print(f"Notice: could not remove label '{label}' from issue #{issue_number}: {e}", file=sys.stderr)
+
 
 def process_event(
     event_name: str, payload: Dict[str, Any], client: Optional[GitHubProjectClient] = None
@@ -236,6 +242,7 @@ def process_event(
                 for issue_num in bound_issues:
                     issue_url = f"https://github.com/{repo_full_name}/issues/{issue_num}"
                     client.add_issue_label(repo_full_name, issue_num, "Done")
+                    client.remove_issue_label(repo_full_name, issue_num, "In Progress")
                     item_id = client.add_item(issue_url)
                     if item_id:
                         client.edit_status(item_id, "Done")
@@ -268,6 +275,7 @@ def process_event(
                 for issue_num in bound:
                     issue_url = f"https://github.com/{repo_full_name}/issues/{issue_num}"
                     client.add_issue_label(repo_full_name, issue_num, "Done")
+                    client.remove_issue_label(repo_full_name, issue_num, "In Progress")
                     item_id = client.add_item(issue_url)
                     if item_id:
                         client.edit_status(item_id, "Done")

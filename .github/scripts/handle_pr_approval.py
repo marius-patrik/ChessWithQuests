@@ -129,6 +129,12 @@ def reconcile_post_merge(pr_number: int, repo: str) -> None:
             text=True,
             env=dict(os.environ, GH_REPO=repo),
         )
+        subprocess.run(
+            ["gh", "issue", "edit", str(num), "--repo", repo, "--remove-label", "In Progress"],
+            capture_output=True,
+            text=True,
+            env=dict(os.environ, GH_REPO=repo),
+        )
         mark_done_on_project(issue_url)
         print(f"Closed issue #{num} and marked Done on Project {project_num}")
 
