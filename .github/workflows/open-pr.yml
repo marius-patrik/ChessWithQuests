@@ -29,7 +29,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  workflows: write
+  actions: write
 
 jobs:
   open-pr:
@@ -37,7 +37,7 @@ jobs:
     steps:
       - name: Create or Update Pull Request as GitHub Actions Bot
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PROJECT_TOKEN || secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           BRANCH: ${{ inputs.branch }}
           TITLE: ${{ inputs.title }}
