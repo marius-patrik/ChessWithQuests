@@ -3,7 +3,7 @@ import os
 import re
 import subprocess
 import sys
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional, Set
 
 PROJECT_OWNER = os.environ.get(
     "PROJECT_OWNER", os.environ.get("GITHUB_REPOSITORY_OWNER", "marius-patrik")
@@ -22,6 +22,16 @@ STATUS_OPTIONS = {
     "Done": "db1d3578",
     "Superseded": "1ea57ba8",
     "Dropped": "7d7814ed",
+}
+
+STATUS_LABELS: Set[str] = {
+    "Backlog",
+    "ToDo",
+    "In Progress",
+    "Blocked",
+    "Done",
+    "Superseded",
+    "Dropped",
 }
 
 CLOSING_PATTERN = re.compile(
@@ -133,7 +143,33 @@ class GitHubProjectClient:
             print(f"Error updating item status: {e}", file=sys.stderr)
             return False
 
+    def set_status_label(self, repo: str, issue_number: int, status_name: str) -> None:
+        """Applies one status label and removes every other status label.
+
+        Args:
+            repo: Repository slug (owner/name).
+            issue_number: Issue or pull request number.
+            status_name: Status label to apply.
+        """
+        args = ["issue", "edit", str(issue_number), "--repo", repo, "--add-label", status_name]
+        for label in sorted(STATUS_LABELS - {status_name}):
+            args += ["--remove-label", label]
+        try:
+            self.run_gh(args)
+        except Exception as e:
+            print(f"Error setting status label on issue #{issue_number}: {e}", file=sys.stderr)
+
     def add_issue_label(self, repo: str, issue_number: int, label: str) -> None:
+        """Adds a label to an issue, delegating to set_status_label if it is a status label.
+
+        Args:
+            repo: Repository slug (owner/name).
+            issue_number: Issue or pull request number.
+            label: Label name to add.
+        """
+        if label in STATUS_LABELS:
+            self.set_status_label(repo, issue_number, label)
+            return
         try:
             self.run_gh(["issue", "edit", str(issue_number), "--repo", repo, "--add-label", label])
         except Exception as e:

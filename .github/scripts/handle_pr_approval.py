@@ -10,11 +10,26 @@ import re
 import subprocess
 import sys
 import time
-from typing import Set
+from typing import Optional, Set
+
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPT_DIR in sys.path:
+    sys.path.remove(_SCRIPT_DIR)
+sys.path.insert(0, _SCRIPT_DIR)
+
+from project_automation import GitHubProjectClient
 
 
-def reconcile_post_merge(pr_number: int, repo: str) -> None:
-    """Closes bound issues and updates Project 14 board to Done post merge."""
+def reconcile_post_merge(
+    pr_number: int, repo: str, client: Optional[GitHubProjectClient] = None
+) -> None:
+    """Closes bound issues and updates Project 14 board to Done post merge.
+
+    Args:
+        pr_number: Pull request number.
+        repo: Repository slug (owner/name).
+        client: Optional GitHubProjectClient instance.
+    """
     view_res = subprocess.run(
         ["gh", "pr", "view", str(pr_number), "--json", "state,closingIssuesReferences,body,url"],
         capture_output=True,
@@ -46,74 +61,15 @@ def reconcile_post_merge(pr_number: int, repo: str) -> None:
 
     print(f"Reconciling post-merge for PR #{pr_number}. Bound issues: {sorted(issue_numbers)}")
 
-    owner = repo.split("/")[0] if "/" in repo else "marius-patrik"
-    project_num = 14
-    status_field = "PVTSSF_lAHOBCXFy84BidGlzhhVH8o"
-    done_option = "db1d3578"
-
-    proj_view = subprocess.run(
-        ["gh", "project", "view", str(project_num), "--owner", owner, "--format", "json"],
-        capture_output=True,
-        text=True,
-        env=dict(os.environ, GH_REPO=repo),
-    )
-    project_id = None
-    if proj_view.returncode == 0:
-        try:
-            project_id = json.loads(proj_view.stdout).get("id")
-        except Exception:
-            pass
-
-    def mark_done_on_project(url: str):
-        if not project_id:
-            return
-        add_res = subprocess.run(
-            [
-                "gh",
-                "project",
-                "item-add",
-                str(project_num),
-                "--owner",
-                owner,
-                "--url",
-                url,
-                "--format",
-                "json",
-            ],
-            capture_output=True,
-            text=True,
-            env=dict(os.environ, GH_REPO=repo),
-        )
-        if add_res.returncode == 0:
-            try:
-                item_id = json.loads(add_res.stdout).get("id")
-                if item_id:
-                    subprocess.run(
-                        [
-                            "gh",
-                            "project",
-                            "item-edit",
-                            "--id",
-                            item_id,
-                            "--project-id",
-                            project_id,
-                            "--field-id",
-                            status_field,
-                            "--single-select-option-id",
-                            done_option,
-                            "--format",
-                            "json",
-                        ],
-                        capture_output=True,
-                        text=True,
-                        env=dict(os.environ, GH_REPO=repo),
-                    )
-            except Exception as e:
-                print(f"Project update notice for {url}: {e}")
+    if client is None:
+        owner = repo.split("/")[0] if "/" in repo else "marius-patrik"
+        client = GitHubProjectClient(owner=owner)
 
     pr_url = data.get("url")
     if pr_url:
-        mark_done_on_project(pr_url)
+        item_id = client.add_item(pr_url)
+        if item_id:
+            client.edit_status(item_id, "Done")
 
     for num in sorted(issue_numbers):
         issue_url = f"https://github.com/{repo}/issues/{num}"
@@ -123,14 +79,11 @@ def reconcile_post_merge(pr_number: int, repo: str) -> None:
             text=True,
             env=dict(os.environ, GH_REPO=repo),
         )
-        subprocess.run(
-            ["gh", "issue", "edit", str(num), "--repo", repo, "--add-label", "Done"],
-            capture_output=True,
-            text=True,
-            env=dict(os.environ, GH_REPO=repo),
-        )
-        mark_done_on_project(issue_url)
-        print(f"Closed issue #{num} and marked Done on Project {project_num}")
+        client.set_status_label(repo, num, "Done")
+        item_id = client.add_item(issue_url)
+        if item_id:
+            client.edit_status(item_id, "Done")
+        print(f"Closed issue #{num} and marked Done on Project {client.project_number}")
 
 
 def handle_pr_approval():
