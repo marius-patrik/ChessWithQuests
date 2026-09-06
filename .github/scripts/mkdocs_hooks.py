@@ -10,21 +10,33 @@ from mkdocs.structure.files import File, Files
 def _get_repo_root(config: Any) -> str:
     """Resolve the repository root directory from configuration.
 
+    Prioritizes config.config_file_path and __file__, falling back to docs_dir.
+
     Args:
         config (Any): The MkDocs configuration object or dictionary.
 
     Returns:
         str: Absolute path to the repository root directory.
     """
+    if hasattr(config, "config_file_path") and config.config_file_path:
+        return os.path.dirname(os.path.abspath(config.config_file_path))
+    if isinstance(config, dict) and config.get("config_file_path"):
+        return os.path.dirname(os.path.abspath(config["config_file_path"]))
+
     docs_dir = (
         config.get("docs_dir") if hasattr(config, "get") else getattr(config, "docs_dir", None)
     )
+    hook_repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
     if docs_dir:
-        return os.path.abspath(os.path.join(docs_dir, ".."))
-    elif hasattr(config, "config_file_path") and config.config_file_path:
-        return os.path.dirname(os.path.abspath(config.config_file_path))
-    else:
-        return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        docs_parent = os.path.abspath(os.path.join(docs_dir, ".."))
+        try:
+            if os.path.commonpath([docs_parent, hook_repo_root]) != hook_repo_root:
+                return docs_parent
+        except ValueError:
+            return docs_parent
+
+    return hook_repo_root
 
 
 def _get_notes_dir(config: Any) -> Optional[str]:
@@ -36,19 +48,8 @@ def _get_notes_dir(config: Any) -> Optional[str]:
     Returns:
         Optional[str]: Absolute path to the notes directory if it exists, None otherwise.
     """
-    docs_dir = (
-        config.get("docs_dir") if hasattr(config, "get") else getattr(config, "docs_dir", None)
-    )
-    if docs_dir:
-        repo_root = os.path.abspath(os.path.join(docs_dir, ".."))
-    elif hasattr(config, "config_file_path") and config.config_file_path:
-        repo_root = os.path.dirname(os.path.abspath(config.config_file_path))
-    else:
-        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-
+    repo_root = _get_repo_root(config)
     notes_dir = os.path.join(repo_root, "notes")
-    if not os.path.isdir(notes_dir) and os.path.isdir("notes"):
-        notes_dir = os.path.abspath("notes")
     return notes_dir if os.path.isdir(notes_dir) else None
 
 
@@ -61,8 +62,20 @@ def on_config(config: MkDocsConfig) -> MkDocsConfig:
     Returns:
         MkDocsConfig: The updated MkDocs configuration object with notes navigation.
     """
+    # Finding 5: If nav is not configured in mkdocs.yml (nav is None), preserve auto-navigation
+    nav = config.get("nav") if hasattr(config, "get") else getattr(config, "nav", None)
+    if nav is None:
+        return config
+
     notes_dir = _get_notes_dir(config)
     if not notes_dir:
+        # Clean up empty Notes placeholder if notes directory does not exist
+        if isinstance(config.get("nav"), list):
+            config["nav"] = [
+                item
+                for item in config["nav"]
+                if not (isinstance(item, dict) and "Notes" in item and not item["Notes"])
+            ]
         return config
 
     note_files = [
@@ -74,10 +87,13 @@ def on_config(config: MkDocsConfig) -> MkDocsConfig:
     has_notes = bool(note_files or os.path.isfile(notes_index_path))
 
     if not has_notes:
+        if isinstance(config.get("nav"), list):
+            config["nav"] = [
+                item
+                for item in config["nav"]
+                if not (isinstance(item, dict) and "Notes" in item and not item["Notes"])
+            ]
         return config
-
-    if "nav" not in config or config["nav"] is None:
-        config["nav"] = []
 
     notes_section: Optional[List[Any]] = None
     for item in config["nav"]:
@@ -129,8 +145,13 @@ def on_files(files: Files, config: MkDocsConfig) -> Files:
         except AttributeError:
             pass
 
-    src_dir = config["docs_dir"]
     repo_root = _get_repo_root(config)
+    src_dir = (
+        config.get("docs_dir") if hasattr(config, "get") else getattr(config, "docs_dir", None)
+    )
+    if not src_dir:
+        src_dir = os.path.join(repo_root, "src")
+
     notes_dir = _get_notes_dir(config)
 
     note_entries: List[Tuple[str, str]] = []
@@ -140,9 +161,9 @@ def on_files(files: Files, config: MkDocsConfig) -> Files:
                 note_path = os.path.join(notes_dir, f)
                 if os.path.isfile(note_path):
                     try:
-                        with open(note_path, "r", encoding="utf-8", errors="replace") as nf:
+                        with open(note_path, "r", encoding="utf-8") as nf:
                             content = nf.read()
-                    except OSError as e:
+                    except (OSError, UnicodeDecodeError) as e:
                         print(f"Warning: Failed to read note {note_path}: {e}")
                         continue
 
@@ -166,9 +187,9 @@ def on_files(files: Files, config: MkDocsConfig) -> Files:
             if not files.get_file_from_path("notes/index.md"):
                 if has_index_on_disk:
                     try:
-                        with open(notes_index_path, "r", encoding="utf-8", errors="replace") as f:
+                        with open(notes_index_path, "r", encoding="utf-8") as f:
                             notes_hub_content = f.read()
-                    except OSError as e:
+                    except (OSError, UnicodeDecodeError) as e:
                         print(f"Warning: Failed to read notes index {notes_index_path}: {e}")
                         notes_hub_content = ""
                 else:
@@ -198,9 +219,9 @@ def on_files(files: Files, config: MkDocsConfig) -> Files:
         overview_content = ""
         if os.path.isfile(readme_path):
             try:
-                with open(readme_path, "r", encoding="utf-8", errors="replace") as rf:
+                with open(readme_path, "r", encoding="utf-8") as rf:
                     overview_content = rf.read()
-            except OSError as e:
+            except (OSError, UnicodeDecodeError) as e:
                 print(f"Warning: Failed to read README {readme_path}: {e}")
                 overview_content = "# ChessWithQuests\n\nAutogenerated API Documentation.\n"
         else:
@@ -226,39 +247,40 @@ def on_files(files: Files, config: MkDocsConfig) -> Files:
         )
         files.append(index_file)
 
-    for root, _, filenames in os.walk(src_dir):
-        for f in sorted(filenames):
-            if not f.endswith(".py"):
-                continue
-
-            full_path = os.path.join(root, f)
-            rel_path = os.path.relpath(full_path, src_dir)
-            parts = rel_path.split(os.sep)
-            parts[-1] = os.path.splitext(parts[-1])[0]
-
-            if parts[-1] == "__init__":
-                if len(parts) == 1:
-                    # Root package overview is covered by docs/index.md
+    if os.path.isdir(src_dir):
+        for root, _, filenames in os.walk(src_dir):
+            for f in sorted(filenames):
+                if not f.endswith(".py"):
                     continue
-                dotted_path = ".".join(parts[:-1])
-                doc_uri = "/".join(parts[:-1]) + "/index.md"
-                title = f"{parts[-2].capitalize()} Package (`{dotted_path}`)"
-            else:
-                dotted_path = ".".join(parts)
-                doc_uri = "/".join(parts) + ".md"
-                title = f"{parts[-1].capitalize()} (`{dotted_path}`)"
 
-            # Avoid collisions with static docs if already present
-            if files.get_file_from_path(doc_uri):
-                continue
+                full_path = os.path.join(root, f)
+                rel_path = os.path.relpath(full_path, src_dir)
+                parts = rel_path.split(os.sep)
+                parts[-1] = os.path.splitext(parts[-1])[0]
 
-            content = f"# {title}\n\n::: {dotted_path}\n"
-            gen_file = File.generated(
-                config,
-                doc_uri,
-                content=content,
-            )
-            files.append(gen_file)
+                if parts[-1] == "__init__":
+                    if len(parts) == 1:
+                        # Root package overview is covered by docs/index.md
+                        continue
+                    dotted_path = ".".join(parts[:-1])
+                    doc_uri = "/".join(parts[:-1]) + "/index.md"
+                    title = f"{parts[-2].capitalize()} Package (`{dotted_path}`)"
+                else:
+                    dotted_path = ".".join(parts)
+                    doc_uri = "/".join(parts) + ".md"
+                    title = f"{parts[-1].capitalize()} (`{dotted_path}`)"
+
+                # Avoid collisions with static docs if already present
+                if files.get_file_from_path(doc_uri):
+                    continue
+
+                content = f"# {title}\n\n::: {dotted_path}\n"
+                gen_file = File.generated(
+                    config,
+                    doc_uri,
+                    content=content,
+                )
+                files.append(gen_file)
 
     return files
 
@@ -272,7 +294,12 @@ def on_post_build(config: MkDocsConfig) -> None:
     Returns:
         None
     """
-    site_dir = config["site_dir"]
+    site_dir = (
+        config.get("site_dir") if hasattr(config, "get") else getattr(config, "site_dir", None)
+    )
+    if not site_dir:
+        site_dir = os.path.join(_get_repo_root(config), "site")
+
     index_html = os.path.join(site_dir, "index.html")
     if not os.path.exists(index_html):
         for candidate in ["index.html", "__init__/index.html", "src/index.html"]:
