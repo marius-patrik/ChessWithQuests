@@ -83,12 +83,7 @@ nav:
           - model/misc/quest_manager.md
   - View:
       - view/index.md
-  - Notes:
-      - notes/index.md
-      - notes/chess_rules.md
-      - notes/object_model.md
-      - notes/reference_diagram.md
-      - notes/upstream_base.md
+  - Notes: []
 
 markdown_extensions:
   - admonition

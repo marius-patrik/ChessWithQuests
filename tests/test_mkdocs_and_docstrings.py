@@ -70,7 +70,7 @@ def test_all_docs_use_mkdocstrings_directives():
             assert ":::" in f._content, f"Generated file {f.src_uri} missing ':::' directive"
 
 
-def test_dynamic_notes_incorporation():
+def test_dynamic_notes_incorporation(tmp_path):
     """Verify that notes are dynamically discovered, incorporated into navigation and generated."""
     import mkdocs.config
     from mkdocs.structure.files import get_files
@@ -143,32 +143,128 @@ def test_dynamic_notes_incorporation():
         assert f"notes/{note_name}" in notes_entry["Notes"], f"notes/{note_name} missing from nav"
 
     # 5. Verify dynamic discovery works when a temporary note file is placed in notes/
-    temp_note_path = os.path.join(repo_root, "notes", "temp_test_note.md")
-    try:
-        with open(temp_note_path, "w", encoding="utf-8") as f:
-            f.write("# Temp Test Note\nTemporary note content for testing dynamic discovery.")
+    # Uses pytest tmp_path fixture to avoid modifying real repository filesystem
+    test_repo = tmp_path / "repo"
+    test_src = test_repo / "src"
+    test_notes = test_repo / "notes"
+    test_src.mkdir(parents=True)
+    test_notes.mkdir(parents=True)
 
-        # Test on_config with temp note
-        cfg_dyn = mkdocs.config.load_config(os.path.join(repo_root, "mkdocs.yml"))
-        cfg_dyn = mkdocs_hooks.on_config(cfg_dyn)
-        dyn_notes_entry = next(
-            (item for item in cfg_dyn["nav"] if isinstance(item, dict) and "Notes" in item), None
-        )
-        assert dyn_notes_entry is not None
-        assert "notes/temp_test_note.md" in dyn_notes_entry["Notes"]
+    temp_note_path = test_notes / "temp_test_note.md"
+    temp_note_path.write_text(
+        "# Temp Test Note\nTemporary note content for testing dynamic discovery.",
+        encoding="utf-8",
+    )
 
-        # Test on_files with temp note
-        files_dyn = get_files(cfg_dyn)
-        files_dyn = mkdocs_hooks.on_files(files_dyn, cfg_dyn)
-        dyn_map = {f.src_uri: f for f in files_dyn}
-        assert "notes/temp_test_note.md" in dyn_map
-        assert getattr(dyn_map["notes/temp_test_note.md"], "_content", "") == (
-            "# Temp Test Note\nTemporary note content for testing dynamic discovery."
-        )
-        assert "temp_test_note.md" in getattr(dyn_map["notes/index.md"], "_content", "")
-    finally:
-        if os.path.exists(temp_note_path):
-            os.remove(temp_note_path)
+    test_mkdocs_yml = test_repo / "mkdocs.yml"
+    test_mkdocs_yml.write_text(
+        "site_name: Temp Test\ndocs_dir: src\nnav:\n  - Notes: []\n",
+        encoding="utf-8",
+    )
+
+    cfg_dyn = mkdocs.config.load_config(str(test_mkdocs_yml))
+    cfg_dyn = mkdocs_hooks.on_config(cfg_dyn)
+    dyn_notes_entry = next(
+        (item for item in cfg_dyn["nav"] if isinstance(item, dict) and "Notes" in item), None
+    )
+    assert dyn_notes_entry is not None
+    assert "notes/temp_test_note.md" in dyn_notes_entry["Notes"]
+
+    files_dyn = get_files(cfg_dyn)
+    files_dyn = mkdocs_hooks.on_files(files_dyn, cfg_dyn)
+    dyn_map = {f.src_uri: f for f in files_dyn}
+    assert "notes/temp_test_note.md" in dyn_map
+    assert getattr(dyn_map["notes/temp_test_note.md"], "_content", "") == (
+        "# Temp Test Note\nTemporary note content for testing dynamic discovery."
+    )
+    assert "temp_test_note.md" in getattr(dyn_map["notes/index.md"], "_content", "")
+
+
+def test_notes_edge_cases_and_findings(tmp_path):
+    """Verify bug fixes for code review findings:
+    - Finding 1: subdirectories ending in .md and hidden files are ignored.
+    - Finding 2: authored notes/index.md on disk is used instead of boilerplate.
+    - Finding 3: item['Notes'] is None or non-list in nav handled without duplicates.
+    - Finding 7: config_file_path takes precedence for repo_root.
+    """
+    import mkdocs.config
+    from mkdocs.structure.files import get_files
+    import sys
+
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    scripts_dir = os.path.join(repo_root, ".github", "scripts")
+    if scripts_dir in sys.path:
+        sys.path.remove(scripts_dir)
+    sys.path.insert(0, scripts_dir)
+    sys.modules.pop("mkdocs_hooks", None)
+
+    import mkdocs_hooks
+
+    test_repo = tmp_path / "edge_repo"
+    test_src = test_repo / "src"
+    test_notes = test_repo / "notes"
+    test_src.mkdir(parents=True)
+    test_notes.mkdir(parents=True)
+
+    # Finding 1: Subdirectory ending in .md and hidden .md file
+    sub_dir_md = test_notes / "sub_topic.md"
+    sub_dir_md.mkdir()
+    hidden_md = test_notes / ".hidden_note.md"
+    hidden_md.write_text("# Hidden\nShould be ignored.", encoding="utf-8")
+    valid_note = test_notes / "valid_note.md"
+    valid_note.write_text("# Valid Note\nValid content.", encoding="utf-8")
+
+    # Finding 2: Authored notes/index.md on disk
+    authored_index_content = "# Custom Authored Index\nWelcome to custom notes index!"
+    index_md = test_notes / "index.md"
+    index_md.write_text(authored_index_content, encoding="utf-8")
+
+    test_mkdocs_yml = test_repo / "mkdocs.yml"
+    test_mkdocs_yml.write_text(
+        "site_name: Edge Test\ndocs_dir: src\nnav:\n  - Notes: []\n",
+        encoding="utf-8",
+    )
+
+    # Finding 3: Test on_config with item['Notes'] = None to ensure it is converted in-place without duplicates
+    raw_cfg = {"nav": [{"Notes": None}], "config_file_path": str(test_mkdocs_yml)}
+    raw_cfg = mkdocs_hooks.on_config(raw_cfg)
+    raw_notes = [item for item in raw_cfg["nav"] if isinstance(item, dict) and "Notes" in item]
+    assert len(raw_notes) == 1, "Duplicate Notes sections created when item['Notes'] is None"
+    assert isinstance(raw_notes[0]["Notes"], list)
+    assert "notes/index.md" in raw_notes[0]["Notes"]
+    assert "notes/valid_note.md" in raw_notes[0]["Notes"]
+
+    # Finding 7: _get_repo_root prioritizes config_file_path
+    cfg = mkdocs.config.load_config(str(test_mkdocs_yml))
+    resolved_root = mkdocs_hooks._get_repo_root(cfg)
+    assert resolved_root == str(test_repo)
+
+    cfg = mkdocs_hooks.on_config(cfg)
+
+    # Ensure Notes section was replaced in-place and not duplicated
+    notes_nav_items = [item for item in cfg["nav"] if isinstance(item, dict) and "Notes" in item]
+    assert len(notes_nav_items) == 1, "Duplicate Notes sections created in nav"
+    notes_list = notes_nav_items[0]["Notes"]
+    assert isinstance(notes_list, list)
+    assert "notes/index.md" in notes_list
+    assert "notes/valid_note.md" in notes_list
+    # Verify sub_topic.md directory and .hidden_note.md are NOT added to nav
+    assert "notes/sub_topic.md" not in notes_list
+    assert "notes/.hidden_note.md" not in notes_list
+
+    # on_files test
+    files = get_files(cfg)
+    files = mkdocs_hooks.on_files(files, cfg)
+    file_map = {f.src_uri: f for f in files}
+
+    # Finding 1 check on files
+    assert "notes/sub_topic.md" not in file_map
+    assert "notes/.hidden_note.md" not in file_map
+    assert "notes/valid_note.md" in file_map
+
+    # Finding 2 check on files: authored notes/index.md is used
+    assert "notes/index.md" in file_map
+    assert getattr(file_map["notes/index.md"], "_content", "") == authored_index_content
 
 
 def test_mkdocs_config_and_strict_build():

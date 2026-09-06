@@ -1,31 +1,62 @@
 """Dynamic MkDocs hook for generating virtual documentation pages from Python docstrings."""
 
+from collections.abc import MutableMapping
 import os
 import shutil
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 from mkdocs.structure.files import File, Files
 
 
-def on_config(config: Dict[str, Any]) -> Dict[str, Any]:
-    """Inspect notes directory and dynamically populate the Notes navigation section.
+def _get_repo_root(config: MutableMapping[str, Any]) -> str:
+    """Resolve repository root directory from MkDocs configuration.
 
     Args:
-        config (Dict[str, Any]): The MkDocs configuration dictionary.
+        config (MutableMapping[str, Any]): The MkDocs configuration object or dictionary.
 
     Returns:
-        Dict[str, Any]: The updated MkDocs configuration dictionary with notes navigation.
+        str: The absolute path to the repository root.
     """
-    if "docs_dir" in config and config["docs_dir"]:
-        repo_root = os.path.abspath(os.path.join(config["docs_dir"], ".."))
-    elif hasattr(config, "config_file_path") and config.config_file_path:
-        repo_root = os.path.dirname(os.path.abspath(config.config_file_path))
-    else:
-        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    config_file_path = getattr(config, "config_file_path", None)
+    if not config_file_path and isinstance(config, dict):
+        config_file_path = config.get("config_file_path")
+    if config_file_path:
+        return os.path.dirname(os.path.abspath(config_file_path))
 
+    docs_dir = (
+        config.get("docs_dir") if hasattr(config, "get") else getattr(config, "docs_dir", None)
+    )
+    if docs_dir:
+        return os.path.abspath(os.path.join(docs_dir, ".."))
+
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+
+def _get_notes_dir(config: MutableMapping[str, Any]) -> str:
+    """Resolve notes directory from MkDocs configuration or fallback.
+
+    Args:
+        config (MutableMapping[str, Any]): The MkDocs configuration object or dictionary.
+
+    Returns:
+        str: The path to the notes directory.
+    """
+    repo_root = _get_repo_root(config)
     notes_dir = os.path.join(repo_root, "notes")
     if not os.path.isdir(notes_dir) and os.path.isdir("notes"):
         notes_dir = os.path.abspath("notes")
+    return notes_dir
 
+
+def on_config(config: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
+    """Inspect notes directory and dynamically populate the Notes navigation section.
+
+    Args:
+        config (MutableMapping[str, Any]): The MkDocs configuration dictionary.
+
+    Returns:
+        MutableMapping[str, Any]: The updated MkDocs configuration dictionary with notes navigation.
+    """
+    notes_dir = _get_notes_dir(config)
     if not os.path.isdir(notes_dir):
         return config
 
@@ -35,6 +66,8 @@ def on_config(config: Dict[str, Any]) -> Dict[str, Any]:
     notes_section: Optional[List[Any]] = None
     for item in config["nav"]:
         if isinstance(item, dict) and "Notes" in item:
+            if not isinstance(item["Notes"], list):
+                item["Notes"] = []
             notes_section = item["Notes"]
             break
 
@@ -46,9 +79,7 @@ def on_config(config: Dict[str, Any]) -> Dict[str, Any]:
         for entry in notes_section:
             if entry == target_path:
                 return True
-            if isinstance(entry, dict) and (
-                target_path in entry.values() or any(v == target_path for v in entry.values())
-            ):
+            if isinstance(entry, dict) and target_path in entry.values():
                 return True
         return False
 
@@ -56,7 +87,13 @@ def on_config(config: Dict[str, Any]) -> Dict[str, Any]:
         notes_section.insert(0, "notes/index.md")
 
     for f in sorted(os.listdir(notes_dir)):
-        if f.endswith(".md") and f != "index.md":
+        note_path = os.path.join(notes_dir, f)
+        if (
+            f.endswith(".md")
+            and f != "index.md"
+            and not f.startswith(".")
+            and os.path.isfile(note_path)
+        ):
             note_uri = f"notes/{f}"
             if not _is_present(note_uri):
                 notes_section.append(note_uri)
@@ -64,29 +101,26 @@ def on_config(config: Dict[str, Any]) -> Dict[str, Any]:
     return config
 
 
-def on_files(files: Files, config: Dict[str, Any]) -> Files:
+def on_files(files: Files, config: MutableMapping[str, Any]) -> Files:
     """Dynamically generate virtual markdown documentation pages for Python modules and notes.
 
     Args:
         files (Files): The MkDocs collection of File objects.
-        config (Dict[str, Any]): The MkDocs configuration dictionary.
+        config (MutableMapping[str, Any]): The MkDocs configuration dictionary.
 
     Returns:
         Files: The updated collection of File objects including virtual documentation.
     """
-    if not hasattr(config.plugins, "_current_plugin"):
+    if hasattr(config, "plugins") and not hasattr(config.plugins, "_current_plugin"):
         config.plugins._current_plugin = None
 
-    src_dir = config["docs_dir"]
-    repo_root = os.path.abspath(os.path.join(src_dir, ".."))
-    notes_dir = os.path.join(repo_root, "notes")
-    if not os.path.isdir(notes_dir) and os.path.isdir("notes"):
-        notes_dir = os.path.abspath("notes")
+    repo_root = _get_repo_root(config)
+    notes_dir = _get_notes_dir(config)
 
     note_entries: List[Tuple[str, str, str]] = []
     if os.path.isdir(notes_dir):
         for f in sorted(os.listdir(notes_dir)):
-            if f.endswith(".md") and f != "index.md":
+            if f.endswith(".md") and f != "index.md" and not f.startswith("."):
                 note_path = os.path.join(notes_dir, f)
                 if os.path.isfile(note_path):
                     with open(note_path, "r", encoding="utf-8") as nf:
@@ -104,19 +138,24 @@ def on_files(files: Files, config: Dict[str, Any]) -> Files:
                         files.append(gen_file)
 
     # Dynamically generate virtual notes/index.md hub page if not present
+    notes_disk_index = os.path.join(notes_dir, "index.md")
     if not files.get_file_from_path("notes/index.md"):
-        hub_lines = [
-            "# Architecture & Design Notes",
-            "",
-            "Authoritative architectural references, design decisions, and baseline rules for the ChessWithQuests project.",
-            "",
-            "## Table of Contents",
-            "",
-        ]
-        for f, title, _ in note_entries:
-            hub_lines.append(f"- [{title}]({f})")
-        hub_lines.append("")
-        notes_hub_content = "\n".join(hub_lines)
+        if os.path.isfile(notes_disk_index):
+            with open(notes_disk_index, "r", encoding="utf-8") as f:
+                notes_hub_content = f.read()
+        else:
+            hub_lines = [
+                "# Architecture & Design Notes",
+                "",
+                "Authoritative architectural references, design decisions, and baseline rules for the ChessWithQuests project.",
+                "",
+                "## Table of Contents",
+                "",
+            ]
+            for f, title, _ in note_entries:
+                hub_lines.append(f"- [{title}]({f})")
+            hub_lines.append("")
+            notes_hub_content = "\n".join(hub_lines)
 
         notes_index_file = File.generated(
             config,
@@ -150,6 +189,7 @@ def on_files(files: Files, config: Dict[str, Any]) -> Files:
         )
         files.append(index_file)
 
+    src_dir = config["docs_dir"]
     for root, _, filenames in os.walk(src_dir):
         for f in sorted(filenames):
             if not f.endswith(".py"):
@@ -187,11 +227,11 @@ def on_files(files: Files, config: Dict[str, Any]) -> Files:
     return files
 
 
-def on_post_build(config: Dict[str, Any]) -> None:
+def on_post_build(config: MutableMapping[str, Any]) -> None:
     """Ensure site/index.html is available.
 
     Args:
-        config (Dict[str, Any]): The MkDocs configuration dictionary.
+        config (MutableMapping[str, Any]): The MkDocs configuration dictionary.
 
     Returns:
         None
