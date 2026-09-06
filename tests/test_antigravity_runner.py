@@ -992,3 +992,24 @@ def test_default_model_fallback_chain_structure():
         "gemini-3.8-flash-high",
         "claude-opus-4-6-thinking",
     ]
+
+
+def test_is_workflow_permission_error():
+    """Verify detection of git push errors caused by missing workflow write permissions."""
+    from antigravity_runner import is_workflow_permission_error
+
+    err_github_app = (
+        "! [remote rejected] branch -> branch (refusing to allow a GitHub App to create "
+        "or update workflow .github/workflows/verify-docs.yml without workflows permission)"
+    )
+    assert is_workflow_permission_error(err_github_app) is True
+
+    err_token = "error: refusing to allow a GitHub App to create or update workflow"
+    assert is_workflow_permission_error(err_token) is True
+
+    assert is_workflow_permission_error("failed: without workflows permission") is True
+
+    assert is_workflow_permission_error("error: failed to push some refs to remote") is False
+    assert is_workflow_permission_error("fatal: remote origin already exists") is False
+    assert is_workflow_permission_error("") is False
+    assert is_workflow_permission_error(None) is False
