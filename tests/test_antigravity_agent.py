@@ -716,17 +716,12 @@ def test_get_model_fallback_chain():
     chain = get_model_fallback_chain()
     assert chain == [
         "gemini-3.8-flash-high",
-        "gemini-3.8-flash-medium",
-        "gemini-3.7-flash-high",
-        "gemini-3.6-flash-high",
-        "claude-sonnet-4-6",
+        "claude-opus-4-6-thinking",
     ]
 
     # Starting with a specific tier from the chain
-    chain_mid = get_model_fallback_chain("gemini-3.7-flash-high")
-    assert chain_mid[0] == "gemini-3.7-flash-high"
-    assert "gemini-3.6-flash-high" in chain_mid
-    assert "claude-sonnet-4-6" in chain_mid
+    chain_mid = get_model_fallback_chain("claude-opus-4-6-thinking")
+    assert chain_mid == ["claude-opus-4-6-thinking"]
 
     # Custom chain override
     custom = ["custom-model-1", "custom-model-2"]
@@ -735,7 +730,7 @@ def test_get_model_fallback_chain():
 
 def test_run_agy_prompt_model_fallback_escalation():
     # Primary model (gemini-3.8-flash-high) exhausts retries with 429,
-    # then fallback model (gemini-3.8-flash-medium) succeeds
+    # then fallback model (claude-opus-4-6-thinking) succeeds
     err_exhausted = subprocess.CalledProcessError(
         returncode=1, cmd=["agy"], stderr="429 Quota exceeded for gemini-3.8-flash-high"
     )
@@ -767,7 +762,7 @@ def test_run_agy_prompt_model_fallback_escalation():
 
         assert model_1 == "gemini-3.8-flash-high"
         assert model_2 == "gemini-3.8-flash-high"
-        assert model_3 == "gemini-3.8-flash-medium"
+        assert model_3 == "claude-opus-4-6-thinking"
 
 
 def test_run_agy_prompt_non_quota_error_no_fallback():
@@ -876,7 +871,7 @@ def test_checkpoint_and_notify_exhaustion():
             assert "<!-- antigravity-agent -->" in comment_body
             assert "Antigravity Agent Quota Exhaustion Notice" in comment_body
             assert "gemini-3.8-flash-high" in comment_body
-            assert "claude-sonnet-4-6" in comment_body
+            assert "claude-opus-4-6-thinking" in comment_body
             assert "- [x] Step A: Read request" in comment_body
             assert "Instructions to Resume" in comment_body
             assert "Blocked" in comment_body

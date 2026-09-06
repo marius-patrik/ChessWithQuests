@@ -25,11 +25,26 @@ ANTIGRAVITY_CLIENT_ID = os.environ.get("ANTIGRAVITY_CLIENT_ID", "")
 ANTIGRAVITY_CLIENT_SECRET = os.environ.get("ANTIGRAVITY_CLIENT_SECRET", "")
 GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 
-_SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
-if _SCRIPTS_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPTS_DIR)
+_CANDIDATE_DIRS = [
+    os.path.dirname(os.path.abspath(__file__)),
+    os.path.join(os.environ.get("GITHUB_WORKSPACE", "/workspace"), ".github", "scripts"),
+    "/usr/local/share/antigravity-scripts",
+    "/workspace/.github/scripts",
+]
+for _d in _CANDIDATE_DIRS:
+    if os.path.isdir(_d) and _d not in sys.path:
+        sys.path.insert(0, _d)
 
-from project_automation import PROJECT_NUMBER, PROJECT_OWNER
+try:
+    from project_automation import PROJECT_NUMBER, PROJECT_OWNER
+except ImportError:
+    PROJECT_OWNER = os.environ.get(
+        "PROJECT_OWNER", os.environ.get("GITHUB_REPOSITORY_OWNER", "marius-patrik")
+    )
+    try:
+        PROJECT_NUMBER = int(os.environ.get("PROJECT_NUMBER", "14"))
+    except (ValueError, TypeError):
+        PROJECT_NUMBER = 14
 
 CHECKPOINT_FILENAME = ".antigravity_checkpoint.json"
 WORKSPACE_DIR = os.environ.get("GITHUB_WORKSPACE", "/workspace")
@@ -37,10 +52,7 @@ STATE_DIR = os.environ.get("STATE_DIR", WORKSPACE_DIR)
 
 DEFAULT_MODEL_FALLBACK_CHAIN: List[str] = [
     "gemini-3.8-flash-high",
-    "gemini-3.8-flash-medium",
-    "gemini-3.7-flash-high",
-    "gemini-3.6-flash-high",
-    "claude-sonnet-4-6",
+    "claude-opus-4-6-thinking",
 ]
 
 QUOTA_EXHAUSTION_PATTERNS: List[re.Pattern] = [
@@ -1594,13 +1606,19 @@ def handle_self_review(pr_number: int, plan_number: int, repo: str):
         plan_body = plan_data.get("body", "")
 
         # Review via agy
+        max_diff_len = 60000
+        diff_snippet = (
+            diff
+            if len(diff) <= max_diff_len
+            else f"{diff[:max_diff_len]}\n\n[... diff truncated at {max_diff_len} characters ...]"
+        )
         review_prompt = (
             f"Review the following pull request diff for code quality issues.\n"
             f"Look for: bugs, edge cases, missing error handling, missing tests, "
             f"style issues, naming problems, architectural concerns.\n\n"
             f"## Plan Scope (for reference — do NOT evaluate plan alignment here)\n"
             f"{plan_body[:2000]}\n\n"
-            f"## PR Diff\n```diff\n{diff[:8000]}\n```\n\n"
+            f"## PR Diff\n```diff\n{diff_snippet}\n```\n\n"
             f"If you find NO actionable issues, respond starting with: NO_FINDINGS\n"
             f"If you find issues, list each finding with a description and suggested fix. "
             f"For each finding, mark it WITHIN_SCOPE or OUT_OF_SCOPE relative to the plan."
@@ -1793,10 +1811,16 @@ def handle_plan_alignment(pr_number: int, plan_number: int, request_number: int,
         full_plan_scope += "\n\n## Scope Amendments\n" + "\n".join(amendments)
 
     # Run alignment check via agy
+    max_diff_len = 60000
+    diff_snippet = (
+        diff
+        if len(diff) <= max_diff_len
+        else f"{diff[:max_diff_len]}\n\n[... diff truncated at {max_diff_len} characters ...]"
+    )
     alignment_prompt = (
         f"Compare this PR diff against the implementation plan scope.\n\n"
         f"## Full Plan Scope\n{full_plan_scope[:4000]}\n\n"
-        f"## PR Diff\n```diff\n{diff[:8000]}\n```\n\n"
+        f"## PR Diff\n```diff\n{diff_snippet}\n```\n\n"
         f"Determine if the implementation matches the plan scope EXACTLY.\n"
         f"If it matches, respond starting with: MATCHES_PLAN_YES\n"
         f"If there are divergences, list each divergence with details."

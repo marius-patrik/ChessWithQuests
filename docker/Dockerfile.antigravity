@@ -43,8 +43,10 @@ RUN pip install --no-cache-dir --upgrade pip \
 # 3. Create Antigravity home and configuration directory
 RUN mkdir -p /root/.gemini/antigravity-cli
 
-# 4. Copy runner entrypoint
+# 4. Copy runner entrypoint and scripts
+COPY .github/scripts/ /usr/local/share/antigravity-scripts/
 COPY .github/scripts/antigravity_runner.py /usr/local/bin/antigravity-runner
 RUN chmod +x /usr/local/bin/antigravity-runner
+ENV PYTHONPATH="/usr/local/share/antigravity-scripts:/workspace/.github/scripts:${PYTHONPATH}"
 
 ENTRYPOINT ["dbus-run-session", "--", "python3", "/usr/local/bin/antigravity-runner"]

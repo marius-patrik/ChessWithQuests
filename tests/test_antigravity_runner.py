@@ -267,13 +267,12 @@ def test_get_model_fallback_chain_default():
 
 def test_get_model_fallback_chain_no_circular_wrapping():
     """Verify starting with a downstream tier cascades only downstream without wrap-around."""
-    chain = get_model_fallback_chain("gemini-3.7-flash-high")
-    assert chain == ["gemini-3.7-flash-high", "gemini-3.6-flash-high", "claude-sonnet-4-6"]
+    chain = get_model_fallback_chain("claude-opus-4-6-thinking")
+    assert chain == ["claude-opus-4-6-thinking"]
     assert "gemini-3.8-flash-high" not in chain
-    assert "gemini-3.8-flash-medium" not in chain
 
-    chain_last = get_model_fallback_chain("claude-sonnet-4-6")
-    assert chain_last == ["claude-sonnet-4-6"]
+    chain_last = get_model_fallback_chain("claude-opus-4-6-thinking")
+    assert chain_last == ["claude-opus-4-6-thinking"]
 
 
 def test_get_model_fallback_chain_unknown_initial_model():
@@ -983,3 +982,13 @@ def test_project_constants_imported_from_project_automation():
 
     assert PROJECT_OWNER == project_automation.PROJECT_OWNER
     assert PROJECT_NUMBER == project_automation.PROJECT_NUMBER
+
+
+def test_default_model_fallback_chain_structure():
+    """Verify fallback chain contains primary Gemini model and Claude Opus fallback only."""
+    from antigravity_runner import DEFAULT_MODEL_FALLBACK_CHAIN
+
+    assert DEFAULT_MODEL_FALLBACK_CHAIN == [
+        "gemini-3.8-flash-high",
+        "claude-opus-4-6-thinking",
+    ]
