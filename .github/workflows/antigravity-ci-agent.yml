@@ -14,7 +14,7 @@ permissions:
   issues: write
   pull-requests: write
   repository-projects: write
-  workflows: write
+  actions: write
 
 jobs:
   run-agent:
@@ -22,6 +22,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PROJECT_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Build Antigravity Agent Container
         run: |
@@ -33,7 +35,7 @@ jobs:
             -e ANTIGRAVITY_REFRESH_TOKEN="${{ secrets.ANTIGRAVITY_REFRESH_TOKEN }}" \
             -e ANTIGRAVITY_CLIENT_ID="${{ secrets.ANTIGRAVITY_CLIENT_ID }}" \
             -e ANTIGRAVITY_CLIENT_SECRET="${{ secrets.ANTIGRAVITY_CLIENT_SECRET }}" \
-            -e GH_TOKEN="${{ secrets.GITHUB_TOKEN }}" \
+            -e GH_TOKEN="${{ secrets.GH_PROJECT_TOKEN || secrets.GITHUB_TOKEN }}" \
             -e GITHUB_EVENT_PATH="/workspace/event.json" \
             -e GITHUB_EVENT_NAME="${{ github.event_name }}" \
             -e GITHUB_REPOSITORY="${{ github.repository }}" \
