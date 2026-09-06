@@ -2,7 +2,7 @@
 
 import os
 import shutil
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, Union, MutableMapping
 from mkdocs.config.defaults import MkDocsConfig
 from mkdocs.structure.files import File, Files
 
@@ -39,28 +39,36 @@ def _get_repo_root(config: Any) -> str:
     return hook_repo_root
 
 
-def _get_notes_dir(config: Any) -> Optional[str]:
+def _get_notes_dir(config: Union[MkDocsConfig, MutableMapping[str, Any], Any]) -> Optional[str]:
     """Resolve the notes directory from configuration if present.
 
     Args:
-        config (Any): The MkDocs configuration object or dictionary.
+        config (Union[MkDocsConfig, MutableMapping[str, Any], Any]): The MkDocs configuration object or dictionary.
 
     Returns:
         Optional[str]: Absolute path to the notes directory if it exists, None otherwise.
     """
+    custom_notes = (
+        config.get("notes_dir") if hasattr(config, "get") else getattr(config, "notes_dir", None)
+    )
+    if custom_notes and os.path.isdir(custom_notes):
+        return os.path.abspath(custom_notes)
+
     repo_root = _get_repo_root(config)
     notes_dir = os.path.join(repo_root, "notes")
     return notes_dir if os.path.isdir(notes_dir) else None
 
 
-def on_config(config: MkDocsConfig) -> MkDocsConfig:
+def on_config(
+    config: Union[MkDocsConfig, MutableMapping[str, Any]],
+) -> Union[MkDocsConfig, MutableMapping[str, Any]]:
     """Inspect notes directory and dynamically populate the Notes navigation section.
 
     Args:
-        config (MkDocsConfig): The MkDocs configuration object.
+        config (Union[MkDocsConfig, MutableMapping[str, Any]]): The MkDocs configuration object.
 
     Returns:
-        MkDocsConfig: The updated MkDocs configuration object with notes navigation.
+        Union[MkDocsConfig, MutableMapping[str, Any]]: The updated MkDocs configuration object with notes navigation.
     """
     # Finding 5: If nav is not configured in mkdocs.yml (nav is None), preserve auto-navigation
     nav = config.get("nav") if hasattr(config, "get") else getattr(config, "nav", None)
@@ -78,9 +86,15 @@ def on_config(config: MkDocsConfig) -> MkDocsConfig:
             ]
         return config
 
+    try:
+        dir_entries = sorted(os.listdir(notes_dir))
+    except OSError as e:
+        print(f"Warning: Failed to list notes directory {notes_dir}: {e}")
+        dir_entries = []
+
     note_files = [
         f
-        for f in sorted(os.listdir(notes_dir))
+        for f in dir_entries
         if f.endswith(".md") and f != "index.md" and os.path.isfile(os.path.join(notes_dir, f))
     ]
     notes_index_path = os.path.join(notes_dir, "index.md")
@@ -128,12 +142,12 @@ def on_config(config: MkDocsConfig) -> MkDocsConfig:
     return config
 
 
-def on_files(files: Files, config: MkDocsConfig) -> Files:
+def on_files(files: Files, config: Union[MkDocsConfig, MutableMapping[str, Any]]) -> Files:
     """Dynamically generate virtual markdown documentation pages for Python modules and notes.
 
     Args:
         files (Files): The MkDocs collection of File objects.
-        config (MkDocsConfig): The MkDocs configuration object.
+        config (Union[MkDocsConfig, MutableMapping[str, Any]]): The MkDocs configuration object.
 
     Returns:
         Files: The updated collection of File objects including virtual documentation.
@@ -156,7 +170,13 @@ def on_files(files: Files, config: MkDocsConfig) -> Files:
 
     note_entries: List[Tuple[str, str]] = []
     if notes_dir and os.path.isdir(notes_dir):
-        for f in sorted(os.listdir(notes_dir)):
+        try:
+            dir_entries = sorted(os.listdir(notes_dir))
+        except OSError as e:
+            print(f"Warning: Failed to list notes directory {notes_dir}: {e}")
+            dir_entries = []
+
+        for f in dir_entries:
             if f.endswith(".md") and f != "index.md":
                 note_path = os.path.join(notes_dir, f)
                 if os.path.isfile(note_path):
@@ -185,14 +205,15 @@ def on_files(files: Files, config: MkDocsConfig) -> Files:
         has_index_on_disk = os.path.isfile(notes_index_path)
         if note_entries or has_index_on_disk:
             if not files.get_file_from_path("notes/index.md"):
+                notes_hub_content = None
                 if has_index_on_disk:
                     try:
                         with open(notes_index_path, "r", encoding="utf-8") as f:
                             notes_hub_content = f.read()
                     except (OSError, UnicodeDecodeError) as e:
                         print(f"Warning: Failed to read notes index {notes_index_path}: {e}")
-                        notes_hub_content = ""
-                else:
+
+                if notes_hub_content is None:
                     hub_lines = [
                         "# Architecture & Design Notes",
                         "",
@@ -285,11 +306,11 @@ def on_files(files: Files, config: MkDocsConfig) -> Files:
     return files
 
 
-def on_post_build(config: MkDocsConfig) -> None:
+def on_post_build(config: Union[MkDocsConfig, MutableMapping[str, Any]]) -> None:
     """Ensure site/index.html is available.
 
     Args:
-        config (MkDocsConfig): The MkDocs configuration object.
+        config (Union[MkDocsConfig, MutableMapping[str, Any]]): The MkDocs configuration object.
 
     Returns:
         None

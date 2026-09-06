@@ -40,9 +40,14 @@ jobs:
           assert os.path.isfile(os.path.join(site_dir, "model/game/board/index.html")), "model docs missing"
           notes_dir = os.path.join(repo_root, "notes")
           if os.path.isdir(notes_dir):
-              assert os.path.isfile(os.path.join(site_dir, "notes/index.html")), "notes index page missing"
-              for f in sorted(os.listdir(notes_dir)):
-                  if f.endswith(".md") and f != "index.md" and os.path.isfile(os.path.join(notes_dir, f)):
+              note_files = [
+                  f for f in sorted(os.listdir(notes_dir))
+                  if f.endswith(".md") and f != "index.md" and os.path.isfile(os.path.join(notes_dir, f))
+              ]
+              has_notes = bool(note_files or os.path.isfile(os.path.join(notes_dir, "index.md")))
+              if has_notes:
+                  assert os.path.isfile(os.path.join(site_dir, "notes/index.html")), "notes index page missing"
+                  for f in note_files:
                       name = os.path.splitext(f)[0]
                       expected_html = os.path.join(site_dir, "notes", name, "index.html")
                       assert os.path.isfile(expected_html), f"missing generated docs for {f} at {expected_html}"

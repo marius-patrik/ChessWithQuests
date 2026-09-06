@@ -224,6 +224,22 @@ def test_dynamic_notes_nav_variants():
     assert "notes/index.md" in notes_items
     assert "notes/object_model.md" in notes_items
 
+    # Variant F: nav is an empty list []
+    cfg_empty_list = mkdocs.config.load_config(os.path.join(repo_root, "mkdocs.yml"))
+    cfg_empty_list["nav"] = []
+    cfg_empty_list = mkdocs_hooks.on_config(cfg_empty_list)
+    notes_entries = [
+        item for item in cfg_empty_list["nav"] if isinstance(item, dict) and "Notes" in item
+    ]
+    assert len(notes_entries) == 1, "Notes entry should be added when nav is empty list"
+    assert "notes/index.md" in notes_entries[0]["Notes"]
+    assert "notes/chess_rules.md" in notes_entries[0]["Notes"]
+
+    # Variant G: nav key is not in config dictionary
+    cfg_no_nav = {"docs_dir": os.path.join(repo_root, "src")}
+    cfg_no_nav = mkdocs_hooks.on_config(cfg_no_nav)
+    assert cfg_no_nav.get("nav") is None, "Missing nav key should remain None (auto-nav preserved)"
+
     # Pipeline test: on_files correctly creates virtual files
     files = Files([])
     files = mkdocs_hooks.on_files(files, cfg_null)
@@ -276,18 +292,46 @@ def test_dynamic_notes_missing_or_empty_notes_dir(tmp_path):
     if "index.md" in file_map:
         assert "Architecture & Reference Notes" not in getattr(file_map["index.md"], "_content", "")
 
-    # 3. Directory ending in .md inside notes directory
+
+def test_dynamic_notes_non_file_directory_ending_with_md(tmp_path):
+    """Verify that a subdirectory inside notes/ ending with .md is ignored by on_config and on_files."""
+    notes_dir = tmp_path / "notes"
+    notes_dir.mkdir()
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+
+    # Subdirectory ending in .md
     fake_subdir = notes_dir / "subfolder.md"
     fake_subdir.mkdir()
+
+    # Valid note file
+    valid_note = notes_dir / "valid_note.md"
+    valid_note.write_text("# Valid Note\nSome content.", encoding="utf-8")
+
+    mkdocs_file = tmp_path / "mkdocs.yml"
+    mkdocs_file.write_text(
+        "site_name: Test\ndocs_dir: src\nnav:\n  - Overview: index.md\n  - Notes: []\n",
+        encoding="utf-8",
+    )
 
     cfg = mkdocs.config.load_config(str(mkdocs_file))
     cfg = mkdocs_hooks.on_config(cfg)
     notes_entry = next(
         (item for item in cfg["nav"] if isinstance(item, dict) and "Notes" in item), None
     )
+    assert notes_entry is not None
     assert (
-        notes_entry is None or "notes/subfolder.md" not in notes_entry["Notes"]
+        "notes/subfolder.md" not in notes_entry["Notes"]
     ), "Directory ending with .md must not be added to nav"
+    assert "notes/valid_note.md" in notes_entry["Notes"], "Valid note must be added to nav"
+
+    files = Files([])
+    files = mkdocs_hooks.on_files(files, cfg)
+    file_map = {f.src_uri: f for f in files}
+    assert (
+        "notes/subfolder.md" not in file_map
+    ), "Directory ending with .md must not be generated as a file"
+    assert "notes/valid_note.md" in file_map, "Valid note must be generated"
 
 
 def test_dynamic_notes_existing_index_md_on_disk(tmp_path):
@@ -324,7 +368,7 @@ def test_dynamic_notes_existing_index_md_on_disk(tmp_path):
     assert "# Architecture & Design Notes" not in getattr(gen_file, "_content", "")
 
 
-def test_dynamic_notes_file_read_error_handling(tmp_path, capsys):
+def test_dynamic_notes_file_read_error_handling(tmp_path, capsys, monkeypatch):
     """Verify that OSError or UnicodeDecodeError during note reading does not crash the build."""
     notes_dir = tmp_path / "notes"
     notes_dir.mkdir()
@@ -335,14 +379,33 @@ def test_dynamic_notes_file_read_error_handling(tmp_path, capsys):
     bad_note = notes_dir / "corrupted_note.md"
     bad_note.write_bytes(b"\x80\x81\x82\xff")
 
+    # Note that will raise OSError on open
+    os_error_note = notes_dir / "unreadable_note.md"
+    os_error_note.write_text("# Unreadable Note", encoding="utf-8")
+
     good_note = notes_dir / "valid_note.md"
     good_note.write_text("# Valid Note\nValid content.", encoding="utf-8")
+
+    # Custom index.md that will raise OSError on open
+    index_note = notes_dir / "index.md"
+    index_note.write_text("# Broken Index", encoding="utf-8")
 
     mkdocs_file = tmp_path / "mkdocs.yml"
     mkdocs_file.write_text(
         "site_name: Test\ndocs_dir: src\nnav:\n  - Overview: index.md\n  - Notes: []\n",
         encoding="utf-8",
     )
+
+    original_open = open
+
+    def fake_open(file, *args, **kwargs):
+        if "unreadable_note.md" in str(file):
+            raise OSError("Simulated file read failure (permission denied)")
+        if "index.md" in str(file) and str(notes_dir) in str(file):
+            raise OSError("Simulated index read failure (corrupt index)")
+        return original_open(file, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", fake_open)
 
     cfg = mkdocs.config.load_config(str(mkdocs_file))
     cfg = mkdocs_hooks.on_config(cfg)
@@ -353,8 +416,13 @@ def test_dynamic_notes_file_read_error_handling(tmp_path, capsys):
 
     captured = capsys.readouterr()
     assert "Warning: Failed to read note" in captured.out
+    assert "Warning: Failed to read notes index" in captured.out
     assert "notes/valid_note.md" in file_map
     assert "notes/corrupted_note.md" not in file_map
+    assert "notes/unreadable_note.md" not in file_map
+    assert "notes/index.md" in file_map
+    # Falls back to synthetic hub page
+    assert "# Architecture & Design Notes" in getattr(file_map["notes/index.md"], "_content", "")
 
 
 def test_mkdocs_config_and_strict_build():
