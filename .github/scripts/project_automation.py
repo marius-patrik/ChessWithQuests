@@ -141,9 +141,14 @@ class GitHubProjectClient:
 
     def remove_issue_label(self, repo: str, issue_number: int, label: str) -> None:
         try:
-            self.run_gh(["issue", "edit", str(issue_number), "--repo", repo, "--remove-label", label])
+            self.run_gh(
+                ["issue", "edit", str(issue_number), "--repo", repo, "--remove-label", label]
+            )
         except Exception as e:
-            print(f"Notice: could not remove label '{label}' from issue #{issue_number}: {e}", file=sys.stderr)
+            print(
+                f"Notice: could not remove label '{label}' from issue #{issue_number}: {e}",
+                file=sys.stderr,
+            )
 
 
 def process_event(
