@@ -2,16 +2,128 @@
 
 import os
 import shutil
-from mkdocs.structure.files import File
+from typing import Any, Dict, List, Optional, Tuple
+from mkdocs.structure.files import File, Files
 
 
-def on_files(files, config):
-    """Dynamically generate virtual markdown documentation pages for all Python modules in src/."""
+def on_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Inspect notes directory and dynamically populate the Notes navigation section.
+
+    Args:
+        config (Dict[str, Any]): The MkDocs configuration dictionary.
+
+    Returns:
+        Dict[str, Any]: The updated MkDocs configuration dictionary with notes navigation.
+    """
+    if "docs_dir" in config and config["docs_dir"]:
+        repo_root = os.path.abspath(os.path.join(config["docs_dir"], ".."))
+    elif hasattr(config, "config_file_path") and config.config_file_path:
+        repo_root = os.path.dirname(os.path.abspath(config.config_file_path))
+    else:
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+    notes_dir = os.path.join(repo_root, "notes")
+    if not os.path.isdir(notes_dir) and os.path.isdir("notes"):
+        notes_dir = os.path.abspath("notes")
+
+    if not os.path.isdir(notes_dir):
+        return config
+
+    if "nav" not in config or config["nav"] is None:
+        config["nav"] = []
+
+    notes_section: Optional[List[Any]] = None
+    for item in config["nav"]:
+        if isinstance(item, dict) and "Notes" in item:
+            notes_section = item["Notes"]
+            break
+
+    if notes_section is None:
+        notes_section = []
+        config["nav"].append({"Notes": notes_section})
+
+    def _is_present(target_path: str) -> bool:
+        for entry in notes_section:
+            if entry == target_path:
+                return True
+            if isinstance(entry, dict) and (
+                target_path in entry.values() or any(v == target_path for v in entry.values())
+            ):
+                return True
+        return False
+
+    if not _is_present("notes/index.md"):
+        notes_section.insert(0, "notes/index.md")
+
+    for f in sorted(os.listdir(notes_dir)):
+        if f.endswith(".md") and f != "index.md":
+            note_uri = f"notes/{f}"
+            if not _is_present(note_uri):
+                notes_section.append(note_uri)
+
+    return config
+
+
+def on_files(files: Files, config: Dict[str, Any]) -> Files:
+    """Dynamically generate virtual markdown documentation pages for Python modules and notes.
+
+    Args:
+        files (Files): The MkDocs collection of File objects.
+        config (Dict[str, Any]): The MkDocs configuration dictionary.
+
+    Returns:
+        Files: The updated collection of File objects including virtual documentation.
+    """
     if not hasattr(config.plugins, "_current_plugin"):
         config.plugins._current_plugin = None
 
     src_dir = config["docs_dir"]
     repo_root = os.path.abspath(os.path.join(src_dir, ".."))
+    notes_dir = os.path.join(repo_root, "notes")
+    if not os.path.isdir(notes_dir) and os.path.isdir("notes"):
+        notes_dir = os.path.abspath("notes")
+
+    note_entries: List[Tuple[str, str, str]] = []
+    if os.path.isdir(notes_dir):
+        for f in sorted(os.listdir(notes_dir)):
+            if f.endswith(".md") and f != "index.md":
+                note_path = os.path.join(notes_dir, f)
+                if os.path.isfile(note_path):
+                    with open(note_path, "r", encoding="utf-8") as nf:
+                        content = nf.read()
+                    title = os.path.splitext(f)[0].replace("_", " ").title()
+                    note_entries.append((f, title, content))
+
+                    doc_uri = f"notes/{f}"
+                    if not files.get_file_from_path(doc_uri):
+                        gen_file = File.generated(
+                            config,
+                            doc_uri,
+                            content=content,
+                        )
+                        files.append(gen_file)
+
+    # Dynamically generate virtual notes/index.md hub page if not present
+    if not files.get_file_from_path("notes/index.md"):
+        hub_lines = [
+            "# Architecture & Design Notes",
+            "",
+            "Authoritative architectural references, design decisions, and baseline rules for the ChessWithQuests project.",
+            "",
+            "## Table of Contents",
+            "",
+        ]
+        for f, title, _ in note_entries:
+            hub_lines.append(f"- [{title}]({f})")
+        hub_lines.append("")
+        notes_hub_content = "\n".join(hub_lines)
+
+        notes_index_file = File.generated(
+            config,
+            "notes/index.md",
+            content=notes_hub_content,
+        )
+        files.append(notes_index_file)
 
     # Generate virtual index.md overview from README.md if no index.md on disk
     if not files.get_file_from_path("index.md"):
@@ -24,6 +136,13 @@ def on_files(files, config):
             overview_content = "# ChessWithQuests\n\nAutogenerated API Documentation.\n"
 
         overview_content += "\n\n---\n\n## Reference Architecture Diagram\n- [Architecture Diagram](https://app.diagrams.net/#G19OY7iySOQWRAZDFKy1r-7tJKG_L-_Qn8#%7B%22pageId%22%3A%22C5RBs43oDa-KdzZeNtuy%22%7D)\n"
+
+        overview_content += (
+            "\n\n---\n\n## Architecture & Reference Notes\n- [Notes Overview](notes/index.md)\n"
+        )
+        for f, title, _ in note_entries:
+            overview_content += f"- [{title}](notes/{f})\n"
+
         index_file = File.generated(
             config,
             "index.md",
@@ -68,8 +187,15 @@ def on_files(files, config):
     return files
 
 
-def on_post_build(config):
-    """Ensure site/index.html is available."""
+def on_post_build(config: Dict[str, Any]) -> None:
+    """Ensure site/index.html is available.
+
+    Args:
+        config (Dict[str, Any]): The MkDocs configuration dictionary.
+
+    Returns:
+        None
+    """
     site_dir = config["site_dir"]
     index_html = os.path.join(site_dir, "index.html")
     if not os.path.exists(index_html):
