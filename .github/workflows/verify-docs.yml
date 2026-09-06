@@ -38,11 +38,14 @@ jobs:
           assert os.path.isfile(os.path.join(site_dir, "index.html")), "site/index.html missing"
           assert os.path.isfile(os.path.join(site_dir, "controller/controller/index.html")), "controller docs missing"
           assert os.path.isfile(os.path.join(site_dir, "model/game/board/index.html")), "model docs missing"
-          assert os.path.isfile(os.path.join(site_dir, "notes/index.html")), "notes index page missing"
-          assert os.path.isfile(os.path.join(site_dir, "notes/chess_rules/index.html")), "chess_rules notes missing"
-          assert os.path.isfile(os.path.join(site_dir, "notes/object_model/index.html")), "object_model notes missing"
-          assert os.path.isfile(os.path.join(site_dir, "notes/reference_diagram/index.html")), "reference_diagram notes missing"
-          assert os.path.isfile(os.path.join(site_dir, "notes/upstream_base/index.html")), "upstream_base notes missing"
+          notes_dir = os.path.join(repo_root, "notes")
+          if os.path.isdir(notes_dir):
+              assert os.path.isfile(os.path.join(site_dir, "notes/index.html")), "notes index page missing"
+              for f in sorted(os.listdir(notes_dir)):
+                  if f.endswith(".md") and f != "index.md" and os.path.isfile(os.path.join(notes_dir, f)):
+                      name = os.path.splitext(f)[0]
+                      expected_html = os.path.join(site_dir, "notes", name, "index.html")
+                      assert os.path.isfile(expected_html), f"missing generated docs for {f} at {expected_html}"
           print("✅ Dynamic documentation build verified successfully!")
           '
 

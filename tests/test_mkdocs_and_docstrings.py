@@ -58,6 +58,7 @@ def test_all_docs_use_mkdocstrings_directives():
     import mkdocs_hooks
 
     cfg = mkdocs.config.load_config(os.path.join(repo_root, "mkdocs.yml"))
+    cfg = mkdocs_hooks.on_config(cfg)
     files = get_files(cfg)
     files = mkdocs_hooks.on_files(files, cfg)
 
@@ -86,6 +87,7 @@ def test_dynamic_notes_incorporation():
     import mkdocs_hooks
 
     cfg = mkdocs.config.load_config(os.path.join(repo_root, "mkdocs.yml"))
+    cfg = mkdocs_hooks.on_config(cfg)
     files = get_files(cfg)
     files = mkdocs_hooks.on_files(files, cfg)
 
@@ -169,6 +171,187 @@ def test_dynamic_notes_incorporation():
     finally:
         if os.path.exists(temp_note_path):
             os.remove(temp_note_path)
+
+
+def test_dynamic_notes_nav_variants():
+    """Verify on_config followed by on_files works when nav has no Notes, empty Notes, or None Notes."""
+    import mkdocs.config
+    from mkdocs.structure.files import Files
+    import sys
+
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    scripts_dir = os.path.join(repo_root, ".github", "scripts")
+    if scripts_dir in sys.path:
+        sys.path.remove(scripts_dir)
+    sys.path.insert(0, scripts_dir)
+    sys.modules.pop("mkdocs_hooks", None)
+
+    import mkdocs_hooks
+
+    # Variant A: No Notes section in nav
+    cfg_none = mkdocs.config.load_config(os.path.join(repo_root, "mkdocs.yml"))
+    cfg_none["nav"] = [{"Overview": "index.md"}]
+    cfg_none = mkdocs_hooks.on_config(cfg_none)
+    notes_entries = [item for item in cfg_none["nav"] if isinstance(item, dict) and "Notes" in item]
+    assert len(notes_entries) == 1, "Expected exactly one Notes entry in nav"
+    assert "notes/index.md" in notes_entries[0]["Notes"]
+    assert "notes/chess_rules.md" in notes_entries[0]["Notes"]
+
+    # Variant B: nav has - Notes: [] (empty list)
+    cfg_empty = mkdocs.config.load_config(os.path.join(repo_root, "mkdocs.yml"))
+    cfg_empty["nav"] = [{"Overview": "index.md"}, {"Notes": []}]
+    cfg_empty = mkdocs_hooks.on_config(cfg_empty)
+    notes_entries = [
+        item for item in cfg_empty["nav"] if isinstance(item, dict) and "Notes" in item
+    ]
+    assert len(notes_entries) == 1, "Expected exactly one Notes entry in nav"
+    assert "notes/index.md" in notes_entries[0]["Notes"]
+    assert "notes/chess_rules.md" in notes_entries[0]["Notes"]
+
+    # Variant C: nav has - Notes: (None in parsed yaml)
+    cfg_null = mkdocs.config.load_config(os.path.join(repo_root, "mkdocs.yml"))
+    cfg_null["nav"] = [{"Overview": "index.md"}, {"Notes": None}]
+    cfg_null = mkdocs_hooks.on_config(cfg_null)
+    notes_entries = [item for item in cfg_null["nav"] if isinstance(item, dict) and "Notes" in item]
+    assert len(notes_entries) == 1, "Expected exactly one Notes entry in nav (no duplicates)"
+    assert isinstance(notes_entries[0]["Notes"], list), "Notes entry must be mutated to a list"
+    assert "notes/index.md" in notes_entries[0]["Notes"]
+    assert "notes/chess_rules.md" in notes_entries[0]["Notes"]
+
+    # Pipeline test: on_files correctly creates virtual files
+    files = Files([])
+    files = mkdocs_hooks.on_files(files, cfg_null)
+    file_map = {f.src_uri: f for f in files}
+    assert "notes/index.md" in file_map
+    assert "notes/chess_rules.md" in file_map
+
+
+def test_dynamic_notes_missing_or_empty_notes_dir(monkeypatch):
+    """Verify behavior when notes/ directory does not exist or is empty."""
+    import tempfile
+    import mkdocs.config
+    from mkdocs.structure.files import Files
+    import sys
+
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    scripts_dir = os.path.join(repo_root, ".github", "scripts")
+    if scripts_dir in sys.path:
+        sys.path.remove(scripts_dir)
+    sys.path.insert(0, scripts_dir)
+    sys.modules.pop("mkdocs_hooks", None)
+
+    import mkdocs_hooks
+
+    # 1. Missing notes directory
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        monkeypatch.chdir(tmp_dir)
+        fake_src = os.path.join(tmp_dir, "src")
+        os.makedirs(fake_src)
+
+        cfg = mkdocs.config.load_config(os.path.join(repo_root, "mkdocs.yml"))
+        cfg["docs_dir"] = fake_src
+        cfg["nav"] = [{"Overview": "index.md"}]
+        cfg = mkdocs_hooks.on_config(cfg)
+        notes_entry = next(
+            (item for item in cfg["nav"] if isinstance(item, dict) and "Notes" in item), None
+        )
+        assert notes_entry is None, "Notes section should not be added when notes/ dir is missing"
+
+        files = Files([])
+        files = mkdocs_hooks.on_files(files, cfg)
+        file_map = {f.src_uri: f for f in files}
+        assert "notes/index.md" not in file_map
+        if "index.md" in file_map:
+            assert "Architecture & Reference Notes" not in getattr(
+                file_map["index.md"], "_content", ""
+            )
+
+    # 2. Empty notes directory
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        monkeypatch.chdir(tmp_dir)
+        fake_src = os.path.join(tmp_dir, "src")
+        os.makedirs(fake_src)
+        fake_notes = os.path.join(tmp_dir, "notes")
+        os.makedirs(fake_notes)
+
+        cfg = mkdocs.config.load_config(os.path.join(repo_root, "mkdocs.yml"))
+        cfg["docs_dir"] = fake_src
+        cfg["nav"] = [{"Overview": "index.md"}]
+        cfg = mkdocs_hooks.on_config(cfg)
+        notes_entry = next(
+            (item for item in cfg["nav"] if isinstance(item, dict) and "Notes" in item), None
+        )
+        assert notes_entry is None, "Notes section should not be populated when notes/ dir is empty"
+
+        files = Files([])
+        files = mkdocs_hooks.on_files(files, cfg)
+        file_map = {f.src_uri: f for f in files}
+        assert "notes/index.md" not in file_map
+        if "index.md" in file_map:
+            assert "Architecture & Reference Notes" not in getattr(
+                file_map["index.md"], "_content", ""
+            )
+
+    # 3. Directory ending in .md inside notes directory (Finding 4)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        monkeypatch.chdir(tmp_dir)
+        fake_src = os.path.join(tmp_dir, "src")
+        os.makedirs(fake_src)
+        fake_notes = os.path.join(tmp_dir, "notes")
+        os.makedirs(fake_notes)
+        fake_subdir = os.path.join(fake_notes, "subfolder.md")
+        os.makedirs(fake_subdir)
+
+        cfg = mkdocs.config.load_config(os.path.join(repo_root, "mkdocs.yml"))
+        cfg["docs_dir"] = fake_src
+        cfg["nav"] = [{"Overview": "index.md"}]
+        cfg = mkdocs_hooks.on_config(cfg)
+        notes_entry = next(
+            (item for item in cfg["nav"] if isinstance(item, dict) and "Notes" in item), None
+        )
+        assert (
+            notes_entry is None or "notes/subfolder.md" not in notes_entry["Notes"]
+        ), "Directory ending with .md must not be added to nav"
+
+
+def test_dynamic_notes_existing_index_md_on_disk():
+    """Verify that an existing on-disk notes/index.md is preserved and not overwritten."""
+    import mkdocs.config
+    from mkdocs.structure.files import get_files
+    import sys
+
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    scripts_dir = os.path.join(repo_root, ".github", "scripts")
+    if scripts_dir in sys.path:
+        sys.path.remove(scripts_dir)
+    sys.path.insert(0, scripts_dir)
+    sys.modules.pop("mkdocs_hooks", None)
+
+    import mkdocs_hooks
+
+    notes_index_path = os.path.join(repo_root, "notes", "index.md")
+    custom_content = "# Real Hub Page On Disk\n\nThis is a hand-written index.md page."
+
+    assert not os.path.exists(notes_index_path), "notes/index.md should not exist before test"
+    try:
+        with open(notes_index_path, "w", encoding="utf-8") as f:
+            f.write(custom_content)
+
+        cfg = mkdocs.config.load_config(os.path.join(repo_root, "mkdocs.yml"))
+        cfg = mkdocs_hooks.on_config(cfg)
+        files = get_files(cfg)
+        files = mkdocs_hooks.on_files(files, cfg)
+
+        file_map = {f.src_uri: f for f in files}
+        assert "notes/index.md" in file_map, "notes/index.md must be generated"
+        gen_file = file_map["notes/index.md"]
+        assert (
+            getattr(gen_file, "_content", "") == custom_content
+        ), "Existing on-disk notes/index.md was overwritten by synthetic content"
+        assert "# Architecture & Design Notes" not in getattr(gen_file, "_content", "")
+    finally:
+        if os.path.exists(notes_index_path):
+            os.remove(notes_index_path)
 
 
 def test_mkdocs_config_and_strict_build():
