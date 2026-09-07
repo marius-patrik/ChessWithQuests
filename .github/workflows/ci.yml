@@ -2,43 +2,22 @@ name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_dispatch:
 
+# The pipeline itself lives in marius-patrik/DarkFactory and is pinned in
+# `.github/darkfactory.json`. This file is a caller, not a copy: every job body, every script and
+# every version matrix comes from the pinned commit, so adopting a pipeline update is a one-line
+# change here and the diff shows exactly what moved.
+#
+# A caller has to exist on this branch because GitHub only runs workflow files that are present on
+# the branch an event fires on - there is no way to drive the pipeline purely from a side branch.
+# Secrets are not passed: CI needs none beyond the automatic GITHUB_TOKEN.
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: "pip"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
-
-      - name: Run unit tests with pytest
-        run: |
-          pytest -v
-
-  verify-docker:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Build Docker Container
-        run: |
-          docker build -t antigravity-agent -f docker/Dockerfile.antigravity .
+  pipeline:
+    uses: marius-patrik/DarkFactory/.github/workflows/ci.yml@65864fce5772a80d8c05fb76c2ce9af9f0082ebc
+    with:
+      pipeline-repo: marius-patrik/DarkFactory
+      pipeline-ref: 65864fce5772a80d8c05fb76c2ce9af9f0082ebc
