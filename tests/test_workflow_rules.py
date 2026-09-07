@@ -139,20 +139,31 @@ def test_open_pr_workflow_and_script_exist():
     assert "open_pr_as_bot" in py_content
 
 
-def test_pr_approval_automerge_workflow_exists():
+def test_pr_approval_automerge_calls_the_pinned_pipeline():
+    """The approval handler runs upstream, so this repository carries the caller, not the script.
+
+    The board token still has to be handed across explicitly: secrets do not cross a
+    `workflow_call` boundary on their own, and without it the approval silently cannot move the
+    project item.
+    """
+    import json
+
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     workflow_path = os.path.join(repo_root, ".github", "workflows", "pr-approval-automerge.yml")
-    script_path = os.path.join(repo_root, ".github", "scripts", "handle_pr_approval.py")
-
     assert os.path.isfile(workflow_path), "pr-approval-automerge.yml must exist"
-    assert os.path.isfile(script_path), "handle_pr_approval.py must exist"
+    assert not os.path.isfile(
+        os.path.join(repo_root, ".github", "scripts", "handle_pr_approval.py")
+    ), "the handler must come from the pipeline, not a local copy"
 
-    with open(workflow_path, encoding="utf-8") as f:
-        content = f.read()
+    with open(workflow_path, encoding="utf-8") as handle:
+        content = handle.read()
+    with open(os.path.join(repo_root, ".github", "darkfactory.json"), encoding="utf-8") as handle:
+        ref = json.load(handle)["upstream"]["ref"]
 
     assert "pull_request_review" in content
     assert "issue_comment" in content
-    assert "handle_pr_approval.py" in content
+    assert f"pr-approval-automerge.yml@{ref}" in content
+    assert "GH_PROJECT_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}" in content
 
 
 def test_agents_rule_mandates_a_harness_agnostic_agent():
