@@ -22,7 +22,7 @@ Every push must maintain green status on GitHub Actions CI across all matrix Pyt
 
 ### 7. Branch & Pull Request Workflow
 All changes, features, refactors, and bug fixes must be developed on dedicated topic/feature branches and submitted through GitHub Pull Requests. Direct commits and pushes to the `main` branch are strictly prohibited:
-- **Branch Naming**: Branch names must be lowercase, hyphen-separated, and descriptive of the work (e.g. `feature/dockerized-antigravity-ci-agent`). Branch names must NEVER contain issue numbers (e.g. do not name branches `feature/30-description`).
+- **Branch Naming**: Branch names must be lowercase, hyphen-separated, and descriptive of the work (e.g. `feature/shared-agent-runner`). Branch names must NEVER contain issue numbers (e.g. do not name branches `feature/30-description`).
 - **Bot-Authored PRs**: Pull requests must be authored by `github-actions[bot]` via `.github/workflows/open-pr.yml` (e.g. using `python3 .github/scripts/open_pr.py` or `gh workflow run open-pr.yml`) to ensure repository maintainers are not registered as authors and can natively review and approve them.
 - **Draft Status**: Every pull request must be opened in Draft status (`--draft`) and remain in draft throughout development and review until explicitly approved.
 - **Up-to-Date with Main**: Every pull request branch must contain the latest `main` branch before merge (`strict: true` required status checks).
@@ -64,16 +64,31 @@ Every incoming user prompt or task must immediately be converted into one or mor
 - **Confirmation Gate**: The interpretation requires explicit user confirmation (e.g. commenting `approve`) before any implementation plan gets made.
 - **Child Plan Issues**: Once the interpretation is confirmed by the user, a separate child issue is automatically created with the `Plan` label natively linked via GitHub sub-issues (`--parent <request_id>`), containing the detailed implementation plan. All subsequent code branches and pull requests bind to the plan issue.
 
-### 13. Containerized Antigravity Agent & Conversational CI Lifecycle
-An autonomous AI agent runs containerized in GitHub Actions CI using Docker (`docker/Dockerfile.antigravity`), Google Antigravity CLI (`agy`), and Gemini 3.8 Flash (`gemini-3.8-flash-high`) authenticated under Google user `plskynech@gmail.com`:
-- **Authentication**: Long-lived Google OAuth refresh token stored in repository secret `ANTIGRAVITY_REFRESH_TOKEN`. The CI runner performs a pre-flight exchange against Google's OAuth2 endpoint (`https://oauth2.googleapis.com/token`) to generate a fresh access token on every run.
-- **Auto-Detection & Interpretation**: Incoming unlabelled issues are automatically tagged with the `Request` label, classified with appropriate type and area labels, and greeted with an agent interpretation comment.
-- **Conversational Feedback Loop**: The agent actively monitors comments on Request issues, Plan issues, and Pull Requests, responding directly to human feedback and executing requested adjustments.
-- **Autonomous Implementation & Review**: Upon plan approval (`approve`), the agent drafts the feature branch, implements code and tests, opens a bot-authored Draft PR, and conducts an autonomous code review loop.
+### 13. Harness-Agnostic Containerized Agent & Conversational CI Lifecycle
+An autonomous AI agent runs containerized in GitHub Actions. The runner, the container and the
+harness registry come from the shared pipeline in `marius-patrik/DarkFactory`, pinned by commit SHA
+in `.github/darkfactory.json`; `.github/workflows/agent.yml` is a caller, not a copy.
+- **Harness-agnostic**: no pipeline code knows which coding-agent CLI is executing. Antigravity
+  (`agy`), Claude Code, Codex, Kimi, Grok, Cursor and opencode are declared as data - a binary, an
+  argv template and a model chain - so adding one is a configuration change.
+- **Fallback across harnesses, not just models**: quota exhaustion on one harness escalates to the
+  next. This repository previously ran a single-vendor runner, and a single vendor's quota halted
+  delivery outright; that is the divergence this rule removes.
+- **Graceful degradation**: harnesses whose binary or credentials are absent are skipped rather
+  than failed, so holding three credentials of twelve gives a shorter chain, not a broken agent.
+- **Authentication**: provider credentials live in repository secrets and are passed explicitly to
+  the shared workflow, because secrets do not cross a `workflow_call` boundary on their own.
+- **Auto-Detection & Interpretation**: incoming unlabelled issues are tagged `Request`, classified
+  with type and area labels from this repository's own taxonomy, and answered with an
+  interpretation comment.
+- **Conversational Feedback Loop**: the agent monitors comments on Request issues, Plan issues and
+  pull requests, responds to human feedback and executes requested adjustments.
+- **Autonomous Implementation & Review**: on plan approval (`approve`) the agent creates the
+  branch, implements code and tests, opens a bot-authored Draft PR and runs a self-review loop.
 
 ### 14. Conventional Commits & Taxonomy Enforcement
 All commits must strictly adhere to the Conventional Commits specification:
-- **Format**: `<type>(<scope>): <description>` (e.g. `feat(ci): add dockerized antigravity agent`).
+- **Format**: `<type>(<scope>): <description>` (e.g. `feat(ci): pin the shared agent runner`).
 - **Allowed Types**: `feat`, `fix` (mapped from `bug`), `chore`, `docs`, `refactor`, `test`, `ci`.
 - **Allowed Area Scopes & Labels**:
   - `area:model`: Core domain model, board representation, piece logic, quest rules.

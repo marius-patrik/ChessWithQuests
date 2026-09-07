@@ -155,18 +155,24 @@ def test_pr_approval_automerge_workflow_exists():
     assert "handle_pr_approval.py" in content
 
 
-def test_agents_rule_mandates_containerized_antigravity_agent():
+def test_agents_rule_mandates_a_harness_agnostic_agent():
+    """The rule used to name one vendor, one model and one person's account.
+
+    That is the divergence the shared pipeline removes: a single vendor's quota halted delivery
+    outright. The rule now describes a registry of harnesses that degrades gracefully, and names
+    no individual - a governance document in a public repository is the wrong place for an
+    address.
+    """
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    agents_file = os.path.join(repo_root, "AGENTS.md")
+    with open(os.path.join(repo_root, "AGENTS.md"), encoding="utf-8") as handle:
+        content = handle.read()
+    lower = content.lower()
 
-    with open(agents_file, encoding="utf-8") as f:
-        content = f.read()
-
-    lower_content = content.lower()
-    assert "antigravity" in lower_content
-    assert "gemini-3.8-flash" in lower_content
-    assert "plskynech@gmail.com" in lower_content
-    assert "oauth" in lower_content or "token" in lower_content
+    assert "harness-agnostic" in lower
+    assert "fallback" in lower and "quota" in lower
+    assert "skipped rather" in lower or "graceful" in lower
+    assert "@gmail.com" not in lower, "no personal address belongs in a public governance document"
+    assert "gemini-3.8-flash" not in lower, "the rule must not pin one vendor's model"
 
 
 def test_agents_rule_mandates_conventional_commits_and_taxonomy():
@@ -198,12 +204,50 @@ def test_agents_rule_mandates_project_board_statuses_and_autodeletion():
     assert "auto-deletion" in lower_content or "delete_branch_on_merge" in lower_content
 
 
-def test_antigravity_workflow_and_dockerfile_exist():
-    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    workflow_path = os.path.join(repo_root, ".github", "workflows", "antigravity-ci-agent.yml")
-    docker_path = os.path.join(repo_root, "docker", "Dockerfile.antigravity")
-    runner_path = os.path.join(repo_root, ".github", "scripts", "antigravity_runner.py")
+def test_the_agent_calls_the_pinned_runner_rather_than_carrying_one():
+    """The runner, the container and the harness registry all live upstream now.
 
-    assert os.path.isfile(workflow_path), "antigravity-ci-agent.yml must exist"
-    assert os.path.isfile(docker_path), "Dockerfile.antigravity must exist"
-    assert os.path.isfile(runner_path), "antigravity_runner.py must exist"
+    This repository used to carry `antigravity_runner.py` and a Dockerfile of its own, which is
+    exactly the divergence the shared pipeline exists to remove: a single-vendor runner that
+    stalled when that vendor's quota ran out. The replacement is harness-agnostic and shared.
+    """
+    import json
+
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    workflow_path = os.path.join(repo_root, ".github", "workflows", "agent.yml")
+    assert os.path.isfile(workflow_path), "agent.yml must exist"
+
+    with open(workflow_path, encoding="utf-8") as handle:
+        content = handle.read()
+    with open(os.path.join(repo_root, ".github", "darkfactory.json"), encoding="utf-8") as handle:
+        pinned = json.load(handle)["upstream"]
+
+    assert f"agent.yml@{pinned['ref']}" in content, "the agent must call the pinned pipeline"
+    assert not os.path.isfile(
+        os.path.join(repo_root, ".github", "scripts", "antigravity_runner.py")
+    ), "the bespoke runner must be gone, not merely unused"
+
+
+def test_the_agent_caller_passes_every_credential_it_holds():
+    """Secrets do not cross a workflow_call boundary unless they are passed explicitly.
+
+    A credential omitted here is not an error anywhere: the harness that needed it is simply
+    skipped, and the agent quietly loses a fallback tier.
+    """
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(
+        os.path.join(repo_root, ".github", "workflows", "agent.yml"), encoding="utf-8"
+    ) as handle:
+        content = handle.read()
+
+    for credential in (
+        "ANTIGRAVITY_REFRESH_TOKEN",
+        "ANTIGRAVITY_CLIENT_ID",
+        "ANTIGRAVITY_CLIENT_SECRET",
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "GH_PROJECT_TOKEN",
+    ):
+        assert (
+            f"{credential}: ${{{{ secrets.{credential} }}}}" in content
+        ), f"{credential} is held by this repository but never reaches the runner"
