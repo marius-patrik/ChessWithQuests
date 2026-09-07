@@ -8,12 +8,18 @@
     "agent_slug": "chesswithquests-agent",
     "default_branch": "main",
     "description": "School project of a chess game with customizable pieces, board, and quests.",
-    "topics": ["chess", "python", "mvc", "game", "education"]
+    "topics": [
+      "chess",
+      "python",
+      "mvc",
+      "game",
+      "education"
+    ]
   },
   "upstream": {
     "$comment": "The shared pipeline. `ref` is the pin: bump it to adopt a pipeline update, and the diff shows exactly what changed.",
     "repo": "marius-patrik/DarkFactory",
-    "ref": "65864fce5772a80d8c05fb76c2ce9af9f0082ebc"
+    "ref": "ac2a124a9e60438b4d61f9913a54aecf90978720"
   },
   "versioning": {
     "mode": "pridever",
@@ -25,7 +31,12 @@
     "testing": {
       "python": {
         "command": "pytest",
-        "versions": ["3.10", "3.11", "3.12", "3.13"]
+        "versions": [
+          "3.10",
+          "3.11",
+          "3.12",
+          "3.13"
+        ]
       }
     },
     "documentation": {
@@ -40,35 +51,101 @@
     "$default": "core",
     "rules": {
       "description": "Move generation, check and mate detection, chess rule conformance",
-      "keywords": ["rule", "rules", "move", "check", "mate", "castling", "promotion", "stalemate", "legal"]
+      "keywords": [
+        "rule",
+        "rules",
+        "move",
+        "check",
+        "mate",
+        "castling",
+        "promotion",
+        "stalemate",
+        "legal"
+      ]
     },
     "pieces": {
       "description": "Piece definitions, movement and attack vectors, custom pieces",
-      "keywords": ["piece", "pieces", "bishop", "knight", "rook", "queen", "king", "pawn", "vector"]
+      "keywords": [
+        "piece",
+        "pieces",
+        "bishop",
+        "knight",
+        "rook",
+        "queen",
+        "king",
+        "pawn",
+        "vector"
+      ]
     },
     "quests": {
       "description": "Quest system, objectives, progression and rewards",
-      "keywords": ["quest", "quests", "objective", "reward", "progression", "challenge"]
+      "keywords": [
+        "quest",
+        "quests",
+        "objective",
+        "reward",
+        "progression",
+        "challenge"
+      ]
     },
     "board": {
       "description": "Board representation, custom board configurations, coordinates",
-      "keywords": ["board", "square", "grid", "coordinate", "layout", "configuration"]
+      "keywords": [
+        "board",
+        "square",
+        "grid",
+        "coordinate",
+        "layout",
+        "configuration"
+      ]
     },
     "view": {
       "description": "Desktop UI, rendering, input handling",
-      "keywords": ["view", "ui", "gui", "render", "window", "input", "display", "sprite"]
+      "keywords": [
+        "view",
+        "ui",
+        "gui",
+        "render",
+        "window",
+        "input",
+        "display",
+        "sprite"
+      ]
     },
     "docs": {
       "description": "Documentation site, API reference, architecture notes",
-      "keywords": ["doc", "docs", "documentation", "mkdocs", "mkdocstrings", "readme"]
+      "keywords": [
+        "doc",
+        "docs",
+        "documentation",
+        "mkdocs",
+        "mkdocstrings",
+        "readme"
+      ]
     },
     "ci": {
       "description": "GitHub Actions workflows, containers, runner scripts, repository automation",
-      "keywords": ["ci", "action", "workflow", "pipeline", "docker", "runner", "automation"]
+      "keywords": [
+        "ci",
+        "action",
+        "workflow",
+        "pipeline",
+        "docker",
+        "runner",
+        "automation"
+      ]
     },
     "core": {
       "description": "Controller, model wiring, application lifecycle, configuration",
-      "keywords": ["controller", "model", "mvc", "lifecycle", "config", "state", "engine"]
+      "keywords": [
+        "controller",
+        "model",
+        "mvc",
+        "lifecycle",
+        "config",
+        "state",
+        "engine"
+      ]
     }
   },
   "required_checks": [
@@ -79,11 +156,15 @@
     "pipeline / rust",
     "pipeline / web",
     "pipeline / docs",
+    "verify-docs",
     "verify-bound-issue"
   ],
   "board": {
     "global_title": "Global",
-    "link_boards": ["Global", "ChessWithQuests"]
+    "link_boards": [
+      "Global",
+      "ChessWithQuests"
+    ]
   },
   "pages": {
     "build_type": "legacy",
