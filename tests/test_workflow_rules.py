@@ -119,24 +119,28 @@ def test_agents_rule_mandates_request_plan_hierarchy_and_confirmation_gate():
     assert "decomposed" in lower_content or "decomposition" in lower_content
 
 
-def test_open_pr_workflow_and_script_exist():
+def test_open_pr_calls_the_pinned_pipeline_and_forwards_its_inputs():
+    """Bot-authored pull requests are rule 7's mechanism, and the script that opens them lives
+    upstream now. Each dispatch input has to be forwarded by name: a called workflow receives
+    nothing from the caller's own `inputs` context, so an unforwarded field silently arrives empty.
+    """
+    import json
+
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     workflow_path = os.path.join(repo_root, ".github", "workflows", "open-pr.yml")
-    script_path = os.path.join(repo_root, ".github", "scripts", "open_pr.py")
-
     assert os.path.isfile(workflow_path), "open-pr.yml must exist"
-    assert os.path.isfile(script_path), "open_pr.py must exist"
+    assert not os.path.isfile(
+        os.path.join(repo_root, ".github", "scripts", "open_pr.py")
+    ), "the opener must come from the pipeline, not a local copy"
 
-    with open(workflow_path, encoding="utf-8") as f:
-        wf_content = f.read()
+    with open(workflow_path, encoding="utf-8") as handle:
+        content = handle.read()
+    with open(os.path.join(repo_root, ".github", "darkfactory.json"), encoding="utf-8") as handle:
+        ref = json.load(handle)["upstream"]["ref"]
 
-    assert "workflow_dispatch" in wf_content
-    assert "gh pr create" in wf_content
-
-    with open(script_path, encoding="utf-8") as f:
-        py_content = f.read()
-
-    assert "open_pr_as_bot" in py_content
+    assert f"open-pr.yml@{ref}" in content
+    for field in ("branch", "title", "body", "base", "draft"):
+        assert f"{field}: ${{{{ inputs.{field} }}}}" in content, f"{field} never reaches the runner"
 
 
 def test_pr_approval_automerge_calls_the_pinned_pipeline():
