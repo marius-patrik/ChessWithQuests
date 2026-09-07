@@ -19,7 +19,7 @@
   "upstream": {
     "$comment": "The shared pipeline. `ref` is the pin: bump it to adopt a pipeline update, and the diff shows exactly what changed.",
     "repo": "marius-patrik/DarkFactory",
-    "ref": "f93c12c22e55d48361f0affcc171485ad37c0142"
+    "ref": "f87fecc9f0f64b395f4195f04e668c0bd00060f8"
   },
   "versioning": {
     "mode": "pridever",
@@ -41,7 +41,7 @@
     },
     "documentation": {
       "python": {
-        "command": "mkdocs build --strict",
+        "command": "properdocs build --strict",
         "source": "docstrings"
       }
     }
@@ -170,5 +170,22 @@
     "build_type": "legacy",
     "branch": "gh-pages",
     "path": "/"
+  },
+  "documentation": {
+    "$comment": "Sites offered by the switcher's Project axis.",
+    "projects": [
+      {
+        "name": "DarkFactory",
+        "url": "https://marius-patrik.github.io/DarkFactory/"
+      },
+      {
+        "name": "Omnis",
+        "url": "https://marius-patrik.github.io/omnis/"
+      },
+      {
+        "name": "ChessWithQuests",
+        "url": "https://marius-patrik.github.io/ChessWithQuests/"
+      }
+    ]
   }
 }

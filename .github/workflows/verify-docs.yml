@@ -28,7 +28,7 @@ jobs:
 
       - name: Verify dynamic documentation autogeneration
         run: |
-          python -m mkdocs build --strict
+          python -m properdocs build --strict
           python -c '
           import os, sys
           repo_root = os.getcwd()
@@ -56,4 +56,4 @@ jobs:
 
       - name: Run documentation tests
         run: |
-          pytest -v tests/test_mkdocs_and_docstrings.py
+          pytest -v tests/test_docs_and_docstrings.py
