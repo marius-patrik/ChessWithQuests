@@ -17,7 +17,7 @@ on:
 # Secrets are not passed: CI needs none beyond the automatic GITHUB_TOKEN.
 jobs:
   pipeline:
-    uses: marius-patrik/DarkFactory/.github/workflows/ci.yml@ac2a124a9e60438b4d61f9913a54aecf90978720
+    uses: marius-patrik/DarkFactory/.github/workflows/ci.yml@79b400f450f66c30744edbce04f0b04bcb4f25d6
     with:
       pipeline-repo: marius-patrik/DarkFactory
-      pipeline-ref: ac2a124a9e60438b4d61f9913a54aecf90978720
+      pipeline-ref: 79b400f450f66c30744edbce04f0b04bcb4f25d6
