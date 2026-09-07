@@ -74,6 +74,7 @@ class MockGitHubProjectClient:
         self.added_items = []
         self.edited_statuses = []
         self.added_labels = []
+        self.removed_labels = []
         self.status_labels = []
         self.project_number = 14
         self.owner = "marius-patrik"
@@ -95,6 +96,11 @@ class MockGitHubProjectClient:
         self.added_labels.append((repo, issue_number, label))
         if label in STATUS_LABELS:
             self.set_status_label(repo, issue_number, label)
+
+    def remove_issue_label(self, repo, issue_number, label):
+        # The real client removes the label a status transition supersedes; the mock records it so
+        # a test can assert the old status was cleared rather than merely overwritten.
+        self.removed_labels.append((repo, issue_number, label))
 
     def run_gh(self, args):
         cmd = " ".join(args)
