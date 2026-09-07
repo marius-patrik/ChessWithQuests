@@ -2,13 +2,13 @@ name: Project Board Automation
 
 on:
   issues:
-    types: [opened, labeled, unlabeled, closed, reopened]
+    types: [opened, edited, closed, reopened, labeled, unlabeled]
   pull_request:
-    types: [opened, edited, closed, ready_for_review, reopened]
-  push:
-    branches: [main]
+    types: [opened, edited, closed, reopened, labeled, unlabeled, ready_for_review]
   workflow_dispatch:
 
+# The job bodies and the scripts they run come from the pinned pipeline. This file is a caller,
+# not a copy. The job name is part of every check this reports, so renaming it renames the check.
 permissions:
   contents: read
   issues: write
@@ -16,21 +16,10 @@ permissions:
   repository-projects: write
 
 jobs:
-  automate-project:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Run Project Board Automation
-        run: |
-          python3 .github/scripts/project_automation.py
-        env:
-          GH_TOKEN: ${{ secrets.GH_PROJECT_TOKEN || secrets.GITHUB_TOKEN }}
-          GITHUB_EVENT_PATH: ${{ github.event_path }}
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
+  run:
+    uses: marius-patrik/DarkFactory/.github/workflows/project-automation.yml@8f2418f5ad6e12ec179ddd2fa20e3520edd8db42
+    with:
+      pipeline-repo: marius-patrik/DarkFactory
+      pipeline-ref: 8f2418f5ad6e12ec179ddd2fa20e3520edd8db42
+    secrets:
+      GH_PROJECT_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}
