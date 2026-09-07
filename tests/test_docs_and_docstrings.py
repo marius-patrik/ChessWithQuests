@@ -4,17 +4,17 @@ import subprocess
 import sys
 import tempfile
 import pytest
-import mkdocs.config
-from mkdocs.structure.files import Files, get_files
+import properdocs.config
+from properdocs.structure.files import Files, get_files
 
 import importlib.util
 
 repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-hook_path = os.path.join(repo_root, ".github", "scripts", "mkdocs_hooks.py")
-spec = importlib.util.spec_from_file_location("mkdocs_hooks", hook_path)
-mkdocs_hooks = importlib.util.module_from_spec(spec)
-sys.modules["mkdocs_hooks"] = mkdocs_hooks
-spec.loader.exec_module(mkdocs_hooks)
+hook_path = os.path.join(repo_root, ".github", "scripts", "docs_hooks.py")
+spec = importlib.util.spec_from_file_location("docs_hooks", hook_path)
+docs_hooks = importlib.util.module_from_spec(spec)
+sys.modules["docs_hooks"] = docs_hooks
+spec.loader.exec_module(docs_hooks)
 
 
 def test_all_source_modules_have_google_docstrings():
@@ -56,10 +56,10 @@ def test_all_source_modules_have_google_docstrings():
 
 def test_all_docs_use_mkdocstrings_directives():
     """Verify that dynamic docs hook generates mkdocstrings ':::' directives for source modules."""
-    cfg = mkdocs.config.load_config(os.path.join(repo_root, "mkdocs.yml"))
-    cfg = mkdocs_hooks.on_config(cfg)
+    cfg = properdocs.config.load_config(os.path.join(repo_root, "properdocs.yml"))
+    cfg = docs_hooks.on_config(cfg)
     files = get_files(cfg)
-    files = mkdocs_hooks.on_files(files, cfg)
+    files = docs_hooks.on_files(files, cfg)
 
     generated_files = [f for f in files if getattr(f, "_content", None)]
     assert (
@@ -72,10 +72,10 @@ def test_all_docs_use_mkdocstrings_directives():
 
 def test_dynamic_notes_incorporation():
     """Verify that notes are dynamically discovered, incorporated into navigation and generated."""
-    cfg = mkdocs.config.load_config(os.path.join(repo_root, "mkdocs.yml"))
-    cfg = mkdocs_hooks.on_config(cfg)
+    cfg = properdocs.config.load_config(os.path.join(repo_root, "properdocs.yml"))
+    cfg = docs_hooks.on_config(cfg)
     files = get_files(cfg)
-    files = mkdocs_hooks.on_files(files, cfg)
+    files = docs_hooks.on_files(files, cfg)
 
     # 1. Verify virtual files generated for all notes
     expected_notes = [
@@ -116,7 +116,7 @@ def test_dynamic_notes_incorporation():
 
     # 4. Verify on_config successfully populates Notes in config["nav"]
     test_cfg = {"nav": [{"Overview": "index.md"}], "docs_dir": os.path.join(repo_root, "src")}
-    updated_cfg = mkdocs_hooks.on_config(test_cfg)
+    updated_cfg = docs_hooks.on_config(test_cfg)
     notes_entry = next(
         (item for item in updated_cfg["nav"] if isinstance(item, dict) and "Notes" in item), None
     )
@@ -144,14 +144,18 @@ def test_dynamic_notes_incorporation_temporary_note(tmp_path):
         encoding="utf-8",
     )
 
-    mkdocs_file = tmp_path / "mkdocs.yml"
-    mkdocs_file.write_text(
-        "site_name: Test\ndocs_dir: src\nnav:\n  - Overview: index.md\n  - Notes: []\n",
+    docs_config_file = tmp_path / "properdocs.yml"
+    docs_config_file.write_text(
+        "site_name: Test\ndocs_dir: src\n"
+        # properdocs has no built-in default theme, so a bare config aborts on one it
+        # cannot resolve. Naming the first-party theme keeps these fixtures loadable.
+        "theme:\n  name: null\n  custom_dir: " + os.path.join(repo_root, "theme") + "\n"
+        "nav:\n  - Overview: index.md\n  - Notes: []\n",
         encoding="utf-8",
     )
 
-    cfg = mkdocs.config.load_config(str(mkdocs_file))
-    cfg = mkdocs_hooks.on_config(cfg)
+    cfg = properdocs.config.load_config(str(docs_config_file))
+    cfg = docs_hooks.on_config(cfg)
     dyn_notes_entry = next(
         (item for item in cfg["nav"] if isinstance(item, dict) and "Notes" in item), None
     )
@@ -160,7 +164,7 @@ def test_dynamic_notes_incorporation_temporary_note(tmp_path):
     assert "notes/index.md" in dyn_notes_entry["Notes"]
 
     files = Files([])
-    files = mkdocs_hooks.on_files(files, cfg)
+    files = docs_hooks.on_files(files, cfg)
     dyn_map = {f.src_uri: f for f in files}
     assert "notes/temp_test_note.md" in dyn_map
     assert getattr(dyn_map["notes/temp_test_note.md"], "_content", "") == (
@@ -172,18 +176,18 @@ def test_dynamic_notes_incorporation_temporary_note(tmp_path):
 def test_dynamic_notes_nav_variants():
     """Verify on_config followed by on_files works across various nav configurations."""
     # Variant A: No Notes section in nav
-    cfg_none = mkdocs.config.load_config(os.path.join(repo_root, "mkdocs.yml"))
+    cfg_none = properdocs.config.load_config(os.path.join(repo_root, "properdocs.yml"))
     cfg_none["nav"] = [{"Overview": "index.md"}]
-    cfg_none = mkdocs_hooks.on_config(cfg_none)
+    cfg_none = docs_hooks.on_config(cfg_none)
     notes_entries = [item for item in cfg_none["nav"] if isinstance(item, dict) and "Notes" in item]
     assert len(notes_entries) == 1, "Expected exactly one Notes entry in nav"
     assert "notes/index.md" in notes_entries[0]["Notes"]
     assert "notes/chess_rules.md" in notes_entries[0]["Notes"]
 
     # Variant B: nav has - Notes: [] (empty list)
-    cfg_empty = mkdocs.config.load_config(os.path.join(repo_root, "mkdocs.yml"))
+    cfg_empty = properdocs.config.load_config(os.path.join(repo_root, "properdocs.yml"))
     cfg_empty["nav"] = [{"Overview": "index.md"}, {"Notes": []}]
-    cfg_empty = mkdocs_hooks.on_config(cfg_empty)
+    cfg_empty = docs_hooks.on_config(cfg_empty)
     notes_entries = [
         item for item in cfg_empty["nav"] if isinstance(item, dict) and "Notes" in item
     ]
@@ -192,9 +196,9 @@ def test_dynamic_notes_nav_variants():
     assert "notes/chess_rules.md" in notes_entries[0]["Notes"]
 
     # Variant C: nav has - Notes: (None in parsed yaml)
-    cfg_null = mkdocs.config.load_config(os.path.join(repo_root, "mkdocs.yml"))
+    cfg_null = properdocs.config.load_config(os.path.join(repo_root, "properdocs.yml"))
     cfg_null["nav"] = [{"Overview": "index.md"}, {"Notes": None}]
-    cfg_null = mkdocs_hooks.on_config(cfg_null)
+    cfg_null = docs_hooks.on_config(cfg_null)
     notes_entries = [item for item in cfg_null["nav"] if isinstance(item, dict) and "Notes" in item]
     assert len(notes_entries) == 1, "Expected exactly one Notes entry in nav (no duplicates)"
     assert isinstance(notes_entries[0]["Notes"], list), "Notes entry must be mutated to a list"
@@ -202,18 +206,18 @@ def test_dynamic_notes_nav_variants():
     assert "notes/chess_rules.md" in notes_entries[0]["Notes"]
 
     # Variant D (Finding 5): nav is None (auto-navigation mode preserved)
-    cfg_auto = mkdocs.config.load_config(os.path.join(repo_root, "mkdocs.yml"))
+    cfg_auto = properdocs.config.load_config(os.path.join(repo_root, "properdocs.yml"))
     cfg_auto["nav"] = None
-    cfg_auto = mkdocs_hooks.on_config(cfg_auto)
+    cfg_auto = docs_hooks.on_config(cfg_auto)
     assert cfg_auto["nav"] is None, "When nav is None, on_config must leave nav as None"
 
     # Variant E (Finding 10, scenario 3): nav has dictionary items with custom labels
-    cfg_custom = mkdocs.config.load_config(os.path.join(repo_root, "mkdocs.yml"))
+    cfg_custom = properdocs.config.load_config(os.path.join(repo_root, "properdocs.yml"))
     cfg_custom["nav"] = [
         {"Overview": "index.md"},
         {"Notes": [{"Rules of Chess": "notes/chess_rules.md"}]},
     ]
-    cfg_custom = mkdocs_hooks.on_config(cfg_custom)
+    cfg_custom = docs_hooks.on_config(cfg_custom)
     notes_entries = [
         item for item in cfg_custom["nav"] if isinstance(item, dict) and "Notes" in item
     ]
@@ -225,9 +229,9 @@ def test_dynamic_notes_nav_variants():
     assert "notes/object_model.md" in notes_items
 
     # Variant F: nav is an empty list []
-    cfg_empty_list = mkdocs.config.load_config(os.path.join(repo_root, "mkdocs.yml"))
+    cfg_empty_list = properdocs.config.load_config(os.path.join(repo_root, "properdocs.yml"))
     cfg_empty_list["nav"] = []
-    cfg_empty_list = mkdocs_hooks.on_config(cfg_empty_list)
+    cfg_empty_list = docs_hooks.on_config(cfg_empty_list)
     notes_entries = [
         item for item in cfg_empty_list["nav"] if isinstance(item, dict) and "Notes" in item
     ]
@@ -237,12 +241,12 @@ def test_dynamic_notes_nav_variants():
 
     # Variant G: nav key is not in config dictionary
     cfg_no_nav = {"docs_dir": os.path.join(repo_root, "src")}
-    cfg_no_nav = mkdocs_hooks.on_config(cfg_no_nav)
+    cfg_no_nav = docs_hooks.on_config(cfg_no_nav)
     assert cfg_no_nav.get("nav") is None, "Missing nav key should remain None (auto-nav preserved)"
 
     # Pipeline test: on_files correctly creates virtual files
     files = Files([])
-    files = mkdocs_hooks.on_files(files, cfg_null)
+    files = docs_hooks.on_files(files, cfg_null)
     file_map = {f.src_uri: f for f in files}
     assert "notes/index.md" in file_map
     assert "notes/chess_rules.md" in file_map
@@ -253,22 +257,26 @@ def test_dynamic_notes_missing_or_empty_notes_dir(tmp_path):
     src_dir = tmp_path / "src"
     src_dir.mkdir()
 
-    mkdocs_file = tmp_path / "mkdocs.yml"
-    mkdocs_file.write_text(
-        "site_name: Test\ndocs_dir: src\nnav:\n  - Overview: index.md\n  - Notes: []\n",
+    docs_config_file = tmp_path / "properdocs.yml"
+    docs_config_file.write_text(
+        "site_name: Test\ndocs_dir: src\n"
+        # properdocs has no built-in default theme, so a bare config aborts on one it
+        # cannot resolve. Naming the first-party theme keeps these fixtures loadable.
+        "theme:\n  name: null\n  custom_dir: " + os.path.join(repo_root, "theme") + "\n"
+        "nav:\n  - Overview: index.md\n  - Notes: []\n",
         encoding="utf-8",
     )
 
     # 1. Missing notes directory
-    cfg = mkdocs.config.load_config(str(mkdocs_file))
-    cfg = mkdocs_hooks.on_config(cfg)
+    cfg = properdocs.config.load_config(str(docs_config_file))
+    cfg = docs_hooks.on_config(cfg)
     notes_entry = next(
         (item for item in cfg["nav"] if isinstance(item, dict) and "Notes" in item), None
     )
     assert notes_entry is None, "Notes section should not be added when notes/ dir is missing"
 
     files = Files([])
-    files = mkdocs_hooks.on_files(files, cfg)
+    files = docs_hooks.on_files(files, cfg)
     file_map = {f.src_uri: f for f in files}
     assert "notes/index.md" not in file_map
     if "index.md" in file_map:
@@ -278,15 +286,15 @@ def test_dynamic_notes_missing_or_empty_notes_dir(tmp_path):
     notes_dir = tmp_path / "notes"
     notes_dir.mkdir()
 
-    cfg = mkdocs.config.load_config(str(mkdocs_file))
-    cfg = mkdocs_hooks.on_config(cfg)
+    cfg = properdocs.config.load_config(str(docs_config_file))
+    cfg = docs_hooks.on_config(cfg)
     notes_entry = next(
         (item for item in cfg["nav"] if isinstance(item, dict) and "Notes" in item), None
     )
     assert notes_entry is None, "Notes section should not be populated when notes/ dir is empty"
 
     files = Files([])
-    files = mkdocs_hooks.on_files(files, cfg)
+    files = docs_hooks.on_files(files, cfg)
     file_map = {f.src_uri: f for f in files}
     assert "notes/index.md" not in file_map
     if "index.md" in file_map:
@@ -308,14 +316,18 @@ def test_dynamic_notes_non_file_directory_ending_with_md(tmp_path):
     valid_note = notes_dir / "valid_note.md"
     valid_note.write_text("# Valid Note\nSome content.", encoding="utf-8")
 
-    mkdocs_file = tmp_path / "mkdocs.yml"
-    mkdocs_file.write_text(
-        "site_name: Test\ndocs_dir: src\nnav:\n  - Overview: index.md\n  - Notes: []\n",
+    docs_config_file = tmp_path / "properdocs.yml"
+    docs_config_file.write_text(
+        "site_name: Test\ndocs_dir: src\n"
+        # properdocs has no built-in default theme, so a bare config aborts on one it
+        # cannot resolve. Naming the first-party theme keeps these fixtures loadable.
+        "theme:\n  name: null\n  custom_dir: " + os.path.join(repo_root, "theme") + "\n"
+        "nav:\n  - Overview: index.md\n  - Notes: []\n",
         encoding="utf-8",
     )
 
-    cfg = mkdocs.config.load_config(str(mkdocs_file))
-    cfg = mkdocs_hooks.on_config(cfg)
+    cfg = properdocs.config.load_config(str(docs_config_file))
+    cfg = docs_hooks.on_config(cfg)
     notes_entry = next(
         (item for item in cfg["nav"] if isinstance(item, dict) and "Notes" in item), None
     )
@@ -326,7 +338,7 @@ def test_dynamic_notes_non_file_directory_ending_with_md(tmp_path):
     assert "notes/valid_note.md" in notes_entry["Notes"], "Valid note must be added to nav"
 
     files = Files([])
-    files = mkdocs_hooks.on_files(files, cfg)
+    files = docs_hooks.on_files(files, cfg)
     file_map = {f.src_uri: f for f in files}
     assert (
         "notes/subfolder.md" not in file_map
@@ -348,16 +360,20 @@ def test_dynamic_notes_existing_index_md_on_disk(tmp_path):
     sample_note = notes_dir / "sample.md"
     sample_note.write_text("# Sample Note\nContent here.", encoding="utf-8")
 
-    mkdocs_file = tmp_path / "mkdocs.yml"
-    mkdocs_file.write_text(
-        "site_name: Test\ndocs_dir: src\nnav:\n  - Overview: index.md\n  - Notes: []\n",
+    docs_config_file = tmp_path / "properdocs.yml"
+    docs_config_file.write_text(
+        "site_name: Test\ndocs_dir: src\n"
+        # properdocs has no built-in default theme, so a bare config aborts on one it
+        # cannot resolve. Naming the first-party theme keeps these fixtures loadable.
+        "theme:\n  name: null\n  custom_dir: " + os.path.join(repo_root, "theme") + "\n"
+        "nav:\n  - Overview: index.md\n  - Notes: []\n",
         encoding="utf-8",
     )
 
-    cfg = mkdocs.config.load_config(str(mkdocs_file))
-    cfg = mkdocs_hooks.on_config(cfg)
+    cfg = properdocs.config.load_config(str(docs_config_file))
+    cfg = docs_hooks.on_config(cfg)
     files = Files([])
-    files = mkdocs_hooks.on_files(files, cfg)
+    files = docs_hooks.on_files(files, cfg)
 
     file_map = {f.src_uri: f for f in files}
     assert "notes/index.md" in file_map, "notes/index.md must be generated"
@@ -390,9 +406,13 @@ def test_dynamic_notes_file_read_error_handling(tmp_path, capsys, monkeypatch):
     index_note = notes_dir / "index.md"
     index_note.write_text("# Broken Index", encoding="utf-8")
 
-    mkdocs_file = tmp_path / "mkdocs.yml"
-    mkdocs_file.write_text(
-        "site_name: Test\ndocs_dir: src\nnav:\n  - Overview: index.md\n  - Notes: []\n",
+    docs_config_file = tmp_path / "properdocs.yml"
+    docs_config_file.write_text(
+        "site_name: Test\ndocs_dir: src\n"
+        # properdocs has no built-in default theme, so a bare config aborts on one it
+        # cannot resolve. Naming the first-party theme keeps these fixtures loadable.
+        "theme:\n  name: null\n  custom_dir: " + os.path.join(repo_root, "theme") + "\n"
+        "nav:\n  - Overview: index.md\n  - Notes: []\n",
         encoding="utf-8",
     )
 
@@ -407,11 +427,11 @@ def test_dynamic_notes_file_read_error_handling(tmp_path, capsys, monkeypatch):
 
     monkeypatch.setattr("builtins.open", fake_open)
 
-    cfg = mkdocs.config.load_config(str(mkdocs_file))
-    cfg = mkdocs_hooks.on_config(cfg)
+    cfg = properdocs.config.load_config(str(docs_config_file))
+    cfg = docs_hooks.on_config(cfg)
 
     files = Files([])
-    files = mkdocs_hooks.on_files(files, cfg)
+    files = docs_hooks.on_files(files, cfg)
     file_map = {f.src_uri: f for f in files}
 
     captured = capsys.readouterr()
@@ -425,15 +445,17 @@ def test_dynamic_notes_file_read_error_handling(tmp_path, capsys, monkeypatch):
     assert "# Architecture & Design Notes" in getattr(file_map["notes/index.md"], "_content", "")
 
 
-def test_mkdocs_config_and_strict_build():
-    mkdocs_yml = os.path.join(repo_root, "mkdocs.yml")
-    assert os.path.isfile(mkdocs_yml), "mkdocs.yml must exist at repository root"
+def test_docs_config_and_strict_build():
+    """The site must build with zero warnings, which is what `--strict` enforces."""
+    config = os.path.join(repo_root, "properdocs.yml")
+    assert os.path.isfile(config), "properdocs.yml must exist at repository root"
 
-    cmd = [sys.executable, "-m", "mkdocs", "build", "--strict"]
+    cmd = [sys.executable, "-m", "properdocs", "build", "--strict"]
     result = subprocess.run(cmd, cwd=repo_root, capture_output=True, text=True)
-    assert (
-        result.returncode == 0
-    ), f"mkdocs build --strict failed with code {result.returncode}:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+    assert result.returncode == 0, (
+        f"properdocs build --strict failed with code {result.returncode}:\n"
+        f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+    )
 
 
 def test_deploy_docs_workflow_exists():
@@ -445,12 +467,22 @@ def test_deploy_docs_workflow_exists():
         content = f.read()
 
     assert "Deploy Documentation" in content
-    assert "mkdocs build --strict" in content
-    assert "upload-pages-artifact" in content
-    assert "deploy-pages" in content
+
+    # The deploy is a caller now: the build command, the theme and the version manifest all come
+    # from the pinned pipeline, so this file names a pin rather than a build.
+    import json
+    import re
+
+    with open(os.path.join(repo_root, ".github", "darkfactory.json"), encoding="utf-8") as handle:
+        pinned = json.load(handle)["upstream"]
+    assert f"deploy-docs.yml@{pinned['ref']}" in content, "the deploy must call the pinned pipeline"
+    assert re.findall(r"[0-9a-f]{40}", content) == [pinned["ref"], pinned["ref"]]
+    assert (
+        "concurrency:" not in content
+    ), "a caller naming the callee's concurrency group deadlocks the run it calls"
 
 
-def test_agents_rule_mandates_google_docstrings_and_mkdocs():
+def test_agents_rule_mandates_google_docstrings_and_a_strict_docs_build():
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     agents_file = os.path.join(repo_root, "AGENTS.md")
 
@@ -458,5 +490,5 @@ def test_agents_rule_mandates_google_docstrings_and_mkdocs():
         content = f.read()
 
     assert "Google-style" in content or "Google-Style" in content
-    assert "mkdocs build --strict" in content
+    assert "build --strict" in content, "the rule must mandate a zero-warning documentation build"
     assert "GitHub Pages" in content

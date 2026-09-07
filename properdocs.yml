@@ -14,34 +14,13 @@ exclude_docs: |
   __pycache__/*
 
 theme:
-  name: material
-  palette:
-    - media: "(prefers-color-scheme: light)"
-      scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-    - media: "(prefers-color-scheme: dark)"
-      scheme: slate
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
-  features:
-    - navigation.instant
-    - navigation.tracking
-    - navigation.sections
-    - navigation.expand
-    - navigation.top
-    - search.suggest
-    - search.highlight
-    - content.code.copy
+  # The first-party theme shared by every repository on this pipeline, so the documentation of all
+  # of them looks like one system and the version switcher works here too. Design system: shadcn/ui.
+  name: null
+  custom_dir: theme
 
 hooks:
-  - .github/scripts/mkdocs_hooks.py
+  - .github/scripts/docs_hooks.py
 
 nav:
   - Overview: index.md
@@ -87,11 +66,17 @@ nav:
 
 markdown_extensions:
   - admonition
+  - attr_list
+  - md_in_html
+  - tables
   - pymdownx.details
   - pymdownx.superfences
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
+  - toc:
+      permalink: true
+      toc_depth: 2-4
 
 plugins:
   - search
