@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   run:
-    uses: marius-patrik/DarkFactory/.github/workflows/project-automation.yml@f0d838e891c73656952ca18bc49a8cae871dfed5
+    uses: marius-patrik/DarkFactory/.github/workflows/project-automation.yml@52816adc67cf9327831ecba775e8c9fdde764051
     with:
       pipeline-repo: marius-patrik/DarkFactory
       pipeline-ref: f0d838e891c73656952ca18bc49a8cae871dfed5
