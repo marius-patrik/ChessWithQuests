@@ -35,7 +35,7 @@ permissions:
 
 jobs:
   run:
-    uses: marius-patrik/DarkFactory/.github/workflows/open-pr.yml@56e369b18af1151b2cc651b953796435fc39d6c3
+    uses: marius-patrik/DarkFactory/.github/workflows/open-pr.yml@826f883ab1b7363a9bdbb39cf30af3437e5691ee
     with:
       branch: ${{ inputs.branch }}
       title: ${{ inputs.title }}
@@ -43,6 +43,6 @@ jobs:
       base: ${{ inputs.base }}
       draft: ${{ inputs.draft }}
       pipeline-repo: marius-patrik/DarkFactory
-      pipeline-ref: 56e369b18af1151b2cc651b953796435fc39d6c3
+      pipeline-ref: 826f883ab1b7363a9bdbb39cf30af3437e5691ee
     secrets:
       GH_PROJECT_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}
