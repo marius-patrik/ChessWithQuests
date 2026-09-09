@@ -19,7 +19,7 @@
   "upstream": {
     "$comment": "The shared pipeline. `ref` is the pin: bump it to adopt a pipeline update, and the diff shows exactly what changed.",
     "repo": "marius-patrik/DarkFactory",
-    "ref": "56e369b18af1151b2cc651b953796435fc39d6c3"
+    "ref": "826f883ab1b7363a9bdbb39cf30af3437e5691ee"
   },
   "versioning": {
     "mode": "pridever",
@@ -193,5 +193,12 @@
         "url": "https://marius-patrik.github.io/ChessWithQuests/"
       }
     ]
-  }
+  },
+  "license": {
+    "$comment": "Written from GitHub's canonical text, so it cannot drift from the wording it claims to be. NONE means deliberately not licensed for reuse, which is different from having forgotten to choose. Change it through a configuration issue.",
+    "spdx": "NONE",
+    "holder": "",
+    "year": ""
+  },
+  "$comment_required_checks": "Written rather than defaulted: calling the pipeline as a reusable workflow prefixes every check with the caller's job name, so the unprefixed defaults would protect the branch against contexts nothing reports."
 }
