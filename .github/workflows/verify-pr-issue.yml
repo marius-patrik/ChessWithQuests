@@ -11,8 +11,8 @@ permissions:
 
 jobs:
   verify:
-    uses: marius-patrik/DarkFactory/.github/workflows/verify-pr-issue.yml@4f26dd372b6c921316b0ee69d2d0b50a2e584f18
+    uses: marius-patrik/DarkFactory/.github/workflows/verify-pr-issue.yml@6d42a0ea793a3e1fc26876ff99662a94f82bb987
     with:
       pipeline-repo: marius-patrik/DarkFactory
-      pipeline-ref: "4f26dd372b6c921316b0ee69d2d0b50a2e584f18"
+      pipeline-ref: "6d42a0ea793a3e1fc26876ff99662a94f82bb987"
     secrets: inherit
