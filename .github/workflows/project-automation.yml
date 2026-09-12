@@ -17,10 +17,10 @@ permissions:
 
 jobs:
   run:
-    uses: marius-patrik/DarkFactory/.github/workflows/project-automation.yml@c61e39e7be5aa882c5f106606a6c0bb1b48348bc
+    uses: marius-patrik/DarkFactory/.github/workflows/project-automation.yml@480900aaac7f6e8f0284aa5e10385218e8890723
     with:
       pipeline-repo: marius-patrik/DarkFactory
-      pipeline-ref: c61e39e7be5aa882c5f106606a6c0bb1b48348bc
+      pipeline-ref: "480900aaac7f6e8f0284aa5e10385218e8890723"
     secrets:
       DARKFACTORY_APP_PRIVATE_KEY: ${{ secrets.DARKFACTORY_APP_PRIVATE_KEY }}
       GH_PROJECT_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}

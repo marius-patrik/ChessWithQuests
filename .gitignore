@@ -52,3 +52,6 @@ site/
 
 # Temporary CI artifacts
 event.json
+
+.pipeline/
+.darkfactory/
