@@ -11,8 +11,8 @@ permissions:
 
 jobs:
   run:
-    uses: marius-patrik/DarkFactory/.github/workflows/auto-format.yml@f758971e77cdbb6ba5f2dbdbba3146c7f77b4e8d
+    uses: marius-patrik/DarkFactory/.github/workflows/auto-format.yml@1e6bdb0e060ea8dbf614bbec1d1fa7b9f3650228
     with:
       pipeline-repo: marius-patrik/DarkFactory
-      pipeline-ref: "f758971e77cdbb6ba5f2dbdbba3146c7f77b4e8d"
+      pipeline-ref: "1e6bdb0e060ea8dbf614bbec1d1fa7b9f3650228"
     secrets: inherit
