@@ -17,9 +17,10 @@ permissions:
 
 jobs:
   run:
-    uses: marius-patrik/DarkFactory/.github/workflows/pr-approval-automerge.yml@826f883ab1b7363a9bdbb39cf30af3437e5691ee
+    uses: marius-patrik/DarkFactory/.github/workflows/pr-approval-automerge.yml@234d84d9bc24ee246fc0b91d29759c8699b24479
     with:
       pipeline-repo: marius-patrik/DarkFactory
-      pipeline-ref: 826f883ab1b7363a9bdbb39cf30af3437e5691ee
+      pipeline-ref: 234d84d9bc24ee246fc0b91d29759c8699b24479
     secrets:
+      DARKFACTORY_APP_PRIVATE_KEY: ${{ secrets.DARKFACTORY_APP_PRIVATE_KEY }}
       GH_PROJECT_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}
