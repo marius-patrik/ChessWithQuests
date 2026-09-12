@@ -24,10 +24,10 @@ permissions:
 
 jobs:
   agent:
-    uses: marius-patrik/DarkFactory/.github/workflows/agent.yml@02490f3012ad0b91beac0c20c2d807adb1647932
+    uses: marius-patrik/DarkFactory/.github/workflows/agent.yml@7ecba1617f553e6a34ceb31177e1ac84d08c350f
     with:
       pipeline-repo: marius-patrik/DarkFactory
-      pipeline-ref: "02490f3012ad0b91beac0c20c2d807adb1647932"
+      pipeline-ref: "7ecba1617f553e6a34ceb31177e1ac84d08c350f"
       agent-enabled: ${{ vars.AGENT_ENABLED }}
     secrets:
       DARKFACTORY_APP_PRIVATE_KEY: ${{ secrets.DARKFACTORY_APP_PRIVATE_KEY }}

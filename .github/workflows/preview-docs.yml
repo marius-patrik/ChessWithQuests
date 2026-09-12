@@ -13,8 +13,8 @@ permissions:
 
 jobs:
   preview-docs:
-    uses: marius-patrik/DarkFactory/.github/workflows/preview-docs.yml@02490f3012ad0b91beac0c20c2d807adb1647932
+    uses: marius-patrik/DarkFactory/.github/workflows/preview-docs.yml@7ecba1617f553e6a34ceb31177e1ac84d08c350f
     with:
       pipeline-repo: marius-patrik/DarkFactory
-      pipeline-ref: "02490f3012ad0b91beac0c20c2d807adb1647932"
+      pipeline-ref: "7ecba1617f553e6a34ceb31177e1ac84d08c350f"
     secrets: inherit
