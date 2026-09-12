@@ -19,7 +19,7 @@
   "upstream": {
     "$comment": "The shared pipeline. `ref` is the pin: bump it to adopt a pipeline update, and the diff shows exactly what changed.",
     "repo": "marius-patrik/DarkFactory",
-    "ref": "1e6bdb0c502deccf5b79b548f089fd07742981a7"
+    "ref": "7585c73e7d00f8774627d05288bc3770003efe0d"
   },
   "versioning": {
     "mode": "pridever",
