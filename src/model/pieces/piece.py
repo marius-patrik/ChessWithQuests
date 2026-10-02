@@ -6,12 +6,24 @@ from typing import Any, List, Optional, Tuple
 class Piece:
     """Base class for all chess pieces.
 
+    Every piece is described by data: where it may go, where it may take, how far one step
+    travels, and whether it may leap. Nothing about a piece is special-cased by the engine,
+    which is what lets a configuration declare a piece the engine has never heard of.
+
     Attributes:
-        _type: The piece type descriptor (e.g. "pawn", "king", 1, -1).
-        _vectors: List of relative coordinate move offsets (row_delta, col_delta).
-        _attack_vectors: List of relative coordinate attack offsets.
-        _can_jump: Boolean indicating whether piece can leap over other pieces.
+        _type: The piece type descriptor the configuration chose.
+        _vectors: Offsets along which the piece may move (and, when they are not also
+            attack vectors, may only move to an empty square).
+        _attack_vectors: Offsets along which the piece may take. A vector that appears only
+            here is a capture and nothing else.
+        _can_jump: Whether the piece may leap over other pieces.
         _name: Human-readable display name of the piece.
+        _max_steps: How far one step travels. None means the piece slides as far as the
+            board allows, which is what a ray mover does.
+        _initial_vectors: Extra offsets available only before the piece has moved, which is
+            how a piece gets a one-off first advance.
+        has_moved: Whether the piece has ever moved. Cleared on placement, set by the board
+            on the first move.
     """
 
     def __init__(
@@ -22,16 +34,25 @@ class Piece:
         attack_vectors: Optional[List[Tuple[int, int]]] = None,
         can_jump: bool = False,
         name: Optional[str] = None,
+        max_steps: Optional[int] = None,
+        initial_vectors: Optional[List[Tuple[int, int]]] = None,
+        has_moved: bool = False,
     ):
-        """Initialize a new chess piece.
+        """Initialize a piece.
 
         Args:
             color: Color identifier (1 for White, -1 for Black).
             piece_type: Piece identifier or type descriptor.
-            vectors: Optional movement vectors.
-            attack_vectors: Optional attack vectors (defaults to vectors if None).
+            vectors: Offsets along which the piece may move.
+            attack_vectors: Offsets along which the piece may take. Defaults to `vectors`,
+                which means the piece takes wherever it moves.
             can_jump: Whether this piece can jump over other pieces.
             name: Optional display name for the piece.
+            max_steps: How far one step travels. None means the piece slides as far as the
+                board allows.
+            initial_vectors: Extra offsets available only before the piece has moved.
+            has_moved: Whether the piece has already moved. A newly placed piece has not,
+                which is what makes a first-only advance available.
         """
         self.__color = color
         self._type = piece_type
@@ -39,6 +60,9 @@ class Piece:
         self._attack_vectors = attack_vectors
         self._can_jump = can_jump
         self._name = name or (str(piece_type) if piece_type is not None else "Piece")
+        self._max_steps = max_steps
+        self._initial_vectors = initial_vectors or []
+        self.has_moved = has_moved
 
     def getDirections(self) -> Optional[List[Tuple[int, int]]]:
         """Return the standard movement vectors for this piece.
@@ -57,6 +81,43 @@ class Piece:
         if self._attack_vectors is not None:
             return self._attack_vectors
         return self._vectors
+
+    def getMaxSteps(self) -> Optional[int]:
+        """Return how far one step of this piece travels.
+
+        Returns:
+            Optional[int]: The step length, or None when the piece slides as far as the
+            board allows.
+        """
+        return self._max_steps
+
+    def getInitialVectors(self) -> List[Tuple[int, int]]:
+        """Return the offsets available only before this piece has moved.
+
+        Returns:
+            List[Tuple[int, int]]: The one-off first-move offsets, empty when the piece has
+            no first-move advance.
+        """
+        return list(self._initial_vectors)
+
+    def hasMoved(self) -> bool:
+        """Return whether this piece has already moved.
+
+        Returns:
+            bool: True once the piece has moved, False while it has not.
+        """
+        return self.has_moved
+
+    def setMoved(self, moved: bool = True) -> None:
+        """Record whether this piece has moved.
+
+        Args:
+            moved: The new state. Defaults to True.
+
+        Returns:
+            None
+        """
+        self.has_moved = moved
 
     def canJump(self) -> bool:
         """Check whether the piece can jump over other pieces.

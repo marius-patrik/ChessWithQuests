@@ -7,7 +7,7 @@ built by `view/`, and the rules it plays are the ones the selected configuration
 
 import argparse
 import sys
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from model.game.games import DEFAULT_GAME, available_games, configuration_path, games_root
 
@@ -78,7 +78,7 @@ def _version() -> str:
         return "unknown"
 
 
-def build_window(root, game: str = DEFAULT_GAME):
+def build_window(root: Any, game: str = DEFAULT_GAME):
     """Populate a Tk root with the application window.
 
     Args:

@@ -1,4 +1,5 @@
 import pytest
+from games.chess.rules import build_rules
 from model.game.board import Board
 from model.game.move import Move
 from model.game.validator import MoveValidator
@@ -10,9 +11,18 @@ from model.pieces.pawn import Pawn
 
 def test_validator_initialization():
     board = Board()
-    validator = MoveValidator(board)
-    assert validator.find_king(1) == (0, 4)
-    assert validator.find_king(-1) == (7, 4)
+    validator = MoveValidator(board, rules=build_rules())
+    assert validator.find_royal(1) == (0, 4)
+    assert validator.find_royal(-1) == (7, 4)
+
+
+def test_royal_piece_is_declared_by_a_rule_not_a_type_name():
+    """A validator with no rules in force has no royal piece, so nothing is ever in check."""
+    board = Board()
+    assert MoveValidator(board).find_royal(1) is None
+    assert MoveValidator(board).is_check(1) is False
+    assert MoveValidator(board).royal_kinds() == []
+    assert MoveValidator(board, rules=build_rules()).royal_kinds() == ["king"]
 
 
 def test_validator_pawn_moves():
@@ -26,7 +36,7 @@ def test_validator_pawn_moves():
 
 def test_validator_check_detection():
     board = Board(setup_pieces=False)
-    validator = MoveValidator(board)
+    validator = MoveValidator(board, rules=build_rules())
     white_king = King(1)
     black_rook = Rook(-1)
 
@@ -39,7 +49,7 @@ def test_validator_check_detection():
 
 def test_validator_checkmate():
     board = Board(setup_pieces=False)
-    validator = MoveValidator(board)
+    validator = MoveValidator(board, rules=build_rules())
     # Corner checkmate scenario: King in corner attacked by Queen, Queen backed by Rook
     white_king = King(1)
     black_queen = Queen(-1)
@@ -54,7 +64,7 @@ def test_validator_checkmate():
 
 def test_validator_stalemate():
     board = Board(setup_pieces=False)
-    validator = MoveValidator(board)
+    validator = MoveValidator(board, rules=build_rules())
     # King at (0, 0) not in check, but all surrounding squares attacked
     white_king = King(1)
     black_queen = Queen(-1)

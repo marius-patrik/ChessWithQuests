@@ -48,8 +48,13 @@ class GameManager:
         self.current_move: Optional[Move] = None
         self.timer: Timer = timer or Timer()
         self.game_logger: GameLogger = logger or GameLogger()
-        rules = configuration.enabled_rules() if configuration else None
-        self.move_validator: MoveValidator = validator or MoveValidator(self.board, rules=rules)
+        self.move_validator: MoveValidator = validator or MoveValidator(self.board)
+        if configuration is not None:
+            self.move_validator.set_rules(
+                configuration.enabled_rules(),
+                clock=self.timer,
+                active_color=self.active_player,
+            )
 
     def get_result(self) -> Optional[Result]:
         """Ask the rules in force whether the game is over.
@@ -57,6 +62,8 @@ class GameManager:
         Returns:
             Optional[Result]: The outcome that wins, or None when the game continues.
         """
+        for rule in self.move_validator.active_rules():
+            rule.active_color = self.active_player
         return self.move_validator.resolve_outcome(self.board)
 
     def status(self) -> Optional[str]:

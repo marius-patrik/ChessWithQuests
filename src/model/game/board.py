@@ -116,8 +116,7 @@ class Board:
 
         self.set_piece_at(end_pos, piece)
         self.set_piece_at(start_pos, None)
-        if hasattr(piece, "setMoved"):
-            piece.setMoved(True)
+        piece.has_moved = True
         return True
 
     def replace_piece(self, position: Tuple[int, int], new_piece: Piece) -> None:

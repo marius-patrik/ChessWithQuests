@@ -14,6 +14,9 @@ class Move:
         move_type: str = "normal",
         captured_piece: Optional[Any] = None,
         promotion_piece: Optional[Any] = None,
+        capture_from: Optional[Tuple[int, int]] = None,
+        companion_start: Optional[Tuple[int, int]] = None,
+        companion_end: Optional[Tuple[int, int]] = None,
     ):
         """Initialize a Move instance.
 
@@ -23,7 +26,12 @@ class Move:
             piece: Moving piece instance, or None to infer from board.
             move_type: Type of move (e.g. "normal", "castling", "en_passant").
             captured_piece: Captured piece instance if any.
-            promotion_piece: New piece instance if move involves pawn promotion.
+            promotion_piece: New piece instance if move involves promotion.
+            capture_from: Square a captured piece stands on when it is not the destination.
+                An en passant capture takes the piece that stepped past.
+            companion_start: Square a second piece starts from, for a move that carries one
+                along. Castling moves a rook with its king.
+            companion_end: Square that second piece ends on.
         """
         self.start_pos = tuple(start_pos)
         self.end_pos = tuple(end_pos)
@@ -31,6 +39,9 @@ class Move:
         self.move_type = move_type
         self.captured_piece = captured_piece
         self.promotion_piece = promotion_piece
+        self.capture_from = tuple(capture_from) if capture_from else None
+        self.companion_start = tuple(companion_start) if companion_start else None
+        self.companion_end = tuple(companion_end) if companion_end else None
 
     @staticmethod
     def _bounds(board: Optional[Any]) -> Tuple[int, int]:
@@ -89,8 +100,22 @@ class Move:
         if self.piece is None:
             return False
 
-        self.captured_piece = board.get_piece_at(self.end_pos)
+        if self.capture_from is not None:
+            self.captured_piece = board.get_piece_at(self.capture_from)
+            board.set_piece_at(self.capture_from, None)
+        else:
+            self.captured_piece = board.get_piece_at(self.end_pos)
+
         success = board.move_piece(self.start_pos, self.end_pos)
-        if success and self.promotion_piece is not None:
+        if not success:
+            return False
+
+        if self.companion_start is not None and self.companion_end is not None:
+            companion = board.get_piece_at(self.companion_start)
+            board.set_piece_at(self.companion_start, None)
+            if companion is not None:
+                board.set_piece_at(self.companion_end, companion)
+
+        if self.promotion_piece is not None:
             board.replace_piece(self.end_pos, self.promotion_piece)
-        return success
+        return True

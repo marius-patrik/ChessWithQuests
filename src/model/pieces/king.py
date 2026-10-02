@@ -1,50 +1,41 @@
-"""King chess piece implementation with 8-direction step movement and castling state."""
+"""King: one square in any of the eight directions.
+
+`max_steps=1` is what makes it a one-square mover. The engine does not know it is a king;
+whether it is royal is a rule, and that rule is chess's to declare.
+"""
+
+from typing import Any
 
 from .piece import Piece
 
+DIRECTIONS = [
+    (0, 1),
+    (0, -1),
+    (1, 0),
+    (-1, 0),
+    (1, 1),
+    (1, -1),
+    (-1, 1),
+    (-1, -1),
+]
+
 
 class King(Piece):
-    """King chess piece with 1-square movement in any of 8 directions and moved-state tracking."""
+    """Moves exactly one square in any of the eight directions."""
 
-    def __init__(self, color: int, piece_type: str = "king"):
+    def __init__(self, color: Any, piece_type: str = "king"):
         """Initialize a King piece.
 
         Args:
             color: Color identifier (1 for White, -1 for Black).
             piece_type: Piece type descriptor (default: "king").
         """
-        vectors = [
-            (0, 1),
-            (0, -1),
-            (1, 0),
-            (-1, 0),
-            (1, 1),
-            (1, -1),
-            (-1, 1),
-            (-1, -1),
-        ]
         super().__init__(
             color=color,
             piece_type=piece_type,
-            vectors=vectors,
-            attack_vectors=vectors,
+            vectors=DIRECTIONS,
+            attack_vectors=DIRECTIONS,
             can_jump=False,
             name="King",
+            max_steps=1,
         )
-        self._has_moved = False
-
-    def hasMoved(self) -> bool:
-        """Check whether the King has moved from its starting position.
-
-        Returns:
-            bool: True if the King has moved, False otherwise.
-        """
-        return self._has_moved
-
-    def setMoved(self, moved: bool = True) -> None:
-        """Update the King's moved state.
-
-        Args:
-            moved: Movement flag value (default: True).
-        """
-        self._has_moved = moved

@@ -16,6 +16,9 @@ KIND_WIN = OUTCOME_WIN
 KIND_LOSS = OUTCOME_LOSS
 KIND_DRAW = OUTCOME_DRAW
 
+#: The name under which a rule declares which piece kinds are royal.
+ROYAL_KIND = "royal_kind"
+
 #: The kinds that end a game for somebody. A draw never outranks one of these.
 DECISIVE_KINDS = (KIND_WIN, KIND_LOSS)
 
@@ -136,6 +139,10 @@ class Rule:
         enabled: Whether the rule is in force at all.
         value: The configured values. Persisted.
         state: The runtime values. Reset each game, and never persisted.
+        rules: The set this rule belongs to, so a rule can consult its siblings.
+        clock: The game's clock, when the game provides one. A rule about time needs it
+            and a rule about the board does not.
+        active_color: Whose turn it is, which a rule cannot work out from a board alone.
     """
 
     #: Name used in configuration errors and the settings form.
@@ -153,6 +160,9 @@ class Rule:
         self.label = self.default_name
         self.value: Dict[str, Any] = {}
         self.state: Dict[str, Any] = {}
+        self.rules: List["Rule"] = []
+        self.clock: Any = None
+        self.active_color = 1
         for field in self.value_fields():
             self.value[field.name] = values.get(field.name, field.default)
 
@@ -259,6 +269,34 @@ class Rule:
         """
         return None
 
+    def royal_kind(self) -> Optional[str]:
+        """Return the piece kind this rule set declares royal.
+
+        Exactly one rule declares it — a rule carrying a configured value called
+        `royal_kind` — and every other rule asks the set rather than declaring it again. A
+        set with no such declaration has no royal piece, which is a game nobody has heard
+        of rather than an error.
+
+        Returns:
+            Optional[str]: The declared kind, or None when nothing is declared.
+        """
+        for rule in self.rules:
+            kind = rule.value.get(ROYAL_KIND)
+            if kind:
+                return kind
+        return None
+
+    def attach(self) -> None:
+        """Take hold of the game this rule has joined.
+
+        Wiring, not behaviour: it is called once when a rule set enters a game, so a rule
+        that needs the clock or its siblings can find them. The default does nothing.
+
+        Returns:
+            None
+        """
+        return None
+
     def reset(self) -> None:
         """Clear this rule's runtime state for a new game.
 
@@ -266,6 +304,7 @@ class Rule:
             None
         """
         self.state = {}
+        self.attach()
 
     def persisted_values(self) -> Dict[str, Any]:
         """Return the values that may be written to disk.
