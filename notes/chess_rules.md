@@ -1,6 +1,21 @@
-# Complete FIDE Chess Rules Reference
+# FIDE Chess Rules Reference
 
-This reference document serves as the authoritative rules baseline for ChessWithQuests, ensuring our engine, validator (`MoveValidator`), board model (`Board`), and game manager (`GameManager`) faithfully adhere to standard international chess rules.
+This is the **rules baseline for the chess configuration**, transcribed from FIDE
+rules. It describes orthodox chess on an 8×8 board.
+
+**Two things this document is not:**
+
+1. **It is not a constraint on the engine.** It describes one configuration. The
+   board size is configurable (FR-15), and a rank-relative rule — castling, en
+   passant, promotion — is generalised rather than disabled: the home rank, the
+   knight-forward file and the castling rook files are derived from the configured
+   board. Every statement below that names rank 1, rank 8 or a specific file is
+   true of the *default* configuration and is parameterised everywhere else.
+2. **It is not the specification for the object model.** The reference
+   architecture diagram is. Where this document and
+   `notes/reference_diagram.md` disagree about structure, the diagram governs.
+
+The rule names used by the code are listed in `PRD.md` FR-16.
 
 ---
 
@@ -36,7 +51,7 @@ This reference document serves as the authoritative rules baseline for ChessWith
 - Each Bishop remains confined throughout the game to squares of its initial color (one light-squared Bishop, one dark-squared Bishop per side).
 - Cannot leap over intervening pieces.
 
-### Knight (N / Horse)
+### Knight (N)
 - Moves in an **L-shape**: 2 squares along a rank/file and 1 square perpendicularly, or 1 square along a rank/file and 2 squares perpendicularly (8 potential target coordinates).
 - **Jumping capability**: The Knight is the only piece permitted to leap over intervening pieces on its path.
 

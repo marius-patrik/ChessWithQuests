@@ -1,45 +1,181 @@
 # Reference Architecture Diagram
 
-## Link to Live Diagram
+## Link to the live diagram
+
 [Draw.io Architecture Diagram](https://app.diagrams.net/#G19OY7iySOQWRAZDFKy1r-7tJKG_L-_Qn8#%7B%22pageId%22%3A%22C5RBs43oDa-KdzZeNtuy%22%7D)
 
 - **File**: `Šachy - diagram tříd.drawio`
-- **Pages**:
-  - `Page-1`: Full object model encompassing User Management, Quests, Game Management, Board, Pieces, and Exporters.
-  - `MVC - GameView`: Focus on the Model-View-Controller integration and GameView bindings.
+- **Pages**: `Page-1` — the full object model, and `MVC - GameView` — the MVC
+  integration and the view bindings.
+
+**Status**: this diagram is the assignment specification. Anything it defines is
+implemented; anything it omits is out of scope unless a user request adds it.
+
+## What this document is
+
+An inventory of the diagram, transcribed from the draw.io file. It records what
+the diagram **actually draws**, including where the diagram is inconsistent or
+incomplete, so that conformance claims elsewhere are checkable against it.
+
+Deviations from this inventory are recorded in `notes/object_model.md`.
 
 ---
 
-## Diagram Structure & Component Inventory
+## Page-1 — class inventory
 
-### 1. Pieces Layer (`model.pieces`)
-- **`Figurka` (`Piece`)**: Base class with `name`, `color` (`1` / `-1`), `vectors`, `attack_vectors`, and `can_jump`.
-- **`Pěšák` (`Pawn`)**: Forward step `(1 * color, 0)`, initial 2-step advance, diagonal attack `(1 * color, ±1)`.
-- **`Věž` (`Rook`)** & **`Tower`**: Orthogonal ray-marching sliding piece.
-- **`Kůň` (`Horse` / `Knight`)**: L-shaped jumping piece (`can_jump = True`).
-- **`Střelec` (`Bishop`)**: Diagonal ray-marching sliding piece.
-- **`Dáma` (`Queen`)**: 8-direction ray-marching sliding piece.
-- **`Král` (`King`)**: 8-direction 1-step piece with check/checkmate tracking.
+| Diagram class | Declared members | Declared operations |
+|---|---|---|
+| `Uzivatel` | `uzivatelske_jmeno : string`, `jmeno : string`, `email : string`, `elo : integer`, `splnene_kwesty : List(Kwest)` | `pridej_quest(quest : Quest)` |
+| `Quest` | `nazev`, `popis` | `validate() : bool` |
+| `HerníPlocha` | `+rozmery: Tuple = (8,8)`, `herni_deska: List(List(Figurka))`, `vyhozene_figurky_b: List(Figurka)`, `vyhozene_figurky_c: List(Figurka)` | `+vrat_obsah(souradnice): Figurka`, `posun_figurky(Tah): bool`, `nahrad_figurku(Figurka, Tah)` |
+| `Figurka` | `název: string`, `vektory_utoku: List(Vektor)`, `barva(tým): integer`, `vektory: List(Vektor)` | none |
+| `Hrac` | `+barva : integer`, `+uzivatel : Uzivatel` | `getEloRating: integer` |
+| `GameManager` | `plocha: HerníPlocha`, `aktivni_hrac: int`, `hraci: List(Hrac)`, `aktualni_tah: Tah`, `casovac: Timer`, `game_logger: GameLogger`, `+revizor_tahu: RevizorTahu` | `zacni_tah(): Tah`, `mozne_tahy(): List(Tah)`, `zrus_tah(): None`, `uloz_log(): void`, `get_stav(): int`, `najdi_uzivatele(id: integer): Uzivatel` |
+| `Tah` | `vychozi pozice: seznam`, `cilova pozice: seznam`, `figurka: Figurka`, `typ tahu: string` | `over platnost(): bool`, `proved tah(): void` |
+| `RevizorTahu` | `herni_plocha: HerníPlocha`, `tah: Tah` | `simulate_Move() = seznam`, `check_Šach() = bool`, `check_Mat = bool`, `check_Pat = bool` |
+| `Kůň` | `vektor: seznam`, `vektor_utoku: seznam`, `skok: bool = true` | none |
+| `Král` | `vektor`, `vektor_utoku`, `skok: bool = false` | none |
+| `Dáma` | `vektor`, `vektor_utoku`, `skok: bool = false` | none |
+| `Věž` | `vektor`, `vektor_utoku`, `skok: bool = false` | none |
+| `Pěšák` | `vektor`, `vektor_utoku`, `skok: bool = false` | none |
+| `Střelec` | `vektor`, `vektor_utoku`, `skok: bool = false` | none |
+| `User Manager` | `Id_uzivatele: hrac`, `log_uzivatelu: string`, `historie_uzivatele: string` | `proveď_tah: () bool` |
+| `export writers` | `+field: type` | none — the operation compartment is empty |
+| `ChessNotationWriter` | `+item: attribute` | none named; the operation compartment holds prose (see below) |
+| `MetadataWriter` | none; the attribute compartment reads `no parameters` | `+method(type): type` |
+| `GameLogger` | `soubor: File` | `+uloz_tah(Tah): None`, `+vytvor_soubor(String): None` |
+| `Timer` | `+cas_hrac: List(int)` | `+nuluj_cas(): None`, `+pocitej_cas(hrac: int): None` |
+| `QuestManager` | `+field: type` | `+method(type): type` |
 
-### 2. Game Core Layer (`model.game`)
-- **`HerníPlocha` (`Board`)**: 8×8 board grid, piece indexing, capture pools (`vyhozene_figurky_b`, `vyhozene_figurky_c`).
-- **`Tah` (`Move`)**: Move execution, coordinate tracking, promotion handling, and basic geometry validation.
-- **`Hrac` (`Player`)**: Player color code and linked user account with ELO rating lookup.
-- **`Timer`**: Dual clock countdown and time increment management.
-- **`GameLogger`**: In-memory and file-based move transcript logging.
-- **`RevizorTahu` (`MoveValidator`)**: Ray-marching attack detection, check, checkmate, and stalemate validation.
-- **`GameManager`**: Central engine tying board, players, timer, validator, and state machine together.
-- **`Quest`**: In-game achievement tracking with conditional predicates.
+### The `ChessNotationWriter` format list
 
-### 3. Users Layer (`model.users`)
-- **`Uzivatel` (`User`)**: User profile with username, display name, email, ELO rating, and completed quests.
-- **`User Manager` (`UserManager`)**: User directory, profile registration, match logging, and player linkage.
+Its operation compartment is prose rather than named operations, and enumerates:
+*letter*, *PGN*, *FEN*, *Field - Field - Extra*, *Stenographic* — annotated
+"(Standard or custom compression)" — together with **the game transcript**,
+described as arriving "as a single parameter".
 
-### 4. Serialization & Notation Layer (`model.misc`)
-- **`MetadataWriter`**: PGN header tags roster.
-- **`ChessNotationWriter`**: PGN, FEN, and Stenographic notation generation.
-- **`QuestManager`**: Registry for tracking and awarding in-game quests.
+The **`export writers`** box does **not** contain this list. It holds one field.
+Both facts are load-bearing: see `notes/object_model.md` section 7.
 
-### 5. Controllers (`controller`)
-- **`GameController`**: Handles user board clicks, piece selections, and move executions.
-- **`WindowController`**: Manages window loop, dialog prompts, timer ticks, and UI events.
+### Free-standing notes on Page-1
+
+- **Validation timing**, still posed as an open question in the diagram:
+  *"Validace tahu — Rozhodněme se, zda je lepší rozhodnout o proveditelnosti tahu
+  pro každou figuru před tahem, nebo bezprostředně po kliknutí na konkrétní a pro
+  konkrétní figuru."* Resolved by `notes/object_model.md` section 2 and FR-15.
+- *"Integer bude buď 1 nebo -1 podle barvy"*
+- *"Pro pěšáka se vektor vynásobí barvou"*
+
+---
+
+## Page-1 — relationships
+
+**Exactly one generalisation edge exists in the whole file**: `Kůň → Figurka`,
+drawn with a hollow triangle.
+
+**Composition**: `Quest` into `Uzivatel.splnene_kwesty`.
+
+**Associations** (no arrowhead, with multiplicity where drawn):
+
+`Uzivatel` ↔ `Hrac` · `GameManager.plocha` → `HerníPlocha` · `HerníPlocha` →
+`Figurka` · `GameManager.hraci` → `Hrac` · `Tah.figurka` → `Figurka` ·
+`RevizorTahu.herni_plocha` → `HerníPlocha` · `RevizorTahu.tah` → `Tah` ·
+`GameManager.revizor_tahu` → `RevizorTahu` · `GameManager.game_logger` →
+`GameLogger` · `GameManager.casovac` → `Timer`
+
+---
+
+## Page 2 — MVC integration
+
+| Diagram class | Declared members | Declared operations |
+|---|---|---|
+| `GameManagerController` | `+game_manager: GameManager`, `+herni_plocha: HerniPlocha`, `+game_view: GameView`, `+hrac_view: HracView` | `+vyber_pole(souradnice)` |
+| `GameManager` | `+herni_plocha: HerniPlocha`, `+aktivni_hrac: int`, `+hraci: List(Uzivatele)`, `+revizor_tahu: RevizorTahu` | `+je_vlastni_figurka(souradnice): bool` |
+| `HerniPlocha` | `+hraci_plocha: List(List(Figurka))`, `+rozmery: Tuple(int,int)` | `+vrat_obsah(souradnice): Figurka` |
+| `GameVeiw` | `+controller: GameManagerController` | `+aktualizuj_plochu: None` |
+| `HracGameView` | `+controller: GameManagerController` | `+akutalizuj_hrace(hrac): None` |
+
+All four edges are plain associations. **Page 2 draws no generalisation.**
+
+---
+
+## Recorded defects in the diagram
+
+Recorded because conformance claims depend on them, and because silently
+smoothing them over would make the deviations unverifiable.
+
+### Naming
+
+| Drawn | Note |
+|---|---|
+| `GameVeiw` | missing `r`. The class is `GameView`; the drawn spelling is not reproduced |
+| `check_Pat` | Czech *patová* — stalemate. Retained as the drawn operation name's meaning, spelled correctly in code |
+| `intger` | misspelling of `integer` on `get_stav()` |
+| `akutalizuj_hrace` | missing `l` |
+| `Id_uzivatele: hrac` | a user id typed as a player |
+| `proveď_tah`, `over platnost` | Czech with diacritics inside member names |
+| `HracView` | **no class box exists.** It appears only as an attribute *type* on `GameManagerController`. The class is created as `PlayerView` — `notes/object_model.md` section 15 |
+
+### Structural inconsistency
+
+- **Only `Kůň` is connected to `Figurka`.** The other five pieces have an edge
+  with a source and **no target**, and each redeclares `vektor`, `vektor_utoku`
+  and `skok` rather than inheriting them. The intent is that all six extend
+  `Figurka`, and the code does that; the drawing is simply unfinished.
+- **`skok` is declared on the six subclasses, not on `Figurka`.** `Figurka` has
+  `název`, `vektory`, `vektory_utoku` and `barva`.
+- **`Extends` is not a relationship.** It is an `edgeLabel` on a free-standing
+  line inside a zero-height legend group positioned beside the piece row.
+- **`ChessNotationWriter`, `MetadataWriter`, `QuestManager` and `User Manager`
+  have no edges at all.**
+- **`get_stav()` is drawn in transparent zero-size text** wrapping a nested
+  `mxGraphModel` — a copy-paste leftover that concealed the operation. It is the
+  diagram's only game-state accessor and is retained.
+
+### The two pages contradict each other
+
+| Member | Page-1 | Page 2 |
+|---|---|---|
+| board field on the game manager | `plocha` | `herni_plocha` |
+| player collection | `hraci: List(Hrac)` | `hraci: List(Uzivatele)` |
+| board grid field | `herni_deska` | `hraci_plocha` |
+| board dimensions | `rozmery: Tuple = (8,8)` | `rozmery: Tuple(int,int)` |
+| operations on the game manager | six | one |
+
+`List(Hrac)` and `List(Uzivatele)` cannot both hold. Page-1 is followed,
+because it is the full object model and page 2 is the integration sketch — see
+`notes/object_model.md` section 14.
+
+Page-1 also writes `rozmery: Tuple = (8,8)`, hard-coding the default board size.
+That default is kept; nothing may rely on it.
+
+---
+
+## Canonical translation
+
+Czech-to-English translation is canonical and is not a deviation. Names not
+listed here are already English in the diagram.
+
+| Diagram | English | Note |
+|---|---|---|
+| `Figurka` | `Piece` | parent of the six pieces |
+| `Pěšák` | `Pawn` | |
+| `Věž` | `Rook` | the diagram has no `Tower` box |
+| `Kůň` | `Knight` | the diagram has no `Horse` box; the Czech alias is `Kun` |
+| `Střelec` | `Bishop` | |
+| `Dáma` | `Queen` | |
+| `Král` | `King` | |
+| `HerníPlocha` / `HerniPlocha` | `Board` | the diagram uses both spellings |
+| `Tah` | `Move` | |
+| `Hrac` | `Player` | |
+| `RevizorTahu` | `MoveValidator` | |
+| `Uzivatel` | `User` | |
+| `User Manager` | `UserManager` | |
+| `Quest` | `Quest` | already English |
+| `Kwest` | `Quest` | appears only inside `splnene_kwesty` |
+| `Timer` | `Timer` | the configurable parent is `Clock` — `notes/object_model.md` section 13 |
+| `GameManagerController` | `GameManagerController` | already English; the diagram has no `GameController` or `WindowController` box |
+| `GameVeiw` | `GameView` | diagram typo |
+| `HracGameView` | `PlayerGameView` | the `Hrac` part is Czech |
+
+The full alias table the code must satisfy is in `PRD.md` section 5.
