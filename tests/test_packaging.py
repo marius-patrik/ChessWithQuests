@@ -78,22 +78,22 @@ def test_entry_point_rejects_an_unknown_configuration():
     assert "no-such-game" in result.stderr
 
 
-def test_entry_point_builds_a_window():
-    """The entry point's whole job is to open a window. Tk needs a display, so the test is
-    skipped rather than weakened when there is none."""
-    tkinter = pytest.importorskip("tkinter")
-    try:
-        root = tkinter.Tk()
-    except tkinter.TclError as error:  # pragma: no cover - depends on the machine
-        pytest.skip(f"no display available: {error}")
+def test_entry_point_builds_a_window(tk_root):
+    """The entry point's whole job is to open a window.
 
-    try:
-        window = chesswithquests.build_window(root, DEFAULT_GAME)
-        assert window.winfo_exists() == 1
-        assert DEFAULT_GAME in window.title()
-        assert window.winfo_children()
-    finally:
-        root.destroy()
+    It builds into the session's root rather than one of its own: destroying the last root in a
+    process tears down the Tcl interpreter, and the next test that needs a window then
+    segfaults instead of skipping. Where there is no display, `tk_root` skips.
+    """
+    window = chesswithquests.build_window(tk_root, DEFAULT_GAME)
+    tk_root.update()
+
+    assert window.winfo_exists() == 1
+    assert DEFAULT_GAME in window.title()
+    assert window.winfo_children()
+
+    for child in tk_root.winfo_children():
+        child.destroy()
 
 
 def test_no_third_party_runtime_import_under_the_project_source():

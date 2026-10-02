@@ -1,0 +1,54 @@
+name: Verify View
+
+# The view layer is the only part of this project that needs a display. These tests build real
+# widgets and click real squares, so skipping them would leave the window unverified; running
+# them needs python3-tk and a display, which xvfb provides without a desktop session.
+#
+# This is deliberately separate from CI. CI runs the pinned shared pipeline, and the pipeline
+# does not install a windowing toolkit. Changing the pipeline belongs to the pull request that
+# adopts it, not to the one that first needs a window.
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  verify-view:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install the windowing toolkit and a virtual display
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends python3-tk xvfb
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+
+      - name: Verify the view under a virtual display
+        run: xvfb-run --auto-servernum python -m pytest -v tests/test_view.py tests/test_packaging.py
+
+      - name: Verify nothing was skipped for want of a display
+        run: |
+          # A skip here means the tests quietly proved nothing, which is the failure mode this
+          # workflow exists to prevent.
+          xvfb-run --auto-servernum python -m pytest -q tests/test_view.py -rs | tee output.txt
+          if grep -q "SKIPPED" output.txt; then
+            echo "::error::view tests skipped under xvfb; they proved nothing"
+            cat output.txt
+            exit 1
+          fi
