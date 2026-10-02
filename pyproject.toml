@@ -1,3 +1,56 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chesswithquests"
+version = "0.1.0"
+description = "A board game engine in which the configuration is the product: chess and checkers share one engine."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "NONE" }
+authors = [{ name = "marius-patrik" }]
+keywords = ["chess", "checkers", "board game", "engine", "mvc", "quests"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Games/Entertainment :: Board Games",
+]
+# The runtime uses the standard library and tkinter, and nothing else. `python-chess` is
+# banned: FEN, PGN, SAN and coordinate conversion are hand-rolled in this repository.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/marius-patrik/ChessWithQuests"
+Documentation = "https://marius-patrik.github.io/ChessWithQuests/"
+"Architecture diagram" = "https://app.diagrams.net/#G19OY7iySOQWRAZDFKy1r-7tJKG_L-_Qn8#%7B%22pageId%22%3A%22C5RBs43oDa-KdzZeNtuy%22%7D"
+
+[project.gui-scripts]
+chesswithquests = "chesswithquests:main"
+
+[tool.setuptools]
+# A flat layout plus auto-discovery trips over `tests/` sitting at the root, so the package
+# list is explicit. `games` is listed because a configuration is a Python package of its own:
+# an install that ships only the engine cannot find its own default configuration.
+packages = [
+    "chesswithquests",
+    "controller",
+    "games",
+    "games.chess",
+    "model",
+    "model.game",
+    "model.misc",
+    "model.pieces",
+    "model.users",
+    "view",
+]
+include-package-data = true
+
 [tool.pytest.ini_options]
 minversion = "7.0"
 testpaths = ["tests"]
