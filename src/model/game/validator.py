@@ -1,9 +1,10 @@
 """Move validation engine enforcing chess rules, checks, pins, and terminal conditions."""
 
-from typing import List, Tuple, Optional, Any
+from typing import Any, Iterable, List, Optional, Tuple
 
 from model.game.board import Board
 from model.game.move import Move
+from model.game.rule import Result, Rule, resolve_outcomes
 from model.pieces.piece import Piece
 from model.pieces.pawn import Pawn
 from model.pieces.king import King
@@ -34,17 +35,96 @@ def _is_single_step(piece: Piece) -> bool:
 
 
 class MoveValidator:
-    """Validates piece movement legality, checks, checkmates, and stalemates."""
+    """Validates piece movement legality, checks, checkmates, and stalemates.
 
-    def __init__(self, board: Optional[Board] = None, move: Optional[Move] = None):
+    The validator asks and rules answer. It owns no game logic of its own: a rule may permit
+    or forbid a move, may offer a move, and may propose an outcome, and the validator is
+    what turns those answers into the set of moves a player can actually play.
+    """
+
+    def __init__(
+        self,
+        board: Optional[Board] = None,
+        move: Optional[Move] = None,
+        rules: Optional[Iterable[Rule]] = None,
+    ):
         """Initialize a MoveValidator instance.
 
         Args:
             board: Optional Board instance to validate moves on.
             move: Optional Move instance being inspected.
+            rules: Optional rules in force, composed explicitly by the configuration.
         """
         self.board = board
         self.move = move
+        self.rules: List[Rule] = list(rules) if rules else []
+
+    def set_rules(self, rules: Iterable[Rule]) -> None:
+        """Replace the rules in force.
+
+        Args:
+            rules: The rules in force, in the order the configuration declared them.
+
+        Returns:
+            None
+        """
+        self.rules = list(rules)
+
+    def active_rules(self) -> List[Rule]:
+        """Return the rules that are in force.
+
+        Returns:
+            List[Rule]: The rules whose `enabled` is True, in declaration order.
+        """
+        return [rule for rule in self.rules if rule.enabled]
+
+    def resolve_outcome(self, board: Optional[Board] = None) -> Optional[Result]:
+        """Ask every rule whether the game is over and settle what they say.
+
+        Args:
+            board: Optional Board instance (defaults to self.board).
+
+        Returns:
+            Optional[Result]: The outcome that wins, or None when no rule proposes one.
+        """
+        b = board or self.board
+        if b is None:
+            return None
+        return resolve_outcomes(
+            [result for result in (rule.outcome(b) for rule in self.active_rules()) if result]
+        )
+
+    def status(self, board: Optional[Board] = None) -> Optional[str]:
+        """Ask every rule whether it has something worth showing.
+
+        Args:
+            board: Optional Board instance (defaults to self.board).
+
+        Returns:
+            Optional[str]: The first thing a rule reports, or None when nothing does.
+        """
+        b = board or self.board
+        if b is None:
+            return None
+        for rule in self.active_rules():
+            message = rule.status(b)
+            if message:
+                return message
+        return None
+
+    def notify_move_made(self, move: Move, board: Optional[Board] = None) -> None:
+        """Tell every rule a move has been played.
+
+        Args:
+            move: The move that was played.
+            board: Optional Board instance (defaults to self.board).
+
+        Returns:
+            None
+        """
+        b = board or self.board
+        for rule in self.active_rules():
+            rule.on_move_made(b, move)
 
     def set_board(self, board: Board) -> None:
         """Assign the active chessboard.
@@ -169,7 +249,12 @@ class MoveValidator:
             return []
 
         r, c = start_pos
-        moves: List[Tuple[int, int]] = []
+        moves: List[Tuple[int, int]] = [
+            tuple(extra.end_pos)
+            for rule in self.active_rules()
+            for extra in rule.available_moves(b, piece)
+            if extra is not None
+        ]
 
         if isinstance(piece, Pawn) or piece.getType() == "pawn":
             # Pawn single forward step
@@ -242,6 +327,10 @@ class MoveValidator:
         legal_moves: List[Tuple[int, int]] = []
 
         for target_pos in pseudo_moves:
+            candidate = Move(start_pos, target_pos, piece=piece)
+            if not self.is_permitted(candidate, b):
+                continue
+
             # Simulate move to ensure it does not leave/place king in check
             original_target = b.get_piece_at(target_pos)
             b.set_piece_at(target_pos, piece)
@@ -257,6 +346,21 @@ class MoveValidator:
                 legal_moves.append(target_pos)
 
         return legal_moves
+
+    def is_permitted(self, move: Move, board: Optional[Board] = None) -> bool:
+        """Ask every rule whether this move is allowed.
+
+        Args:
+            move: The move being considered.
+            board: Optional Board instance (defaults to self.board).
+
+        Returns:
+            bool: False when any rule in force forbids it, True otherwise.
+        """
+        b = board or self.board
+        if b is None:
+            return True
+        return all(rule.permits_move(b, move) for rule in self.active_rules())
 
     def get_all_valid_moves(self, color: int, board: Optional[Board] = None) -> List[Move]:
         """Compute all strictly legal moves for all pieces belonging to a color.
@@ -279,9 +383,11 @@ class MoveValidator:
                     destinations = self.get_valid_moves((r, c), b)
                     for dest in destinations:
                         move_type = "capture" if b.get_piece_at(dest) is not None else "normal"
-                        all_moves.append(
-                            Move(start_pos=(r, c), end_pos=dest, piece=piece, move_type=move_type)
+                        candidate = Move(
+                            start_pos=(r, c), end_pos=dest, piece=piece, move_type=move_type
                         )
+                        if self.is_permitted(candidate, b):
+                            all_moves.append(candidate)
         return all_moves
 
     def is_valid_move(self, move: Move, board: Optional[Board] = None) -> bool:
@@ -295,7 +401,9 @@ class MoveValidator:
             True if the move is legal, False otherwise.
         """
         b = board or self.board
-        if b is None or not move.validate():
+        if b is None or not move.validate(b):
+            return False
+        if not self.is_permitted(move, b):
             return False
         valid_destinations = self.get_valid_moves(move.start_pos, b)
         return move.end_pos in valid_destinations
