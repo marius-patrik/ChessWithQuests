@@ -37,6 +37,8 @@ class Piece:
         max_steps: Optional[int] = None,
         initial_vectors: Optional[List[Tuple[int, int]]] = None,
         has_moved: bool = False,
+        symbols: Optional[Tuple[str, str]] = None,
+        fen: Optional[str] = None,
     ):
         """Initialize a piece.
 
@@ -63,6 +65,8 @@ class Piece:
         self._max_steps = max_steps
         self._initial_vectors = initial_vectors or []
         self.has_moved = has_moved
+        self._symbols = tuple(symbols) if symbols else None
+        self._fen = fen
 
     def getDirections(self) -> Optional[List[Tuple[int, int]]]:
         """Return the standard movement vectors for this piece.
@@ -99,6 +103,27 @@ class Piece:
             no first-move advance.
         """
         return list(self._initial_vectors)
+
+    def getSymbol(self) -> Optional[str]:
+        """Return the glyph this piece is drawn as.
+
+        Returns:
+            Optional[str]: The glyph for this piece's colour, or None when the configuration
+            declared no symbol.
+        """
+        if not self._symbols:
+            return None
+        return self._symbols[0] if self.__color == 1 else self._symbols[1]
+
+    def getFen(self) -> Optional[str]:
+        """Return the character this piece is written as in a position record.
+
+        Returns:
+            Optional[str]: The character's letter, unsided and in lower case, or None when
+            the piece takes no part in that notation. The colour is a matter of case, so
+            the letter alone is what a piece needs to know.
+        """
+        return self._fen
 
     def hasMoved(self) -> bool:
         """Return whether this piece has already moved.

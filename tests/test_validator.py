@@ -1,16 +1,17 @@
+from games.chess.board import build_board
 import pytest
 from games.chess.rules import build_rules
 from model.game.board import Board
 from model.game.move import Move
 from model.game.validator import MoveValidator
-from model.pieces.king import King
-from model.pieces.queen import Queen
-from model.pieces.rook import Rook
-from model.pieces.pawn import Pawn
+from games.chess.pieces.king import King
+from games.chess.pieces.queen import Queen
+from games.chess.pieces.rook import Rook
+from games.chess.pieces.pawn import Pawn
 
 
 def test_validator_initialization():
-    board = Board()
+    board = build_board()
     validator = MoveValidator(board, rules=build_rules())
     assert validator.find_royal(1) == (0, 4)
     assert validator.find_royal(-1) == (7, 4)
@@ -18,7 +19,7 @@ def test_validator_initialization():
 
 def test_royal_piece_is_declared_by_a_rule_not_a_type_name():
     """A validator with no rules in force has no royal piece, so nothing is ever in check."""
-    board = Board()
+    board = build_board()
     assert MoveValidator(board).find_royal(1) is None
     assert MoveValidator(board).is_check(1) is False
     assert MoveValidator(board).royal_kinds() == []
@@ -26,7 +27,7 @@ def test_royal_piece_is_declared_by_a_rule_not_a_type_name():
 
 
 def test_validator_pawn_moves():
-    board = Board()
+    board = build_board()
     validator = MoveValidator(board)
     # White pawn at (1, 0) can move to (2, 0) and (3, 0)
     valid_moves = validator.get_valid_moves((1, 0))
@@ -79,7 +80,7 @@ def test_validator_stalemate():
 
 
 def test_validator_simulate_move():
-    board = Board()
+    board = build_board()
     validator = MoveValidator(board)
     move = Move((1, 0), (2, 0))
     validator.set_move(move)

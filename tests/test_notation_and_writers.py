@@ -1,3 +1,4 @@
+from games.chess.board import build_board
 import pytest
 from model.misc.notation import pos_to_algebraic, algebraic_to_pos
 from model.misc.export_writers import ChessNotationWriter, ExportWriter
@@ -17,7 +18,7 @@ def test_algebraic_conversions():
 
 
 def test_chess_notation_writer_fen():
-    board = Board()
+    board = build_board()
     writer = ChessNotationWriter()
     fen = writer.to_fen(board, active_color=1)
     assert "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1" == fen

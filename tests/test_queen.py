@@ -1,5 +1,5 @@
 import pytest
-from model.pieces.queen import Queen
+from games.chess.pieces.queen import Queen
 from model.pieces.piece import Piece
 
 

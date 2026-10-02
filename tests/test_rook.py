@@ -1,5 +1,5 @@
 import pytest
-from model.pieces.rook import Rook
+from games.chess.pieces.rook import Rook
 from model.pieces.piece import Piece
 
 

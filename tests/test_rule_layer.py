@@ -17,8 +17,8 @@ from model.game.rule import KIND_DRAW, KIND_LOSS, KIND_WIN, Result, Rule, resolv
 from model.game.quest import Quest
 from model.game.validator import MoveValidator
 from model.game.field import Field
-from model.pieces.pawn import Pawn
-from model.pieces.rook import Rook
+from games.chess.pieces.pawn import Pawn
+from games.chess.pieces.rook import Rook
 
 FIXTURE = '''
 """A configuration written entirely outside the engine."""
@@ -29,8 +29,8 @@ from model.game.field import Field
 from model.game.move import Move
 from model.game.quest import Quest
 from model.game.rule import KIND_WIN, Result, Rule
-from model.pieces.pawn import Pawn
-from model.pieces.rook import Rook
+from games.chess.pieces.pawn import Pawn
+from games.chess.pieces.rook import Rook
 
 
 class NoPawnMoves(Rule):

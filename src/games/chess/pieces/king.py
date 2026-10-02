@@ -6,7 +6,7 @@ whether it is royal is a rule, and that rule is chess's to declare.
 
 from typing import Any
 
-from .piece import Piece
+from model.pieces.piece import Piece
 
 DIRECTIONS = [
     (0, 1),
@@ -31,6 +31,8 @@ class King(Piece):
             piece_type: Piece type descriptor (default: "king").
         """
         super().__init__(
+            symbols=("♔", "♚"),
+            fen="K",
             color=color,
             piece_type=piece_type,
             vectors=DIRECTIONS,

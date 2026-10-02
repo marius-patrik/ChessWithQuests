@@ -7,7 +7,7 @@ vector in `initial_vectors` is available once.
 
 from typing import Any, List, Tuple
 
-from .piece import Piece
+from model.pieces.piece import Piece
 
 
 class Pawn(Piece):
@@ -22,6 +22,8 @@ class Pawn(Piece):
         """
         direction = 1 if color == 1 or color == "white" else -1
         super().__init__(
+            symbols=("♙", "♟"),
+            fen="P",
             color=color,
             piece_type=piece_type,
             vectors=[(direction, 0)],

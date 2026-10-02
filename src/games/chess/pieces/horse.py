@@ -1,6 +1,6 @@
 """Horse (Knight) chess piece implementation with L-shaped jumping movement."""
 
-from .piece import Piece
+from model.pieces.piece import Piece
 
 
 class Horse(Piece):
@@ -24,6 +24,8 @@ class Horse(Piece):
             (-1, 2),
         ]
         super().__init__(
+            symbols=("♘", "♞"),
+            fen="N",
             color=color,
             piece_type=piece_type,
             vectors=vectors,

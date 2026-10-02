@@ -1,11 +1,12 @@
+from games.chess.board import build_board
 import pytest
 from model.game.board import Board
-from model.pieces.pawn import Pawn
-from model.pieces.queen import Queen
+from games.chess.pieces.pawn import Pawn
+from games.chess.pieces.queen import Queen
 
 
 def test_board_dimensions_and_setup():
-    board = Board()
+    board = build_board()
     assert board.dimensions == (8, 8)
     assert board.is_within_bounds(0, 0)
     assert not board.is_within_bounds(-1, 0)

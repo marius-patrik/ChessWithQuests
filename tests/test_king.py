@@ -1,5 +1,5 @@
 import pytest
-from model.pieces.king import King
+from games.chess.pieces.king import King
 from model.pieces.piece import Piece
 
 

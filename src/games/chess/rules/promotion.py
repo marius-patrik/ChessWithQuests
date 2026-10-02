@@ -150,10 +150,10 @@ def _make_promotion(piece: Any, kind: str) -> Any:
     Returns:
         Any: A piece of that kind and colour, or None when the kind is unknown.
     """
-    from model.pieces.bishop import Bishop
-    from model.pieces.horse import Horse
-    from model.pieces.queen import Queen
-    from model.pieces.rook import Rook
+    from games.chess.pieces.bishop import Bishop
+    from games.chess.pieces.horse import Horse
+    from games.chess.pieces.queen import Queen
+    from games.chess.pieces.rook import Rook
 
     catalogue = {"queen": Queen, "rook": Rook, "bishop": Bishop, "knight": Horse, "horse": Horse}
     factory = catalogue.get(kind)

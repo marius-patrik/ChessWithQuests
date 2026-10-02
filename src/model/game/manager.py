@@ -3,7 +3,7 @@
 from typing import Any, List, Optional
 
 from model.game.board import Board
-from model.game.configuration import Configuration
+from model.game.configuration import Configuration, load_default_configuration
 from model.game.move import Move
 from model.game.player import Player
 from model.game.rule import Result
@@ -39,10 +39,14 @@ class GameManager:
             logger: Optional GameLogger instance.
             validator: Optional MoveValidator instance.
             configuration: Optional configuration to play. Its board and its rules in force
-                are what the game runs on.
+                are what the game runs on. When none is given the shipped default
+                configuration is loaded, so a manager with no arguments plays the default
+                game rather than an empty rectangle.
         """
-        self.configuration: Optional[Configuration] = configuration
-        self.board: Board = board or (configuration.board if configuration else None) or Board()
+        self.configuration: Optional[Configuration] = configuration or load_default_configuration()
+        self.board: Board = (
+            board or (self.configuration.board if self.configuration else None) or Board()
+        )
         self.players: List[Player] = players or [Player(1), Player(-1)]
         self.active_player: int = 1
         self.current_move: Optional[Move] = None

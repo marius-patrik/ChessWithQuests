@@ -4,15 +4,16 @@ Every case here sets up a position and asks a rule a question. Nothing reaches i
 internals, because the point of the rule layer is that a rule is asked rather than inspected.
 """
 
+from games.chess.board import build_board
 from model.game.board import Board
 from model.game.move import Move
 from model.game.validator import MoveValidator
-from model.pieces.bishop import Bishop
-from model.pieces.horse import Horse
-from model.pieces.king import King
-from model.pieces.pawn import Pawn
-from model.pieces.queen import Queen
-from model.pieces.rook import Rook
+from games.chess.pieces.bishop import Bishop
+from games.chess.pieces.horse import Horse
+from games.chess.pieces.king import King
+from games.chess.pieces.pawn import Pawn
+from games.chess.pieces.queen import Queen
+from games.chess.pieces.rook import Rook
 from games.chess.rules import build_rules
 from games.chess.rules.attacks import has_legal_move
 from games.chess.rules.check import in_check
@@ -127,7 +128,7 @@ def test_stalemate_is_a_draw_and_not_a_loss():
 
 def test_the_opening_position_leaves_nobody_in_check():
     """Neither king starts attacked, so no status fires before the first move."""
-    board = Board()
+    board = build_board()
     assert in_check(board, 1) is False
     assert in_check(board, -1) is False
 
@@ -252,7 +253,7 @@ def test_promotion_is_offered_to_the_four_choices():
 
 def test_the_validator_asks_the_rules_rather_than_guessing():
     """With chess in force the engine knows a king; with no rules it knows nothing."""
-    board = Board()
+    board = build_board()
 
     with_chess = MoveValidator(board, rules=build_rules())
     assert with_chess.royal_kinds() == ["king"]

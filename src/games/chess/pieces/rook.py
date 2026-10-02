@@ -1,6 +1,6 @@
 """Rook: a ray mover along the ranks and files."""
 
-from .piece import Piece
+from model.pieces.piece import Piece
 
 
 class Rook(Piece):
@@ -15,6 +15,8 @@ class Rook(Piece):
         """
         vectors = [(0, 1), (0, -1), (1, 0), (-1, 0)]
         super().__init__(
+            symbols=("♖", "♜"),
+            fen="R",
             color=color,
             piece_type=piece_type,
             vectors=vectors,

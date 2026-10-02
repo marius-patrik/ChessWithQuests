@@ -36,7 +36,7 @@ class Timer:
         """Reset both player clocks to the initial time."""
         self.player_times = [self.initial_time, self.initial_time]
 
-    def tick(self, player: int, elapsed_seconds: int = 1) -> None:
+    def tick(self, player: Union[int, str], elapsed_seconds: int = 1) -> None:
         """Deduct elapsed seconds from a player's clock.
 
         Args:
@@ -46,7 +46,7 @@ class Timer:
         idx = self._get_player_index(player)
         self.player_times[idx] = max(0, self.player_times[idx] - elapsed_seconds)
 
-    def add_time(self, player: int, increment_seconds: int) -> None:
+    def add_time(self, player: Union[int, str], increment_seconds: int) -> None:
         """Add increment time to a player's clock.
 
         Args:
@@ -56,7 +56,7 @@ class Timer:
         idx = self._get_player_index(player)
         self.player_times[idx] += increment_seconds
 
-    def get_time(self, player: int) -> int:
+    def get_time(self, player: Union[int, str]) -> int:
         """Get remaining time in seconds for a player.
 
         Args:
@@ -68,7 +68,7 @@ class Timer:
         idx = self._get_player_index(player)
         return self.player_times[idx]
 
-    def is_expired(self, player: int) -> bool:
+    def is_expired(self, player: Union[int, str]) -> bool:
         """Check if a player's clock has run out of time.
 
         Args:

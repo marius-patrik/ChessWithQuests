@@ -1,8 +1,9 @@
+from games.chess.board import build_board
 import pytest
 from model.game.move import Move
 from model.game.board import Board
-from model.pieces.pawn import Pawn
-from model.pieces.queen import Queen
+from games.chess.pieces.pawn import Pawn
+from games.chess.pieces.queen import Queen
 
 
 def test_move_initialization_and_properties():
@@ -26,7 +27,7 @@ def test_move_validate():
 
 
 def test_move_execute_on_board():
-    board = Board()
+    board = build_board()
     move = Move((1, 0), (2, 0))
     assert move.validate(board) is True
     assert move.execute(board) is True
