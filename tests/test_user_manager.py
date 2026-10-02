@@ -14,7 +14,7 @@ def test_user_manager_registration():
     bob = User("bob", elo=1400)
     uid2 = manager.register_user(bob, user_id=42)
     assert uid2 == 42
-    assert manager.find_user(42) is bob
+    assert manager.get_user(42) is bob
     assert "alice" in manager.user_log
 
 
