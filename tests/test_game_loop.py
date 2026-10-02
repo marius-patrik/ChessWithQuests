@@ -180,3 +180,49 @@ def test_no_quest_oracle_letter_is_used(script):
     for quest in game.quest_manager.get_quests():
         assert isinstance(quest, Quest)
         assert isinstance(quest.validate(), bool)
+
+
+def test_only_a_real_capture_counts_as_a_capture():
+    """A move event is built after the move is applied, so reading the board would call every
+    move a capture: by then the destination holds the piece that just arrived."""
+    game = GameManager()
+
+    quiet = [((1, 4), (3, 4)), ((6, 4), (4, 4)), ((0, 5), (3, 2)), ((7, 1), (5, 2))]
+    for start, end in quiet:
+        game.make_move(Move(start, end))
+
+    assert [event.is_capture for event in game.move_events] == [False] * 4
+    assert all(event.captured_piece_type is None for event in game.move_events)
+    assert not [
+        q
+        for q in game.quest_manager.get_quests()
+        if "apture" in type(q).__name__
+        and q.validate()
+        and type(q).__name__ != "SurviveWithoutCapture"
+    ]
+
+    # Nf6, then the real capture.
+    game.make_move(Move((0, 3), (4, 7)))
+    game.make_move(Move((7, 6), (5, 5)))
+    game.make_move(Move((4, 7), (6, 5)))
+
+    last = game.move_events[-1]
+    assert last.is_capture is True
+    assert last.captured_piece_type == "pawn"
+
+
+def test_a_capture_quest_completes_on_the_capture_and_not_before():
+    game = GameManager()
+    for start, end in [((1, 4), (3, 4)), ((6, 4), (4, 4)), ((0, 5), (3, 2)), ((7, 1), (5, 2))]:
+        game.make_move(Move(start, end))
+
+    first_blood = next(
+        q for q in game.quest_manager.get_quests() if type(q).__name__ == "FirstBlood"
+    )
+    assert first_blood.validate() is False
+
+    for start, end in [((0, 3), (4, 7)), ((7, 6), (5, 5)), ((4, 7), (6, 5))]:
+        game.make_move(Move(start, end))
+
+    assert first_blood.validate() is True
+    assert first_blood in game.quest_manager.get_completed_quests()

@@ -230,8 +230,11 @@ class GameManager:
         Returns:
             MoveEvent: What happened, as the quests want to hear it.
         """
-        piece = move.piece or self.board.get_piece_at(move.start_pos)
-        captured = move.captured_piece or self.board.get_piece_at(move.end_pos)
+        # Both come off the Move, which recorded them while the board still held the position
+        # before the move. Reading the board here would read the position after it, where the
+        # destination holds the piece that just arrived and every move looks like a capture.
+        piece = move.piece
+        captured = move.captured_piece
         return MoveEvent(
             move=move,
             position=self.board,
