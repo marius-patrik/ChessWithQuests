@@ -21,7 +21,7 @@ DARK = "#b58863"
 #: The ring drawn on the selected piece's square.
 SELECTED = "#ffd700"
 #: The dot drawn on a square the selected piece may move to.
-TARGET = "#4a7c2f"
+TARGET = "#2f6b1f"
 #: The colour of a square the active player's royal piece is standing on while in check.
 IN_CHECK = "#d9534f"
 
@@ -120,12 +120,16 @@ class BoardView(ttk.Frame):
 
         for row in range(board.rows):
             for col in range(board.cols):
+                # Drawn from White's side: rank 1 at the bottom, the a-file on the left, which
+                # is how a player expects to read a board. Row 0 holds White's back rank, and
+                # `pos_to_algebraic` calls row 0 rank 1, so the view must agree with it.
+                board_row = board.rows - 1 - row
                 left, top = self._origin(col, row)
                 right = left + self.square_size
                 bottom = top + self.square_size
-                square = (row, col)
+                square = (board_row, col)
 
-                fill = LIGHT if (row + col) % 2 == 0 else DARK
+                fill = LIGHT if (board_row + col) % 2 == 0 else DARK
                 if square == self.in_check:
                     fill = IN_CHECK
                 self.canvas.create_rectangle(left, top, right, bottom, fill=fill, outline="#8b6b4a")
@@ -194,7 +198,7 @@ class BoardView(ttk.Frame):
         Returns:
             None
         """
-        radius = self.square_size * 0.14
+        radius = self.square_size * 0.2
         centre_x = (left + right) / 2
         centre_y = (top + bottom) / 2
         self.canvas.create_oval(
@@ -207,26 +211,27 @@ class BoardView(ttk.Frame):
         )
 
     def _draw_coordinates(self) -> None:
-        """Label the files along the bottom and the ranks up the left.
+        """Label the files along the bottom and the ranks down the left.
 
         Returns:
             None
         """
+        rows = self.board.rows
         for col in range(self.board.cols):
             centre_x = (col + 0.5) * self.square_size
             self.canvas.create_text(
                 centre_x,
-                self.board.rows * self.square_size - 10,
+                rows * self.square_size - 10,
                 text=self._file_label(col),
                 fill="#3b2a1a",
                 font=("TkDefaultFont", 9),
             )
-        for row in range(self.board.rows):
+        for row in range(rows):
             centre_y = (row + 0.5) * self.square_size
             self.canvas.create_text(
                 10,
                 centre_y,
-                text=self._rank_label(row),
+                text=str(rows - row),
                 fill="#3b2a1a",
                 font=("TkDefaultFont", 9),
             )
@@ -243,18 +248,6 @@ class BoardView(ttk.Frame):
         """
         return chr(ord("a") + col)
 
-    @staticmethod
-    def _rank_label(row: int) -> str:
-        """Return the number naming a rank.
-
-        Args:
-            row: The rank's index, counted from the far side.
-
-        Returns:
-            str: The rank's number, so a row is the highest rank first.
-        """
-        return str(8 - row)
-
     def _clicked(self, event: tk.Event) -> None:
         """Report the square the player clicked.
 
@@ -268,5 +261,7 @@ class BoardView(ttk.Frame):
             return
         col = int(event.x // self.square_size)
         row = int(event.y // self.square_size)
-        if self.board.is_within_bounds(row, col):
-            self.on_square_clicked((row, col))
+        # The same inversion the draw applies: the top of the window is rank 8.
+        board_row = self.board.rows - 1 - row
+        if self.board.is_within_bounds(board_row, col):
+            self.on_square_clicked((board_row, col))

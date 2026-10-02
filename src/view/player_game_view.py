@@ -11,6 +11,7 @@ from typing import Optional, Tuple
 
 from controller.window_controller import WindowController
 from model.game.manager import GameManager
+from model.misc.notation import pos_to_algebraic
 from view.game_view import BoardView
 from view.player_view import PlayerView
 from view.quest_view import QuestList
@@ -227,9 +228,11 @@ class PlayerGameView(ttk.Frame):
             return
         self.history.delete(0, "end")
         for number, move in enumerate(moves, start=1):
-            start = move.start_pos
-            end = move.end_pos
-            self.history.insert("end", f"{number}. {start[0]},{start[1]} → {end[0]},{end[1]}")
+            # Notated rather than printed as coordinates: the notation helper is what the
+            # transcript uses, so the list and the export cannot disagree.
+            start = pos_to_algebraic(move.start_pos)
+            end = pos_to_algebraic(move.end_pos)
+            self.history.insert("end", f"{number}. {start} – {end}")
 
     def _quit(self) -> None:
         """Close the window.
