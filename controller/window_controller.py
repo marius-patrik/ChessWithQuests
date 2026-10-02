@@ -2,10 +2,7 @@
 
 from typing import Optional, Tuple, Dict, Any
 
-try:
-    from controller.controller import GameController
-except ImportError:
-    from .controller import GameController
+from controller.controller import GameController
 
 
 class WindowController:

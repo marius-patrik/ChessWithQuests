@@ -1,12 +1,6 @@
 """Horse (Knight) chess piece implementation with L-shaped jumping movement."""
 
-try:
-    from .piece import Piece
-except ImportError:
-    try:
-        from model.pieces.piece import Piece
-    except ImportError:
-        from piece import Piece
+from model.pieces.piece import Piece
 
 
 class Horse(Piece):

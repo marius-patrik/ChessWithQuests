@@ -1,1 +1,0 @@
-"""ChessWithQuests source root."""

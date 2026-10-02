@@ -2,22 +2,13 @@
 
 from typing import Optional, List, Tuple
 
-try:
-    from model.pieces.pawn import Pawn
-    from model.pieces.rook import Rook
-    from model.pieces.horse import Horse
-    from model.pieces.bishop import Bishop
-    from model.pieces.queen import Queen
-    from model.pieces.king import King
-    from model.pieces.piece import Piece
-except ImportError:
-    from ..pieces.pawn import Pawn
-    from ..pieces.rook import Rook
-    from ..pieces.horse import Horse
-    from ..pieces.bishop import Bishop
-    from ..pieces.queen import Queen
-    from ..pieces.king import King
-    from ..pieces.piece import Piece
+from model.pieces.pawn import Pawn
+from model.pieces.rook import Rook
+from model.pieces.horse import Horse
+from model.pieces.bishop import Bishop
+from model.pieces.queen import Queen
+from model.pieces.king import King
+from model.pieces.piece import Piece
 
 
 class Board:

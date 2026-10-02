@@ -2,12 +2,8 @@
 
 from typing import List, Optional, Any
 
-try:
-    from model.misc.notation import pos_to_algebraic
-    from model.misc.metadata import MetadataWriter
-except ImportError:
-    from .notation import pos_to_algebraic
-    from .metadata import MetadataWriter
+from model.misc.notation import pos_to_algebraic
+from model.misc.metadata import MetadataWriter
 
 
 class ExportWriter:
