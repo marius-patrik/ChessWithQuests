@@ -1,18 +1,86 @@
 name: Release
 
-# A caller, not a copy: the job body comes from the pinned pipeline commit.
 on:
+  # A release is a tag. Pushing the tag is how it is requested.
   push:
-    branches: ["main"]
+    tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, with or without the leading v (for example 0.2.0 or v0.2.0)"
+        required: true
+        type: string
 
+# This project ships no build artifacts: pyproject.toml carries only tooling configuration, so
+# there is nothing for `python -m build` to produce. A release here is a tag and its notes, with no
+# assets attached.
+#
+# Versioning is pridever. Resolving the next version means reading the commit history and judging
+# it, which is the maintainer's call and not this workflow's, so this workflow never guesses one:
+# it publishes the version it is given, either by a `v*` tag push or by the dispatch input.
 permissions:
   contents: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release:
-    uses: marius-patrik/DarkFactory/.github/workflows/release.yml@7ecba1617f553e6a34ceb31177e1ac84d08c350f
-    with:
-      pipeline-repo: marius-patrik/DarkFactory
-      pipeline-ref: "7ecba1617f553e6a34ceb31177e1ac84d08c350f"
-    secrets: inherit
+    name: release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        # Tags decide what has already been released, so a shallow clone would answer wrongly.
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve the tag
+        id: resolve
+        env:
+          REQUESTED: ${{ inputs.version }}
+        run: |
+          if [ -n "$REQUESTED" ]; then
+            VERSION="$REQUESTED"
+          else
+            VERSION="${GITHUB_REF_NAME}"
+          fi
+          case "$VERSION" in
+            v*) TAG="$VERSION" ;;
+            *) TAG="v$VERSION" ;;
+          esac
+          echo "Releasing $TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create the tag
+        env:
+          TAG: ${{ steps.resolve.outputs.tag }}
+        run: |
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "$TAG already exists; nothing to tag."
+            exit 0
+          fi
+          git tag "$TAG"
+          git push origin "$TAG"
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; nothing to do."
+            exit 0
+          fi
+          # Notes are generated from the commits since the previous tag, which is the whole content
+          # of a release in a project that ships no artifacts.
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --generate-notes
+          {
+            echo "## Released \`$TAG\`"
+            echo
+            echo "Assets: none. This project ships no build artifacts."
+          } >> "$GITHUB_STEP_SUMMARY"
