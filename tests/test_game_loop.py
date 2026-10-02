@@ -89,15 +89,43 @@ def test_a_finished_game_credits_its_users():
         assert len(player.getUser().completed_quests) == len(game.completed_quests)
 
 
-def test_the_clock_runs_for_both_sides():
-    """Both clocks lose the time their player spent."""
+def test_the_clock_charges_the_time_a_turn_actually_took():
+    """A clock counts seconds, not moves.
+
+    It used to charge one second per move, so it stood still while a player thought and drained
+    at the speed of the game rather than the speed of the clock.
+    """
     game = GameManager()
-    before = {colour: game.timer.get_time(colour) for colour in (1, -1)}
+    start = game.timer.get_time(1)
 
-    play(game, FOOLS_MATE)
+    # A turn that lasted three seconds, charged with an explicit reading so the test does not
+    # have to sleep.
+    game.start_turn_clock(monotonic=100.0)
+    assert game.charge_turn(monotonic=103.0) == 3
+    assert game.timer.get_time(1) == start - 3
 
-    assert game.timer.get_time(1) == before[1] - 2  # White moved twice
-    assert game.timer.get_time(-1) == before[-1] - 2  # Black moved twice
+
+def test_completing_a_move_earns_the_configured_increment():
+    """The configuration offers a five second Fischer increment, and it is applied."""
+    game = GameManager()
+
+    assert game.increment_seconds == 5
+    before = game.timer.get_time(1)
+
+    game.start_turn_clock(monotonic=100.0)
+    game.charge_turn(monotonic=101.0)
+    game.credit_increment(1)
+
+    assert game.timer.get_time(1) == before - 1 + 5
+
+
+def test_a_turn_with_no_clock_reading_started_is_chargeable_nothing():
+    """A game that has not begun has no turn to charge."""
+    game = GameManager()
+    game.turn_started = None
+    before = game.timer.get_time(1)
+    assert game.charge_turn() == 0
+    assert game.timer.get_time(1) == before
 
 
 def test_the_transcript_records_the_game_in_each_notation():

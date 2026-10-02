@@ -26,26 +26,38 @@ class PromotionRule(Rule):
         """
         return [
             Field(
+                "promotable_kinds",
+                "text",
+                "Kinds that promote",
+                "pawn",
+            ),
+            Field(
                 "promotion_kinds",
                 "choice",
                 "Promote to",
                 ("queen", "rook", "bishop", "horse"),
                 choices=("queen", "rook", "bishop", "horse"),
-            )
+            ),
         ]
 
-    @staticmethod
-    def promotion_row(position: Any, piece: Any) -> Optional[int]:
+    def promotion_row(self, position: Any, piece: Any) -> Optional[int]:
         """Return the row on which this piece promotes.
+
+        Whether a piece promotes is declared, not inferred. A rook and a king both have a
+        purely vertical step, so deriving the rank from geometry promoted every piece that
+        could slide sideways on the far rank: no queen or rook could ever reach it, and a king
+        walking its own back rank turned into a knight.
 
         Args:
             position: The board to read.
             piece: The piece asking.
 
         Returns:
-            Optional[int]: The row a single-square forward step reaches, or None when the
-            piece has no such step and therefore never promotes.
+            Optional[int]: The row a single-square forward step reaches, or None when this
+            piece does not promote.
         """
+        if not self._promotes(piece):
+            return None
         origin = _origin(position, piece)
         if origin is None:
             return None
@@ -54,6 +66,18 @@ class PromotionRule(Rule):
                 continue
             return position.rows - 1 if dr > 0 else 0
         return None
+
+    def _promotes(self, piece: Any) -> bool:
+        """Report whether this piece is one that promotes.
+
+        Args:
+            piece: The piece asking.
+
+        Returns:
+            bool: True when the piece's kind is one of the declared promoting kinds.
+        """
+        configured = _split(self.value.get("promotable_kinds")) or ["pawn"]
+        return piece is not None and piece.getType() in configured
 
     def available_moves(self, position: Any, piece: Any) -> List[Move]:
         """Offer one promoting move per choice of replacement piece.
@@ -140,6 +164,22 @@ class PromotionRule(Rule):
         return ["queen"]
 
 
+def _split(value: Any) -> List[str]:
+    """Read a comma-separated configuration value as a list.
+
+    Args:
+        value: The configured value.
+
+    Returns:
+        List[str]: The entries, empty when nothing is configured.
+    """
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    if value:
+        return [str(item) for item in value]
+    return []
+
+
 def _make_promotion(piece: Any, kind: str) -> Any:
     """Build the replacement piece for a promotion.
 
@@ -157,7 +197,9 @@ def _make_promotion(piece: Any, kind: str) -> Any:
 
     catalogue = {"queen": Queen, "rook": Rook, "bishop": Bishop, "knight": Horse, "horse": Horse}
     factory = catalogue.get(kind)
-    return None if factory is None else factory(piece.getColor())
+    if factory is None:
+        raise ValueError(f"{kind!r} is not a piece kind a pawn can promote to")
+    return factory(piece.getColor())
 
 
 def _origin(position: Any, piece: Any) -> Optional[tuple]:

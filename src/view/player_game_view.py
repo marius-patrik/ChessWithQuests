@@ -20,6 +20,13 @@ from view.quest_view import QuestList
 #: a click, so the view cannot wait for one.
 REFRESH_INTERVAL_MS = 500
 
+#: The states in which the game is over and no further move may be played.
+TERMINAL_STATES = (
+    GameManager.STATE_TIMEOUT,
+    GameManager.STATE_CHECKMATE,
+    GameManager.STATE_STALEMATE,
+)
+
 #: The state a game can be in, and what the footer says about it.
 STATE_LABELS = {
     GameManager.STATE_TIMEOUT: "Time is up.",
@@ -38,6 +45,8 @@ class PlayerGameView(ttk.Frame):
         master: tk.Misc,
         window_controller: WindowController,
         square_size: int = 56,
+        on_settings=None,
+        on_new_game_request=None,
     ):
         """Build the window.
 
@@ -48,6 +57,8 @@ class PlayerGameView(ttk.Frame):
         """
         super().__init__(master, padding=10)
         self.window_controller = window_controller
+        self.on_settings = on_settings
+        self.on_new_game_request = on_new_game_request
         self.manager: GameManager = window_controller.game_controller.game_manager
 
         self.turn = tk.StringVar()
@@ -71,6 +82,10 @@ class PlayerGameView(ttk.Frame):
             side="left"
         )
         ttk.Button(heading, text="New game", command=self.on_new_game).pack(side="right")
+        if self.on_settings is not None:
+            ttk.Button(heading, text="Settings", command=self.on_settings).pack(
+                side="right", padx=(0, 6)
+            )
         ttk.Button(heading, text="Quit", command=self._quit).pack(side="right", padx=(0, 6))
 
         top = self.manager.players[-1] if self.manager.players else None
@@ -95,9 +110,12 @@ class PlayerGameView(ttk.Frame):
         )
         self.board_view.pack(pady=6)
         self.bottom_player = (
-            PlayerView(self, bottom, self.manager, side="bottom") if bottom else None
+            PlayerView(left, bottom, self.manager, side="bottom") if bottom else None
         )
         if self.bottom_player is not None:
+            # Packed into `left`, beside the board. Packed into `self` it came after `body`,
+            # which takes all the slack, so on a short window the panel and the footer were
+            # squeezed to nothing and silently stopped appearing.
             self.bottom_player.pack(fill="x")
 
         right = ttk.Frame(body, padding=(12, 0))
@@ -124,7 +142,10 @@ class PlayerGameView(ttk.Frame):
         Returns:
             None
         """
-        if self.manager.get_state() != GameManager.STATE_IN_PROGRESS:
+        # Only a finished game refuses clicks. Check is an ordinary position the player has to
+        # answer, so treating it as terminal froze the board for the rest of the game the
+        # moment anybody was put in check.
+        if self.manager.get_state() in TERMINAL_STATES:
             self.refresh()
             return
 
@@ -156,17 +177,30 @@ class PlayerGameView(ttk.Frame):
             None
         """
         self.manager = manager
+        # The panels hold the manager and the quest manager they were built with, so swapping
+        # the game without rebinding them left the clocks and quests showing the old game.
+        for panel in (self.top_player, self.bottom_player):
+            if panel is not None:
+                panel.manager = manager
+        self.quest_list.quest_manager = manager.quest_manager
         self.board_view.refresh(manager.board)
         self.board_view.set_selection(None, [])
         self.quest_list.rebuild()
+        self.history.delete(0, "end")
         self.refresh()
 
     def on_new_game(self) -> None:
-        """Deal a new game and redraw everything.
+        """Offer the game chooser again, then deal a new game of what was chosen.
+
+        Choosing the configuration is the player's decision and it belongs in front of every
+        game, not only the first one, so New game opens the same modal the program did.
 
         Returns:
             None
         """
+        if self.on_new_game_request is not None:
+            self.on_new_game_request()
+            return
         self.manager.new_game()
         self.window_controller.game_controller.reset_selection()
         self.window_controller.set_status("New game.")
@@ -192,7 +226,7 @@ class PlayerGameView(ttk.Frame):
             else None
         )
 
-        if state != GameManager.STATE_IN_PROGRESS:
+        if state in TERMINAL_STATES:
             self.turn.set("Game over")
         else:
             self.turn.set("White to move" if active == 1 else "Black to move")
@@ -202,8 +236,12 @@ class PlayerGameView(ttk.Frame):
                 panel.refresh(board, active)
         self.quest_list.refresh()
 
+        if state not in TERMINAL_STATES:
+            # B5: the footer was only ever set, never cleared, so it kept announcing the
+            # previous game's result.
+            self.status.set(self.window_controller.status_message)
         label = STATE_LABELS.get(state, "")
-        if label:
+        if label and state in TERMINAL_STATES:
             result = self.manager.result
             if result is not None:
                 winner = result.winner
@@ -241,7 +279,9 @@ class PlayerGameView(ttk.Frame):
             None
         """
         self.window_controller.stop()
-        self.master.destroy()
+        # The master is the shell frame, not the window: destroying it left the process alive
+        # with a blank window and a running mainloop.
+        self.winfo_toplevel().destroy()
 
     def start_auto_refresh(self, interval_ms: int = REFRESH_INTERVAL_MS) -> Optional[str]:
         """Begin redrawing on a timer, so clocks and quests keep up on their own.

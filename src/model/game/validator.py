@@ -64,13 +64,25 @@ class MoveValidator:
         Returns:
             None
         """
+        previous = {id(rule): (rule.clock, rule.active_color) for rule in self.rules}
         self.rules = list(rules)
         for rule in self.rules:
             rule.rules = self.rules
-            rule.clock = clock
+            # Handing a rule its clock or whose turn it is only when one was supplied. A
+            # question like "does anybody have a legal move" composes the same rules again, and
+            # passing no clock used to strip the clock rule of the clock it was reading, so a
+            # flagged player could never lose on time.
+            rule.clock = clock if clock is not None else previous.get(id(rule), (None, None))[0]
             if active_color is not None:
                 rule.active_color = active_color
-            rule.attach()
+            elif id(rule) in previous:
+                rule.active_color = previous[id(rule)][1]
+            if rule not in self.rules[: self.rules.index(rule)]:
+                # Only a rule joining for the first time is attached. Re-attaching a rule that
+                # is already in a game wipes the state it accumulated — the positions a
+                # repetition has seen, the colours that have castled — so asking a question
+                # mid-game reset the very history the question is about.
+                rule.attach()
 
     def active_rules(self) -> List[Rule]:
         """Return the rules that are in force.
@@ -345,7 +357,16 @@ class MoveValidator:
         if not piece.hasMoved():
             for dr, dc in piece.getInitialVectors():
                 nr, nc = r + dr, c + dc
-                if b.is_within_bounds(nr, nc) and b.get_piece_at((nr, nc)) is None:
+                if not b.is_within_bounds(nr, nc) or b.get_piece_at((nr, nc)) is not None:
+                    continue
+                # A first-only advance is a walk, not a leap: every square between here and
+                # there must be empty, or a pawn steps over whatever is sitting on it.
+                blocked = False
+                for step in range(1, max(abs(dr), abs(dc))):
+                    if b.get_piece_at((r + dr // step * step, c + dc // step * step)) is not None:
+                        blocked = True
+                        break
+                if not blocked:
                     add((nr, nc))
 
         return moves

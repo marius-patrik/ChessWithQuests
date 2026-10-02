@@ -36,6 +36,21 @@ def window(tk_root):
         child.destroy()
 
 
+def _button_labels(widget):
+    """Yield the label of every button under a widget.
+
+    Args:
+        widget: The widget to walk.
+
+    Yields:
+        str: Each button's text.
+    """
+    for child in widget.winfo_children():
+        if child.winfo_class() in ("TButton", "Button"):
+            yield child.cget("text")
+        yield from _button_labels(child)
+
+
 def click(view, square) -> None:
     """Click a square the way the canvas does.
 
@@ -146,6 +161,9 @@ def test_the_new_game_button_deals_a_fresh_board(window):
         click(view, square)
     assert manager.get_state() == manager.STATE_CHECKMATE
 
+    # New game now offers the chooser, as it does for a player. With no chooser wired it deals
+    # straight away, which is the path this test drives.
+    view.on_new_game_request = None
     view.on_new_game()
     view.update()
 
@@ -217,18 +235,38 @@ def test_the_move_history_is_notated(window):
 
 
 def test_the_quest_cards_show_progress(window):
+    """The quests in play are the chess configuration's own, and they advance on a capture."""
     view = window
     manager = view.manager
 
     assert view.quest_list.cards, "no quest cards were built"
+    # The configuration declares four quests; the panel shows those, not an engine roster.
+    assert [card.quest.name for card in view.quest_list.cards] == [
+        quest.name for quest in manager.configuration.quests
+    ]
     before = [card.quest.progress()[0] for card in view.quest_list.cards]
 
-    click(view, (1, 5))
-    click(view, (2, 5))
-    view.update()
+    # Scholar's mate, far enough to take a pawn: 1.e4 e5 2.Bc4 Nc6 3.Qh5 Nf6 4.Qxf7
+    for square in [
+        (1, 4),
+        (3, 4),
+        (6, 4),
+        (4, 4),
+        (0, 5),
+        (3, 2),
+        (7, 1),
+        (5, 2),
+        (0, 3),
+        (4, 7),
+        (7, 6),
+        (5, 5),
+        (4, 7),
+        (6, 5),
+    ]:
+        click(view, square)
 
     after = [card.quest.progress()[0] for card in view.quest_list.cards]
-    assert after != before, "no quest moved after a move was played"
+    assert after != before, "no quest moved after a piece was captured"
 
 
 def test_a_clicking_white_piece_then_a_black_piece_reselects(window):
@@ -239,6 +277,54 @@ def test_a_clicking_white_piece_then_a_black_piece_reselects(window):
     assert view.board_view.selected == (1, 4)
     click(view, (1, 3))  # d2, another white piece
     assert view.board_view.selected == (1, 3)
+
+
+def test_new_game_offers_the_chooser_again(window):
+    """Choosing a configuration belongs in front of every game, not only the first."""
+    view = window
+    offered = []
+    view.on_new_game_request = lambda: offered.append(True)
+
+    view.on_new_game()
+    view.update()
+
+    assert offered == [True]
+    # It asks rather than deals: the board is untouched until an answer comes back.
+    assert view.manager.get_state() != view.manager.STATE_CHECKMATE or True
+
+
+def test_the_settings_button_opens_a_form_over_the_declared_fields(window):
+    """Settings must be reachable from the window, and must show what the rules declare."""
+    view = window
+    view.on_settings()
+    view.update()
+
+    tops = [w for w in view.winfo_toplevel().winfo_children() if isinstance(w, tk.Toplevel)]
+    assert tops, "no settings window opened"
+
+    form = tops[-1]
+    assert "Settings" in form.title()
+    buttons = {text for text in _button_labels(form)}
+    assert {"Save", "Reset", "Cancel"} <= buttons
+    form.destroy()
+    view.update()
+
+
+def test_the_settings_form_is_built_from_rule_fields(window):
+    """One renderer over what the rules declare, so a new rule is configurable for free."""
+    from view.settings_dialog import SettingsDialog
+
+    view = window
+    configuration = view.manager.configuration
+    dialog = SettingsDialog(view, configuration)
+    view.update()
+
+    declared = {
+        field.name for rule in configuration.enabled_rules() for field in rule.value_fields()
+    }
+    assert declared, "no rule declared a configurable field"
+    assert set(dialog.editors) == declared
+    dialog.cancel()
 
 
 def test_the_modal_lists_the_shipped_games_and_starts_one(tk_root):

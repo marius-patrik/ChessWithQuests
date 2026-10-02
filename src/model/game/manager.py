@@ -57,7 +57,9 @@ class GameManager:
         self.players: List[Player] = players or [Player(1), Player(-1)]
         self.active_player: int = 1
         self.current_move: Optional[Move] = None
-        self.timer: Timer = timer or Timer()
+        self.turn_started: Optional[float] = None
+        self.clock = self._configuration_clock()
+        self.timer: Timer = timer or getattr(self.clock, "timer", None) or Timer()
         self.game_logger: GameLogger = logger or GameLogger()
         self.move_validator: MoveValidator = validator or MoveValidator(self.board)
 
@@ -65,16 +67,23 @@ class GameManager:
         # clock credit, no transcript and no player behind the pieces is a board with a
         # counter on it, so all four are held here rather than left for a caller to wire.
         self.users: UserManager = UserManager()
-        self.quest_manager: QuestManager = QuestManager(build_quests())
+        # The configuration's quests, not a roster the engine made up. A variant configuration
+        # declared its own quests and they were ignored, so a variant's challenges never ran.
+        self.quest_manager: QuestManager = QuestManager(
+            self.configuration.quests
+            if self.configuration is not None and self.configuration.quests
+            else build_quests()
+        )
         self.notation: ChessNotationWriter = ChessNotationWriter()
         self.metadata: MetadataWriter = MetadataWriter()
         self.move_events: List[MoveEvent] = []
         self.completed_quests: List[Any] = []
         self.result: Optional[Result] = None
         self.elapsed_seconds: int = 0
-        self.increment_seconds: int = 0
+        self.increment_seconds: int = getattr(self.clock, "increment_seconds", 0)
 
         self.link_default_users()
+        self.start_turn_clock()
         if self.configuration is not None:
             self.move_validator.set_rules(
                 self.configuration.enabled_rules(),
@@ -114,6 +123,7 @@ class GameManager:
         self.completed_quests = []
         self.elapsed_seconds = 0
         self.timer.reset_time()
+        self.start_turn_clock()
         self.game_logger = GameLogger()
         self.quest_manager.reset()
         if self.configuration is not None:
@@ -208,9 +218,12 @@ class GameManager:
         self.current_move = move
         self.game_logger.log_move(move)
         self.move_validator.notify_move_made(move, self.board)
-        self.elapsed_seconds += 1
-        self.timer.tick(mover, 1)
-        self.timer.add_time(mover, self.increment_seconds)
+        self.elapsed_seconds += self.charge_turn(mover)
+        self.credit_increment(mover)
+        # Charge the mover for the time their move actually took, then credit the increment
+        # their completed move earns. Counting one second per move meant a clock that only ever
+        # moved when somebody played, which is not a clock.
+        self.charge_turn(mover)
 
         self.move_events.append(self._describe(move, mover))
         self.quest_manager.observe_move(self.move_events[-1])
@@ -218,7 +231,67 @@ class GameManager:
         self.active_player = -mover
         for rule in self.move_validator.active_rules():
             rule.active_color = self.active_player
+        self.start_turn_clock()
         return True
+
+    def _configuration_clock(self):
+        """Return the clock this configuration offers, if it offers one.
+
+        Returns:
+            Any: The configuration's first clock, or None when it declares none. The engine
+            must not invent one: what a game's clocks are is the configuration's decision.
+        """
+        if self.configuration is None:
+            return None
+        clocks = list(getattr(self.configuration, "clocks", None) or [])
+        return clocks[0] if clocks else None
+
+    def start_turn_clock(self, monotonic: Optional[float] = None) -> None:
+        """Begin charging the player to move for the time they spend.
+
+        Args:
+            monotonic: A monotonic clock reading, in seconds. Defaults to `time.monotonic`.
+
+        Returns:
+            None
+        """
+        import time
+
+        self.turn_started = monotonic if monotonic is not None else time.monotonic()
+
+    def charge_turn(self, color: Optional[int] = None, monotonic: Optional[float] = None) -> int:
+        """Charge the active player for the time their turn has lasted, and end that turn.
+
+        Args:
+            color: The player to charge. Defaults to the player whose turn it is.
+            monotonic: A monotonic clock reading, in seconds. Defaults to `time.monotonic`.
+
+        Returns:
+            int: The whole seconds charged. Zero when no turn has been started, which is the
+            case for a game that has not begun.
+        """
+        import time
+
+        if self.turn_started is None:
+            return 0
+        now = monotonic if monotonic is not None else time.monotonic()
+        elapsed = int(now - self.turn_started)
+        self.turn_started = None
+        if elapsed > 0:
+            self.timer.tick(color if color is not None else self.active_player, elapsed)
+        return elapsed
+
+    def credit_increment(self, color: int) -> None:
+        """Add the increment a player earns by completing a move.
+
+        Args:
+            color: The player who moved.
+
+        Returns:
+            None
+        """
+        if self.increment_seconds:
+            self.timer.add_time(color, self.increment_seconds)
 
     def _describe(self, move: Move, mover: int) -> MoveEvent:
         """Build the event the quests judge a move by.

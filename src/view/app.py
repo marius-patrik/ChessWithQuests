@@ -15,6 +15,7 @@ from model.game.configuration import load_configuration
 from model.game.games import DEFAULT_GAME, available_games
 from model.game.manager import GameManager
 from view.player_game_view import PlayerGameView
+from view.settings_dialog import SettingsDialog
 from view.start_modal import StartModal
 
 APPLICATION_TITLE = "ChessWithQuests"
@@ -45,14 +46,44 @@ def build_application(root: tk.Tk, game: str = DEFAULT_GAME, show_modal: bool = 
 
     shell = ttk.Frame(root, padding=0)
     shell.pack(fill="both", expand=True)
-    root.game_view = PlayerGameView(shell, controller)  # type: ignore[attr-defined]
-    root.game_view.pack(fill="both", expand=True)
+
+    view = PlayerGameView(
+        shell,
+        controller,
+        on_settings=lambda: open_settings(root, controller),
+        on_new_game_request=lambda: _offer_modal(root, games, controller),
+    )
+    view.pack(fill="both", expand=True)
+    root.game_view = view  # type: ignore[attr-defined]
     root.window_controller = controller  # type: ignore[attr-defined]
     root.available_games = games  # type: ignore[attr-defined]
 
     if show_modal:
         root.after(50, lambda: _offer_modal(root, games, controller))
     return root
+
+
+def open_settings(root: tk.Tk, controller: WindowController) -> SettingsDialog:
+    """Open the settings form over the game being played.
+
+    Args:
+        root: The window the form belongs to.
+        controller: The controller whose game is being configured.
+
+    Returns:
+        SettingsDialog: The form, so a caller can wait on it.
+    """
+    configuration = controller.game_controller.game_manager.configuration
+    dialog = SettingsDialog(
+        root,
+        configuration,
+        on_saved=lambda saved: (
+            controller.set_status(f"{saved.name} settings saved."),
+            root.game_view.refresh(),
+        ),
+    )
+    root.settings_dialog = dialog  # type: ignore[attr-defined]
+    return dialog
 
 
 def _offer_modal(root: tk.Tk, games: List[str], controller: WindowController) -> None:
@@ -88,5 +119,5 @@ def _offer_modal(root: tk.Tk, games: List[str], controller: WindowController) ->
         games=games,
         default=DEFAULT_GAME,
         on_start=start,
-        on_settings=lambda: controller.show_dialog("Settings arrive with the settings form."),
+        on_settings=lambda: open_settings(root, controller),
     )

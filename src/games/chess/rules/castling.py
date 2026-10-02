@@ -183,6 +183,10 @@ class CastlingRule(Rule):
         piece = position.get_piece_at(move.end_pos)
         if move.move_type == "castling" and piece is not None:
             castled.add(piece.getColor())
+            return
+        # A royal piece that moves by any other route gives the right up again. The castling
+        # branch returns first: it used to fall through to this test, whose `piece` is the king
+        # that had just castled, so the right was granted and revoked on the same move.
         if piece is not None and piece.getType() == self.value.get("royal_kind"):
             castled.discard(piece.getColor())
 

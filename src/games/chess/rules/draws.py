@@ -115,8 +115,10 @@ class FiftyMoveRule(Rule):
         Returns:
             None
         """
-        piece = position.get_piece_at(move.end_pos)
-        progress = _split(self.value.get("progress_kinds"))
+        # The piece that moved, not whatever now stands on the destination: a pawn that has just
+        # promoted is a queen by the time anyone looks, and the counter failed to reset.
+        piece = move.piece or position.get_piece_at(move.end_pos)
+        progress = [_canon(kind) for kind in _split(self.value.get("progress_kinds"))]
         captured = move.captured_piece is not None or (
             move.capture_from is not None and position.get_piece_at(move.capture_from) is None
         )

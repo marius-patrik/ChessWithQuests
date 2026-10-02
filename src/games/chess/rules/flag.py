@@ -10,6 +10,7 @@ from typing import Any, List, Optional
 from model.game.field import Field
 from model.game.rule import KIND_DRAW, KIND_WIN, Result, Rule
 from games.chess.rules.draws import _split
+from games.chess.rules.draws import _canon
 from games.chess.rules.attacks import kinds_of, opponent
 
 #: Precedence, so a flag fall and a mate on the same position resolve deterministically.
