@@ -4,12 +4,19 @@ from typing import Any, List, Optional
 
 from model.game.board import Board
 from model.game.configuration import Configuration, load_default_configuration
+from model.game.events import MoveEvent, ResultEvent
 from model.game.move import Move
 from model.game.player import Player
 from model.game.rule import Result
 from model.game.timer import Timer
 from model.game.logger import GameLogger
 from model.game.validator import MoveValidator
+from model.game.quests import build_quests
+from model.misc.export_writers import ChessNotationWriter
+from model.misc.metadata import MetadataWriter
+from model.misc.quest_manager import QuestManager
+from model.users.manager import UserManager
+from model.users.user import User
 
 
 class GameManager:
@@ -53,9 +60,65 @@ class GameManager:
         self.timer: Timer = timer or Timer()
         self.game_logger: GameLogger = logger or GameLogger()
         self.move_validator: MoveValidator = validator or MoveValidator(self.board)
-        if configuration is not None:
+
+        # The subsystems the game drives. A game that plays but keeps no quest progress, no
+        # clock credit, no transcript and no player behind the pieces is a board with a
+        # counter on it, so all four are held here rather than left for a caller to wire.
+        self.users: UserManager = UserManager()
+        self.quest_manager: QuestManager = QuestManager(build_quests())
+        self.notation: ChessNotationWriter = ChessNotationWriter()
+        self.metadata: MetadataWriter = MetadataWriter()
+        self.move_events: List[MoveEvent] = []
+        self.completed_quests: List[Any] = []
+        self.result: Optional[Result] = None
+        self.elapsed_seconds: int = 0
+        self.increment_seconds: int = 0
+
+        self.link_default_users()
+        if self.configuration is not None:
             self.move_validator.set_rules(
-                configuration.enabled_rules(),
+                self.configuration.enabled_rules(),
+                clock=self.timer,
+                active_color=self.active_player,
+            )
+
+    def link_default_users(self) -> None:
+        """Give each side a user, so a player is a person and not a colour.
+
+        Returns:
+            None
+        """
+        if len(self.players) < 2:
+            return
+        for index, (username, colour) in enumerate((("white", 1), ("black", -1))):
+            player = self.players[index] if index < len(self.players) else None
+            if player is None:
+                continue
+            user = player.getUser() or User(username=username, name=username.capitalize())
+            player.setUser(user)
+            user_id = self.users.register_user(user)
+            self.users.link_player(user_id, player)
+
+    def new_game(self) -> None:
+        """Return every subsystem to its starting state and deal a fresh board.
+
+        Returns:
+            None
+        """
+        if self.configuration is not None:
+            self.board = self.configuration.new_board()
+        self.active_player = 1
+        self.current_move = None
+        self.result = None
+        self.move_events = []
+        self.completed_quests = []
+        self.elapsed_seconds = 0
+        self.timer.reset_time()
+        self.game_logger = GameLogger()
+        self.quest_manager.reset()
+        if self.configuration is not None:
+            self.move_validator.set_rules(
+                self.configuration.enabled_rules(),
                 clock=self.timer,
                 active_color=self.active_player,
             )
@@ -141,8 +204,109 @@ class GameManager:
         if not success:
             return False
 
+        mover = self.active_player
         self.current_move = move
         self.game_logger.log_move(move)
         self.move_validator.notify_move_made(move, self.board)
-        self.active_player = -1 if self.active_player == 1 else 1
+        self.elapsed_seconds += 1
+        self.timer.tick(mover, 1)
+        self.timer.add_time(mover, self.increment_seconds)
+
+        self.move_events.append(self._describe(move, mover))
+        self.quest_manager.observe_move(self.move_events[-1])
+
+        self.active_player = -mover
+        for rule in self.move_validator.active_rules():
+            rule.active_color = self.active_player
         return True
+
+    def _describe(self, move: Move, mover: int) -> MoveEvent:
+        """Build the event the quests judge a move by.
+
+        Args:
+            move: The move that was played.
+            mover: The colour that played it.
+
+        Returns:
+            MoveEvent: What happened, as the quests want to hear it.
+        """
+        piece = move.piece or self.board.get_piece_at(move.start_pos)
+        captured = move.captured_piece or self.board.get_piece_at(move.end_pos)
+        return MoveEvent(
+            move=move,
+            position=self.board,
+            color=mover,
+            piece_type=piece.getType() if piece is not None else "",
+            captured_piece_type=captured.getType() if captured is not None else None,
+            is_check=self.move_validator.is_check(-mover, self.board),
+            in_check=self.move_validator.is_check(mover, self.board),
+            is_castling=move.move_type == "castling",
+            is_en_passant=move.move_type == "en_passant",
+            is_promotion=move.promotion_piece is not None,
+            index=len(self.move_events),
+        )
+
+    def finish_game(self) -> Optional[Result]:
+        """Close the game, judge the quests that judge a finished game, and credit the users.
+
+        Returns:
+            Optional[Result]: The result, or None while the game is still going.
+        """
+        if self.result is not None:
+            return self.result
+        self.result = self.get_result()
+        if self.result is None:
+            return None
+
+        event = ResultEvent(
+            outcome=self.result.kind,
+            winner=self.result.winner,
+            reason=self.result.reason,
+            history=list(self.move_events),
+            position=self.board,
+            players={player.getColor(): player for player in self.players},
+        )
+        self.quest_manager.observe_result(event)
+
+        for quest in self.quest_manager.get_completed_quests():
+            if quest in self.completed_quests:
+                continue
+            self.completed_quests.append(quest)
+            for player in self.players:
+                user = player.getUser()
+                if user is not None:
+                    user.add_quest(quest)
+        return self.result
+
+    def transcript(self, fmt: str = "PGN") -> str:
+        """Render the game so far in a notation this configuration exports.
+
+        Args:
+            fmt: One of `PGN`, `FEN` or `Stenographic`.
+
+        Returns:
+            str: The game as that notation writes it.
+        """
+        moves = [event.move for event in self.move_events]
+        self.metadata.set_header("Result", self.result.reason if self.result else "*")
+        return self.notation.export(fmt, moves=moves, board=self.board, metadata=self.metadata)
+
+    def save_log(self, path: Optional[str] = None) -> str:
+        """Write the transcript of this game to a file.
+
+        Args:
+            path: Where to write it. Defaults to a timestamped file under `logs/`.
+
+        Returns:
+            str: The path written to.
+        """
+        import os
+
+        moves = len(self.game_logger.get_moves())
+        directory = path or os.path.join("logs", f"game-{moves}.pgn")
+        parent = os.path.dirname(directory)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(directory, "w", encoding="utf-8") as handle:
+            handle.write(self.transcript())
+        return directory

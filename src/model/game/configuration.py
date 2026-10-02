@@ -15,7 +15,7 @@ import json
 import os
 import re
 import sys
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Callable, Any, Dict, Iterable, List, Optional
 
 from model.game.board import Board
 from model.game.games import available_games, games_root
@@ -50,6 +50,7 @@ class Configuration:
         quests: Optional[Iterable[Quest]] = None,
         clocks: Optional[Iterable[Any]] = None,
         exporters: Optional[Iterable[Any]] = None,
+        board_factory: Optional[Callable[[], Board]] = None,
     ):
         """Assemble a configuration.
 
@@ -62,6 +63,9 @@ class Configuration:
             quests: The quests available.
             clocks: The clock configurations available.
             exporters: The export writers this configuration offers.
+            board_factory: Builds a fresh board for this configuration. Holding one board
+                means one game; holding the way to build one means as many games as the
+                player has time for.
         """
         self.name = name
         self.path = path
@@ -71,6 +75,21 @@ class Configuration:
         self.quests: List[Quest] = list(quests) if quests else []
         self.clocks: List[Any] = list(clocks) if clocks else []
         self.exporters: List[Any] = list(exporters) if exporters else []
+        self.board_factory: Optional[Callable[[], Board]] = board_factory
+
+    def new_board(self) -> Board:
+        """Build a fresh board for a new game of this configuration.
+
+        Returns:
+            Board: A newly dealt board. A configuration that declared no factory gets the
+            board it already holds, so `new_game` always returns a playable board even when
+            a configuration declares only one.
+        """
+        if self.board_factory is not None:
+            return self.board_factory()
+        if self.board is not None:
+            return self.board
+        return Board()
 
     def enabled_rules(self) -> List[Rule]:
         """Return the rules that are in force, in declaration order.

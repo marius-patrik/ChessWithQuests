@@ -47,8 +47,10 @@ class Player:
             Integer Elo rating, defaulting to 1200 if unrated.
         """
         if self.user is not None:
-            if hasattr(self.user, "elo"):
-                return int(self.user.elo)
-            if hasattr(self.user, "getEloRating"):
-                return int(self.user.getEloRating())
+            rating = getattr(self.user, "elo", None)
+            if rating is not None:
+                return int(rating)
+            get_rating = getattr(self.user, "getEloRating", None)
+            if callable(get_rating):
+                return int(get_rating())
         return 1200

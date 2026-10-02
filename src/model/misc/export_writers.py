@@ -85,7 +85,8 @@ class ChessNotationWriter(ExportWriter):
                     if empty > 0:
                         rank_str += str(empty)
                         empty = 0
-                    ptype = piece.getType().lower() if hasattr(piece, "getType") else "p"
+                    get_type = getattr(piece, "getType", None)
+                    ptype = get_type().lower() if callable(get_type) else "p"
                     char = self.PIECE_CHARS.get(ptype, "p")
                     rank_str += (
                         char.upper()
@@ -116,17 +117,11 @@ class ChessNotationWriter(ExportWriter):
         move_pairs = []
         for i in range(0, len(moves), 2):
             move_num = (i // 2) + 1
-            w_move = (
-                pos_to_algebraic(moves[i].end_pos)
-                if hasattr(moves[i], "end_pos")
-                else str(moves[i])
-            )
+            w_end = getattr(moves[i], "end_pos", None)
+            w_move = pos_to_algebraic(w_end) if w_end is not None else str(moves[i])
             if i + 1 < len(moves):
-                b_move = (
-                    pos_to_algebraic(moves[i + 1].end_pos)
-                    if hasattr(moves[i + 1], "end_pos")
-                    else str(moves[i + 1])
-                )
+                b_end = getattr(moves[i + 1], "end_pos", None)
+                b_move = pos_to_algebraic(b_end) if b_end is not None else str(moves[i + 1])
                 move_pairs.append(f"{move_num}. {w_move} {b_move}")
             else:
                 move_pairs.append(f"{move_num}. {w_move}")

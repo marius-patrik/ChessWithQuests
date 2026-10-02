@@ -80,7 +80,8 @@ class UserManager:
             True if executed or move is None, False if execution failed.
         """
         if move is not None and board is not None:
-            success = move.execute(board) if hasattr(move, "execute") else False
+            execute = getattr(move, "execute", None)
+            success = bool(execute(board)) if callable(execute) else False
             if success:
                 self.record_history(f"Executed move: {move}")
             return success

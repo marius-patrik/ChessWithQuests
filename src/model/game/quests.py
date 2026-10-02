@@ -1141,3 +1141,41 @@ BUILT_IN_QUESTS = (
     Pacifist,
     CompositeQuest,
 )
+
+
+def build_quests() -> List[Quest]:
+    """Build one instance of every built-in quest, at its default target.
+
+    The roster is written out here rather than discovered, for the same reason the chess
+    rules are: the set of quests in play is a decision someone made, and a decision that can
+    be read in one place is one that can be argued with. A quest class not named here is
+    available to a configuration but is not in play.
+
+    `CompositeQuest` is deliberately absent. It is the mechanism for building a quest out of
+    other quests rather than a quest in its own right, so the roster is nineteen quests and
+    one way of composing them.
+
+    Returns:
+        List[Quest]: The nineteen built-in quests, in roster order.
+    """
+    return [
+        FirstBlood(),
+        CaptureN(),
+        CaptureOfType("queen"),
+        MovePieceNTimes(),
+        ReachedSquare((0, 0)),
+        VisitNSquares(),
+        SurvivePlies(),
+        SurviveWithoutCapture(),
+        CastleN(),
+        PromoteN(),
+        EnPassantN(),
+        MakeCheckN(),
+        NeverInCheck(),
+        Pacifist(),
+        MaterialAhead(),
+        KingOnlyGame("king"),
+        GameAtLeast(),
+        GameResult(),
+        WonBy(),
+    ]

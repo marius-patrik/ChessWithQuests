@@ -145,6 +145,7 @@ class Quest:
         """
         self.is_completed = False
         self._current = 0
+        self._current = 0
 
     def _advance(self, amount: int = 1, target: Optional[int] = None) -> None:
         """Record progress towards this quest's target.
