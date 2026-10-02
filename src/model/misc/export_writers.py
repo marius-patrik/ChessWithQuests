@@ -24,6 +24,9 @@ class ExportWriter:
             *args: Variable positional arguments.
             **kwargs: Variable keyword arguments.
 
+        Returns:
+            str: The serialized game in the format this writer produces.
+
         Raises:
             NotImplementedError: Must be implemented by subclasses.
         """

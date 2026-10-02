@@ -46,8 +46,6 @@ class Timer:
         idx = self._get_player_index(player)
         self.player_times[idx] = max(0, self.player_times[idx] - elapsed_seconds)
 
-    countdown = tick
-
     def add_time(self, player: int, increment_seconds: int) -> None:
         """Add increment time to a player's clock.
 

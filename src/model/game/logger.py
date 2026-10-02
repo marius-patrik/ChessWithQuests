@@ -57,5 +57,9 @@ class GameLogger:
 
     @property
     def file_path(self) -> Optional[str]:
-        """Path to the underlying log file, if any."""
+        """Path to the underlying log file, if any.
+
+        Returns:
+            Optional[str]: The configured log file path, or None when logging is in memory only.
+        """
         return self.filename

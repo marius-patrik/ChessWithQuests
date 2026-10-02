@@ -89,9 +89,3 @@ class Piece:
             str: Piece name.
         """
         return self._name
-
-
-if __name__ == "__main__":
-    piece = Piece(1, False)
-    print(piece.getDirections())
-    print(piece.getColor())

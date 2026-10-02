@@ -52,8 +52,3 @@ class Player:
             if hasattr(self.user, "getEloRating"):
                 return int(self.user.getEloRating())
         return 1200
-
-    # Aliases
-    get_elo_rating = getEloRating
-    get_color = getColor
-    get_user = getUser

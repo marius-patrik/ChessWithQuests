@@ -47,8 +47,6 @@ class UserManager:
         """
         return self.users.get(user_id)
 
-    find_user = get_user
-
     def link_player(self, user_id: int, player: Any) -> None:
         """Associate a User ID with a live Player game participant.
 
