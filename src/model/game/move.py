@@ -32,18 +32,37 @@ class Move:
         self.captured_piece = captured_piece
         self.promotion_piece = promotion_piece
 
+    @staticmethod
+    def _bounds(board: Optional[Any]) -> Tuple[int, int]:
+        """Return the (rows, cols) a move is measured against.
+
+        Args:
+            board: The board the move is played on, or None to use `Board`'s default size.
+
+        Returns:
+            Tuple[int, int]: The board dimensions the move must fit inside.
+        """
+        if board is not None:
+            return board.rows, board.cols
+        from model.game.board import Board
+
+        return Board.DEFAULT_DIMENSIONS
+
     def validate(self, board: Optional[Any] = None) -> bool:
         """Validate geometric boundaries and basic board rules for this move.
 
         Args:
-            board: Optional Board instance to verify piece existence and target color.
+            board: Optional Board instance to verify piece existence and target color. Its
+                dimensions decide what is in bounds, so a move may be validated on a board
+                of any size.
 
         Returns:
             True if basic validity checks pass, False otherwise.
         """
-        if not (0 <= self.start_pos[0] < 8 and 0 <= self.start_pos[1] < 8):
+        rows, cols = self._bounds(board)
+        if not (0 <= self.start_pos[0] < rows and 0 <= self.start_pos[1] < cols):
             return False
-        if not (0 <= self.end_pos[0] < 8 and 0 <= self.end_pos[1] < 8):
+        if not (0 <= self.end_pos[0] < rows and 0 <= self.end_pos[1] < cols):
             return False
         if self.start_pos == self.end_pos:
             return False

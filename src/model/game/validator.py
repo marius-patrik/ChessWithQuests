@@ -9,6 +9,30 @@ from model.pieces.pawn import Pawn
 from model.pieces.king import King
 
 
+def _ray_length(board: Board) -> int:
+    """Return the longest ray a sliding piece can travel on this board.
+
+    Args:
+        board: The board being measured.
+
+    Returns:
+        int: The greater of the two dimensions, which no straight ray can exceed.
+    """
+    return max(board.rows, board.cols)
+
+
+def _is_single_step(piece: Piece) -> bool:
+    """Report whether a piece moves exactly one square per vector.
+
+    Args:
+        piece: The piece to measure.
+
+    Returns:
+        bool: True for a one-square mover, False for a piece that slides.
+    """
+    return piece.getType() == "king" or isinstance(piece, King)
+
+
 class MoveValidator:
     """Validates piece movement legality, checks, checkmates, and stalemates."""
 
@@ -90,9 +114,7 @@ class MoveValidator:
 
                 directions = piece.getAttackDirections()
                 can_jump = piece.canJump()
-                max_steps = (
-                    1 if (can_jump or piece.getType() == "king" or isinstance(piece, King)) else 8
-                )
+                max_steps = 1 if (can_jump or _is_single_step(piece)) else _ray_length(b)
 
                 for dr, dc in directions:
                     step = 1
@@ -177,7 +199,7 @@ class MoveValidator:
 
         directions = piece.getDirections() or []
         can_jump = piece.canJump()
-        max_steps = 1 if (can_jump or piece.getType() == "king" or isinstance(piece, King)) else 8
+        max_steps = 1 if (can_jump or _is_single_step(piece)) else _ray_length(b)
 
         for dr, dc in directions:
             step = 1

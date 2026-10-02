@@ -66,17 +66,18 @@ class ChessNotationWriter(ExportWriter):
         """Convert board state to Forsyth-Edwards Notation (FEN) string.
 
         Args:
-            board: Board instance with rows, cols, and get_piece_at.
+            board: Board instance. Its rows and cols decide how many ranks and files the
+                record carries, so a board of any size serialises.
             active_color: Active side color (1 for White, -1 for Black).
 
         Returns:
             FEN record string.
         """
         ranks = []
-        for r in range(7, -1, -1):
+        for r in range(board.rows - 1, -1, -1):
             empty = 0
             rank_str = ""
-            for c in range(8):
+            for c in range(board.cols):
                 piece = board.get_piece_at((r, c))
                 if piece is None:
                     empty += 1
