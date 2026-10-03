@@ -5,12 +5,14 @@ and a configuration that has not declared one is a configuration with no positio
 which is said out loud rather than guessed at.
 
 This module should not be here at all: PGN, FEN and algebraic coordinates are chess formats,
-and `notes/object_model.md` registers them as belonging to `games/chess/export/`. What blocks
-that move is `model/game/manager.py`, which imports `ChessNotationWriter` by name. Until that
-caller is updated, the chess naming of squares is reached through `_to_algebraic()` below,
-which imports the chess configuration on demand rather than at module level — a module-level
-import would make `games/chess/__init__.py` and this module import each other, and loading any
-variant configuration would then fail on a circular import.
+and `notes/object_model.md` registers them as belonging to `games/chess/export/`. The last
+blocker was `model/game/manager.py`, which imported `ChessNotationWriter` by name; it now
+takes its writers from `Configuration.exporters`, so nothing in the engine names this class
+any more and the move is unblocked. Until it happens the chess naming of squares is still
+reached through `_to_algebraic()` below, which imports the chess configuration on demand
+rather than at module level — a module-level import would make `games/chess/__init__.py` and
+this module import each other, and loading any variant configuration would then fail on a
+circular import.
 """
 
 from typing import List, Optional, Any, Tuple
@@ -43,6 +45,20 @@ class ExportWriter:
         """Initialize an ExportWriter instance."""
         self.field: str = ""
 
+    def formats(self) -> Tuple[str, ...]:
+        """Return the format names this writer writes.
+
+        The engine holds no list of formats — which notations exist is the configuration's
+        answer, and a writer is the only thing that knows what it can produce. Declaring them
+        here is what lets `GameManager.transcript` tell "this configuration does not export
+        that" from "this writer had nothing to write", which are different faults and used to
+        be indistinguishable because both arrived as an empty string.
+
+        Returns:
+            Tuple[str, ...]: The format names, empty when this writer writes none.
+        """
+        return ()
+
     def export(self, *args: Any, **kwargs: Any) -> str:
         """Export game data into the target serialization format.
 
@@ -65,6 +81,16 @@ class ChessNotationWriter(ExportWriter):
     def __init__(self):
         """Initialize a ChessNotationWriter instance."""
         super().__init__()
+
+    def formats(self) -> Tuple[str, ...]:
+        """Return the chess formats this writer writes.
+
+        Returns:
+            Tuple[str, ...]: PGN, FEN and the stenographic coordinate record — the formats
+            `notes/object_model.md` section 7 places in `games/chess/export/`, reachable from
+            here because this class has not moved yet.
+        """
+        return ("PGN", "FEN", "Stenographic")
 
     @staticmethod
     def _fen_letter(piece: Any) -> str:

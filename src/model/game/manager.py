@@ -1,4 +1,11 @@
-"""Game manager coordinating board state, turn alternation, clock ticks, and game rules."""
+"""Game manager coordinating board state, turn alternation, clock ticks, and game rules.
+
+Nothing here names a piece, a board size or a notation. Which pieces are in play, how large
+the board is, which quests exist and which notations can be written are all questions the
+configuration answers, and the manager reads those answers rather than carrying defaults of
+its own. An engine default is a claim about every game, and a variant that does not share it
+gets it anyway.
+"""
 
 from typing import Any, List, Optional
 
@@ -11,12 +18,20 @@ from model.game.rule import Result
 from model.game.timer import Timer
 from model.game.logger import GameLogger
 from model.game.validator import MoveValidator
-from model.game.quests import build_quests
-from model.misc.export_writers import ChessNotationWriter
 from model.misc.metadata import MetadataWriter
 from model.misc.quest_manager import QuestManager
 from model.users.manager import UserManager
 from model.users.user import User
+
+
+class UnsupportedExportFormat(ValueError):
+    """Raised when a game is asked for a notation its configuration does not export.
+
+    Which notations exist is the configuration's answer, so the engine cannot answer this
+    question and must not pretend to. It used to pretend: an unknown format went to a
+    hard-coded chess writer, which returned an empty string — indistinguishable from a game
+    that genuinely had nothing to say, and silently empty in the transcript.
+    """
 
 
 class GameManager:
@@ -67,14 +82,18 @@ class GameManager:
         # clock credit, no transcript and no player behind the pieces is a board with a
         # counter on it, so all four are held here rather than left for a caller to wire.
         self.users: UserManager = UserManager()
-        # The configuration's quests, not a roster the engine made up. A variant configuration
-        # declared its own quests and they were ignored, so a variant's challenges never ran.
+        # The configuration's quests, exactly as it declared them, and no roster the engine
+        # made up for it. A configuration that declares no quests has none: falling back to
+        # the engine's roster gave a variant quests nobody asked it to play, drawn from a
+        # roster that cannot even be built without a piece type it has no way to supply.
         self.quest_manager: QuestManager = QuestManager(
-            self.configuration.quests
-            if self.configuration is not None and self.configuration.quests
-            else build_quests()
+            list(self.configuration.quests) if self.configuration is not None else []
         )
-        self.notation: ChessNotationWriter = ChessNotationWriter()
+        # The writers the configuration offers, and the first of them for a caller that just
+        # wants a notation. There is no writer if the configuration declared none, and
+        # `transcript` says so rather than reaching for a chess one.
+        self.exporters: List[Any] = list(self.configuration.exporters) if self.configuration else []
+        self.notation: Optional[Any] = self.exporters[0] if self.exporters else None
         self.metadata: MetadataWriter = MetadataWriter()
         self.move_events: List[MoveEvent] = []
         self.completed_quests: List[Any] = []
@@ -173,10 +192,6 @@ class GameManager:
     def cancel_move(self) -> None:
         """Cancel or reset the currently selected move."""
         self.current_move = None
-
-    def save_log(self) -> None:
-        """Save the game log (stub implementation)."""
-        pass
 
     def get_state(self) -> int:
         """Evaluate and return the current state of the game.
@@ -354,35 +369,104 @@ class GameManager:
                     user.add_quest(quest)
         return self.result
 
-    def transcript(self, fmt: str = "PGN") -> str:
+    def offered_formats(self) -> List[str]:
+        """Return every notation this configuration can write a game in.
+
+        Returns:
+            List[str]: The format names the configuration's writers declare, in declaration
+            order and without repeats.
+        """
+        offered: List[str] = []
+        for writer in self.exporters:
+            for name in writer.formats():
+                if name not in offered:
+                    offered.append(name)
+        return offered
+
+    def default_format(self) -> Optional[str]:
+        """Return the notation a game is written in when nothing is asked for.
+
+        Returns:
+            Optional[str]: The first format the configuration offers, or None when it offers
+            none. There is no fallback: the engine does not know a single notation name, so
+            it has nothing to fall back to.
+        """
+        offered = self.offered_formats()
+        return offered[0] if offered else None
+
+    def writer_for(self, fmt: Optional[str] = None) -> Any:
+        """Return the writer that produces a notation.
+
+        The writers are asked in declaration order and each is judged by what it says it
+        writes, rather than the first writer being handed every format and expected to cope.
+        A configuration whose second writer writes a format its first does not now reaches
+        that writer.
+
+        Args:
+            fmt: The notation wanted, matched without regard to case. Defaults to the first
+                the configuration offers.
+
+        Returns:
+            Any: The writer that writes that notation.
+
+        Raises:
+            UnsupportedExportFormat: If no writer the configuration offered writes it. An
+                unknown notation is a question nothing can answer, and answering it with an
+                empty transcript said otherwise.
+        """
+        wanted = (fmt if fmt is not None else self.default_format() or "").strip().lower()
+        for writer in self.exporters:
+            if wanted in {str(name).strip().lower() for name in writer.formats()}:
+                return writer
+        offered = self.offered_formats()
+        configuration = self.configuration.name if self.configuration is not None else "this game"
+        raise UnsupportedExportFormat(
+            f"{fmt!r} is not a notation {configuration} exports; it offers "
+            f"{', '.join(offered) if offered else 'no notation at all'}"
+        )
+
+    def transcript(self, fmt: Optional[str] = None) -> str:
         """Render the game so far in a notation this configuration exports.
 
         Args:
-            fmt: One of `PGN`, `FEN` or `Stenographic`.
+            fmt: The notation to write. Defaults to the first the configuration offers.
 
         Returns:
             str: The game as that notation writes it.
+
+        Raises:
+            UnsupportedExportFormat: If the configuration exports no such notation.
         """
+        writer = self.writer_for(fmt)
+        wanted = fmt if fmt is not None else self.default_format()
         moves = [event.move for event in self.move_events]
         self.metadata.set_header("Result", self.result.reason if self.result else "*")
-        return self.notation.export(fmt, moves=moves, board=self.board, metadata=self.metadata)
+        return writer.export(wanted, moves=moves, board=self.board, metadata=self.metadata)
 
     def save_log(self, path: Optional[str] = None) -> str:
         """Write the transcript of this game to a file.
 
         Args:
-            path: Where to write it. Defaults to a timestamped file under `logs/`.
+            path: Where to write it. Defaults to a timestamped file under `logs/`, named for
+                the notation it is written in.
 
         Returns:
             str: The path written to.
+
+        Raises:
+            UnsupportedExportFormat: If the configuration exports no notation, so there is
+                nothing to write and nothing to name the file after.
         """
         import os
 
+        wanted = self.default_format()
+        if not wanted:
+            raise UnsupportedExportFormat("this game exports no notation, so it cannot be saved")
         moves = len(self.game_logger.get_moves())
-        directory = path or os.path.join("logs", f"game-{moves}.pgn")
+        directory = path or os.path.join("logs", f"game-{moves}.{wanted.lower()}")
         parent = os.path.dirname(directory)
         if parent:
             os.makedirs(parent, exist_ok=True)
         with open(directory, "w", encoding="utf-8") as handle:
-            handle.write(self.transcript())
+            handle.write(self.transcript(wanted))
         return directory
