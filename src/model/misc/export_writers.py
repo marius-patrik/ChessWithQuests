@@ -1,9 +1,39 @@
-"""Chess export writers converting games to PGN, FEN, and stenographic notation."""
+"""Export writers converting games to PGN, FEN, and stenographic notation.
 
-from typing import List, Optional, Any
+The writer holds no piece knowledge at all. A piece declares the character it is written as,
+and a configuration that has not declared one is a configuration with no position record —
+which is said out loud rather than guessed at.
 
-from model.misc.notation import pos_to_algebraic
+This module should not be here at all: PGN, FEN and algebraic coordinates are chess formats,
+and `notes/object_model.md` registers them as belonging to `games/chess/export/`. What blocks
+that move is `model/game/manager.py`, which imports `ChessNotationWriter` by name. Until that
+caller is updated, the chess naming of squares is reached through `_to_algebraic()` below,
+which imports the chess configuration on demand rather than at module level — a module-level
+import would make `games/chess/__init__.py` and this module import each other, and loading any
+variant configuration would then fail on a circular import.
+"""
+
+from typing import List, Optional, Any, Tuple
+
 from model.misc.metadata import MetadataWriter
+
+
+def _to_algebraic(position: Tuple[int, int]) -> str:
+    """Name a square the way chess names it.
+
+    Args:
+        position: Tuple of (row, col) 0-indexed coordinates.
+
+    Returns:
+        str: The square's chess algebraic notation (e.g. 'e4').
+
+    Raises:
+        ImportError: If the chess configuration is not importable. That configuration is
+            where the chess naming lives, so a writer used without it has no naming to use.
+    """
+    from games.chess.export.algebraic import pos_to_algebraic
+
+    return pos_to_algebraic(position)
 
 
 class ExportWriter:
@@ -32,19 +62,35 @@ class ExportWriter:
 class ChessNotationWriter(ExportWriter):
     """Serializes chess moves and board states into standard chess formats (PGN, FEN, stenographic)."""
 
-    PIECE_CHARS = {
-        "king": "k",
-        "queen": "q",
-        "rook": "r",
-        "bishop": "b",
-        "horse": "n",
-        "knight": "n",
-        "pawn": "p",
-    }
-
     def __init__(self):
         """Initialize a ChessNotationWriter instance."""
         super().__init__()
+
+    @staticmethod
+    def _fen_letter(piece: Any) -> str:
+        """Return the character a piece declares for a position record.
+
+        Args:
+            piece: The piece being written.
+
+        Returns:
+            str: The piece's declared letter, in lower case.
+
+        Raises:
+            ValueError: If the piece declares no character. A piece with nothing to say about
+                a position record has no position record, and writing it as something else
+                would be a lie about the position.
+        """
+        get_fen = getattr(piece, "getFen", None)
+        letter = get_fen() if callable(get_fen) else None
+        if not letter:
+            get_type = getattr(piece, "getType", None)
+            name = get_type() if callable(get_type) else None
+            raise ValueError(
+                f"a piece of type {name!r} declares no character for a position record, "
+                "so this position cannot be written"
+            )
+        return str(letter).lower()
 
     def to_stenographic(self, moves: List[Any]) -> str:
         """Convert a list of moves to stenographic coordinate format (e.g. 'e2e4 e7e5').
@@ -57,8 +103,8 @@ class ChessNotationWriter(ExportWriter):
         """
         tokens = []
         for m in moves:
-            start = pos_to_algebraic(m.start_pos)
-            end = pos_to_algebraic(m.end_pos)
+            start = _to_algebraic(m.start_pos)
+            end = _to_algebraic(m.end_pos)
             tokens.append(f"{start}{end}")
         return " ".join(tokens)
 
@@ -72,6 +118,12 @@ class ChessNotationWriter(ExportWriter):
 
         Returns:
             FEN record string.
+
+        Raises:
+            ValueError: If a piece on the board declares no character for a position record.
+                Nothing is guessed: an undeclared piece has no place in a position record,
+                and a record that quietly called it a pawn would be wrong in a way no reader
+                could see.
         """
         ranks = []
         for r in range(board.rows - 1, -1, -1):
@@ -85,9 +137,7 @@ class ChessNotationWriter(ExportWriter):
                     if empty > 0:
                         rank_str += str(empty)
                         empty = 0
-                    get_type = getattr(piece, "getType", None)
-                    ptype = get_type().lower() if callable(get_type) else "p"
-                    char = self.PIECE_CHARS.get(ptype, "p")
+                    char = self._fen_letter(piece)
                     rank_str += (
                         char.upper()
                         if (piece.getColor() == 1 or piece.getColor() == "white")
@@ -118,10 +168,10 @@ class ChessNotationWriter(ExportWriter):
         for i in range(0, len(moves), 2):
             move_num = (i // 2) + 1
             w_end = getattr(moves[i], "end_pos", None)
-            w_move = pos_to_algebraic(w_end) if w_end is not None else str(moves[i])
+            w_move = _to_algebraic(w_end) if w_end is not None else str(moves[i])
             if i + 1 < len(moves):
                 b_end = getattr(moves[i + 1], "end_pos", None)
-                b_move = pos_to_algebraic(b_end) if b_end is not None else str(moves[i + 1])
+                b_move = _to_algebraic(b_end) if b_end is not None else str(moves[i + 1])
                 move_pairs.append(f"{move_num}. {w_move} {b_move}")
             else:
                 move_pairs.append(f"{move_num}. {w_move}")
