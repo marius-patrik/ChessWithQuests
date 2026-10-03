@@ -24,3 +24,7 @@ class Rook(Piece):
             can_jump=False,
             name="Rook",
         )
+
+
+#: Czech alias for `Rook`, as `PRD.md` section 5 and `Věž` in the diagram require.
+Vez = Rook

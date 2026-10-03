@@ -88,6 +88,3 @@ class GameController:
         """Start a new game session and reset selections."""
         self.game_manager = GameManager()
         self.reset_selection()
-
-
-Controller = GameController

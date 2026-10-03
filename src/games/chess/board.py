@@ -15,8 +15,8 @@ from model.game.board import Board
 from model.pieces.piece import Piece
 
 from .pieces.bishop import Bishop
-from .pieces.horse import Horse
 from .pieces.king import King
+from .pieces.knight import Knight
 from .pieces.pawn import Pawn
 from .pieces.queen import Queen
 from .pieces.rook import Rook
@@ -25,7 +25,7 @@ from .pieces.rook import Rook
 DIMENSIONS: Tuple[int, int] = (8, 8)
 
 #: The pieces a chess back rank carries, in the order they stand on it.
-BACK_RANK = (Rook, Horse, Bishop, Queen, King, Bishop, Horse, Rook)
+BACK_RANK = (Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook)
 
 #: The rank a pawn stands on, counted from White's side.
 PAWN_ROW: int = 1

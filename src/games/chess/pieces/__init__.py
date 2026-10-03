@@ -10,14 +10,14 @@ from typing import List, Tuple, Type
 from model.pieces.piece import Piece
 
 from .bishop import Bishop
-from .horse import Horse
 from .king import King
+from .knight import Knight
 from .pawn import Pawn
 from .queen import Queen
 from .rook import Rook
 
 #: Every piece class chess offers, in no particular order.
-PIECES: Tuple[Type[Piece], ...] = (Bishop, Horse, King, Pawn, Queen, Rook)
+PIECES: Tuple[Type[Piece], ...] = (Bishop, Knight, King, Pawn, Queen, Rook)
 
 
 def build_pieces() -> List[Type[Piece]]:

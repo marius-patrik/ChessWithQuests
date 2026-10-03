@@ -24,3 +24,7 @@ class Bishop(Piece):
             can_jump=False,
             name="Bishop",
         )
+
+
+#: Czech alias for `Bishop`, as `PRD.md` section 5 and `Střelec` in the diagram require.
+Strelec = Bishop

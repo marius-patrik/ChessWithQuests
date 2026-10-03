@@ -33,3 +33,7 @@ class Pawn(Piece):
             max_steps=1,
             initial_vectors=[(direction * 2, 0)],
         )
+
+
+#: Czech alias for `Pawn`, as `PRD.md` section 5 and `Pěšák` in the diagram require.
+Pesak = Pawn

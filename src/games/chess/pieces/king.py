@@ -41,3 +41,7 @@ class King(Piece):
             name="King",
             max_steps=1,
         )
+
+
+#: Czech alias for `King`, as `PRD.md` section 5 and `Král` in the diagram require.
+Kral = King

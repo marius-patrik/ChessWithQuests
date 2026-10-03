@@ -33,3 +33,7 @@ class Queen(Piece):
             can_jump=False,
             name="Queen",
         )
+
+
+#: Czech alias for `Queen`, as `PRD.md` section 5 and `Dáma` in the diagram require.
+Dama = Queen
