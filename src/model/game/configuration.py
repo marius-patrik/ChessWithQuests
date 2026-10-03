@@ -39,6 +39,9 @@ class Configuration:
         quests: The quests available.
         clocks: The clock configurations available.
         exporters: The export writers this configuration offers.
+        package: The module name the configuration is registered under, so a module inside it
+            can resolve its relative imports. Empty until the configuration is loaded from a
+            directory, which is the only way a relative import can work at all.
     """
 
     def __init__(
@@ -77,6 +80,7 @@ class Configuration:
         self.clocks: List[Any] = list(clocks) if clocks else []
         self.exporters: List[Any] = list(exporters) if exporters else []
         self.board_factory: Optional[Callable[[], Board]] = board_factory
+        self.package: str = ""
 
     @property
     def is_default(self) -> bool:
@@ -348,6 +352,7 @@ def load_configuration_at(path: str, root: Optional[str] = None) -> Configuratio
     configuration = builder()
     configuration.name = name
     configuration.path = resolved
+    configuration.package = module.__name__
     return configuration
 
 
