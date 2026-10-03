@@ -3,7 +3,6 @@
 from typing import Optional, Tuple, List, Dict, Any
 
 from model.game.manager import GameManager
-from model.game.move import Move
 
 
 class GameController:
@@ -65,7 +64,22 @@ class GameController:
                     "valid_moves": moves,
                 }
 
-            move = Move(self.selected_square, pos)
+            # The move the rules offered, not a fresh one from two squares. A rule may attach
+            # more than a destination — a capture chain, a promotion piece, a companion rook —
+            # and a rebuilt move carries none of it, so a draughts capture chain was refused.
+            move = self.game_manager.move_validator.find_move(
+                self.selected_square, pos, self.game_manager.board
+            )
+            if move is None:
+                self.selected_square = None
+                self.highlighted_moves = []
+                return {
+                    "action": "invalid",
+                    "success": False,
+                    "from": self.selected_square,
+                    "to": pos,
+                    "game_state": self.game_manager.get_state(),
+                }
             success = self.game_manager.make_move(move)
             prev_selected = self.selected_square
             self.selected_square = None

@@ -49,3 +49,40 @@ def test_controller_new_game():
     ctrl.new_game()
     assert ctrl.game_manager.active_player == 1
     assert ctrl.selected_square is None
+
+
+def test_a_click_plays_the_move_the_rules_offered_not_a_rebuilt_one():
+    """A rule may attach more than a destination to a move, and the click path must keep it.
+
+    A draughts capture is a chain of hops carried on the Move. The controller used to build a
+    fresh `Move` from the two clicked squares, which had no hops, so the legality check
+    refused it and a capture was impossible to play through the window.
+    """
+    from model.game.configuration import load_configuration
+    from model.game.manager import GameManager
+
+    controller = GameController(GameManager(configuration=load_configuration("checkers")))
+    for start, end in [((2, 1), (3, 0)), ((5, 0), (4, 1)), ((1, 0), (2, 1)), ((4, 1), (3, 2))]:
+        controller.select_square(start)
+        assert controller.handle_square_click(end)["action"] == "moved"
+
+    captures = [
+        move for move in controller.game_manager.get_valid_moves() if move.move_type == "capture"
+    ]
+    assert captures, "no capture is on offer"
+    chain = captures[0]
+    assert getattr(chain, "hops", None), "the offered capture carries no hops"
+
+    controller.select_square(chain.start_pos)
+    result = controller.handle_square_click(chain.end_pos)
+
+    assert result["action"] == "moved"
+    assert result["success"] is True
+
+
+def test_find_move_returns_none_for_a_square_pair_that_is_not_a_move():
+    controller = GameController()
+    manager = controller.game_manager
+
+    assert manager.move_validator.find_move((0, 0), (7, 7), manager.board) is None
+    assert manager.move_validator.find_move((-1, 0), (0, 0), manager.board) is None

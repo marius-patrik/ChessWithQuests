@@ -487,6 +487,35 @@ class MoveValidator:
         self.legal_candidates = legal
         return legal_moves
 
+    def find_move(
+        self,
+        start_pos: Tuple[int, int],
+        end_pos: Tuple[int, int],
+        board: Optional[Board] = None,
+    ) -> Optional[Move]:
+        """Return the legal move from one square to another, as the rule offered it.
+
+        A caller that learns a move from two clicks needs the move the rule built, not a bare
+        pair of squares rebuilt into a fresh `Move`. A rule may attach more than a destination
+        to a move — a chain of hops, a piece to promote into, a companion rook — and a rebuilt
+        move has none of it, so a capture chain or a promotion silently becomes illegal.
+
+        Args:
+            start_pos: (row, col) the move begins at.
+            end_pos: (row, col) the move ends at.
+            board: Optional Board instance (defaults to self.board).
+
+        Returns:
+            Optional[Move]: The move the rules offered, or None when none is legal.
+        """
+        b = board or self.board
+        if b is None or not b.is_within_bounds(*start_pos) or not b.is_within_bounds(*end_pos):
+            return None
+        for move in self.get_legal_moves_for(start_pos, b):
+            if tuple(move.end_pos) == tuple(end_pos):
+                return move
+        return None
+
     def get_legal_moves_for(
         self, start_pos: Tuple[int, int], board: Optional[Board] = None
     ) -> List[Move]:
