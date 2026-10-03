@@ -6,8 +6,10 @@ express it and a condition object would only have moved the behaviour somewhere 
 
 Fourteen watch the game a move at a time (`after_move`) and six judge the finished game
 (`at_game_end`). None of them names a chess piece. Anything game-specific — which piece
-type a capture must be, which kind of piece is royal — arrives as a parameter, so the same
-quest serves chess and a game that has never been heard of.
+type a capture must be, which kind of piece may be the only one that moves — arrives as a
+parameter, so the same quest serves chess and a game that has never been heard of. The two
+quests that cannot be built without such an answer are absent from the roster `build_quests()`
+returns, for the same reason: the engine cannot answer them and must not pretend to.
 
 They live here rather than in `games/<variant>/quests/` because they are generic and fully
 parameterised; a configuration instantiates them, and a game needing something these do
@@ -1144,24 +1146,31 @@ BUILT_IN_QUESTS = (
 
 
 def build_quests() -> List[Quest]:
-    """Build one instance of every built-in quest, at its default target.
+    """Build one instance of every built-in quest that needs no game-specific answer.
 
     The roster is written out here rather than discovered, for the same reason the chess
     rules are: the set of quests in play is a decision someone made, and a decision that can
     be read in one place is one that can be argued with. A quest class not named here is
     available to a configuration but is not in play.
 
-    `CompositeQuest` is deliberately absent. It is the mechanism for building a quest out of
-    other quests rather than a quest in its own right, so the roster is nineteen quests and
-    one way of composing them.
+    Three classes are deliberately absent, and each for its own reason.
+
+    - `CompositeQuest` is the mechanism for building a quest out of other quests rather than
+      a quest in its own right.
+    - `CaptureOfType` and `KingOnlyGame` cannot be listed at all: both insist on naming a
+      piece type, and which piece type is a question only a configuration can answer. The
+      engine naming `"queen"` or `"king"` here is the engine holding chess, which is what
+      this module's docstring says it does not do. A configuration that wants them supplies
+      them: `games/chess/__init__.py` names both, with its own piece names.
 
     Returns:
-        List[Quest]: The nineteen built-in quests, in roster order.
+        List[Quest]: The seventeen built-in quests, in roster order. The seventeen are every
+        roster member that a configuration can play without first answering a question about
+        its own pieces.
     """
     return [
         FirstBlood(),
         CaptureN(),
-        CaptureOfType("queen"),
         MovePieceNTimes(),
         ReachedSquare((0, 0)),
         VisitNSquares(),
@@ -1174,7 +1183,6 @@ def build_quests() -> List[Quest]:
         NeverInCheck(),
         Pacifist(),
         MaterialAhead(),
-        KingOnlyGame("king"),
         GameAtLeast(),
         GameResult(),
         WonBy(),
