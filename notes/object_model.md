@@ -34,14 +34,9 @@ user request adds it.
   object, so the diagram-to-code mapping is discoverable from the source and
   the generated documentation. Aliases use ASCII spellings without diacritics.
   Comments, docstrings, commit messages and documentation remain English.
-- **Implemented 2026-10-03, partially — see section 19.** This section listed
-  seven alias spellings as though they were the whole set, which they are not:
-  they are the seven whose Czech spelling *differs* from the English one. The
-  other eight (`Figurka`, `Tah`, `Hrac`, `RevizorTahu`, `Uzivatel`, `Kwest`,
-  `HracView`, `HracGameView`) have the same spelling in both languages and were
-  never listed at all, which is how all fifteen went unimplemented while this
-  section read as if they did not. `PRD.md` section 5 holds the authoritative
-  fifteen-row table; section 19 carries it as corrected against the code.
+- **All fifteen exist.** `PRD.md` section 5 holds the authoritative fifteen-row
+  table, and section 19 carries it with the module each alias lives in, checked
+  against the code by `tests/test_aliases.py`.
 - **Approval**: recorded with user approval, and re-approved for the alias
   allowance on 2026-10-02.
 
@@ -302,11 +297,32 @@ Recorded because the question is fair and the answer is not obvious.
 - **Context**: `Tah` carries `vychozi pozice`, `cilova pozice`, `figurka` and
   `typ tahu` — one start, one end, one piece. There is no structure for a move
   that visits several squares.
-- **Deviation**: `Move` grows a sequence of hops alongside its start and end.
-- **Rationale**: a capture chain in checkers is one move the player makes. The
-  diagram's `typ tahu` field is a move *type*, so it cannot express hop count.
-- **Mitigation**: `Tah`'s existing members are untouched; only a sequence is
-  added. A single-hop move is the degenerate case, and both share one code path.
+- **Deviation**: a move that visits several squares is a subclass of the drawn
+  move. `Move` is unchanged; `HopMove(Move)` in `games/checkers/moves.py` carries
+  the hop sequence, and it is declared by the configuration whose game needs it.
+- **What the subclass carries**: `hops`, the landing square of each jump in
+  order, of which the last is the move's `end_pos`; `captures`, the square each
+  taken piece stood on, one per hop, which cannot be derived because a king's
+  victim is whatever piece stands first along the diagonal; `captured_pieces` in
+  the order they were taken; and `route`, the starting square followed by each
+  landing square.
+- **How it executes**: `HopMove` overrides `apply_to_board` and reuses the
+  engine's `unapply_from_board` verbatim, because it returns the engine's own
+  `Applied` record. The validator's legality test, the game's move execution and
+  every caller between them already go through that pair polymorphically, so a
+  three-jump chain is put on and taken off the board by the same code that plays a
+  castling move. A single jump is the degenerate case of both sequences, and there
+  is no separate path for it.
+- **Rationale**: a capture chain in draughts is one move the player makes, and the
+  diagram's `typ tahu` field is a move *type*, so it cannot express a hop count.
+  Putting the sequence on a subclass rather than on `Tah` is the stronger form of
+  the deviation: nothing under `model/`, `controller/` or `view/` grows a
+  draughts-shaped member, which is the same requirement FR-55 states and the same
+  one the checkers configuration exists to test.
+- **Mitigation**: `Tah`'s members are untouched; a subclass is added. One caller
+  does not survive: a caller that rebuilds the board from a snapshot rather than
+  undoing, because `Move` records the mover and `HopMove` checks it by identity.
+  `tests/test_draughts_perft.py` walks by undoing for that reason.
 - **Approval**: directed by the user on 2026-10-02, via the checkers requirement.
 
 ### 12. FEN Import
@@ -351,17 +367,38 @@ Recorded because the question is fair and the answer is not obvious.
   size. That default is kept, but nothing may rely on it — see FR-1 and FR-15.
 - **Approval**: recorded for visibility on 2026-10-02.
 
-### 15. HracView Is Not a Class
+### 15. The View Classes the Diagram Draws Are Not Three Classes
 
 - **Date**: 2026-10-02
 - **Context**: page 2 has no `HracView` box. `+ hrac_view: HracView` appears only
-  as an attribute *type* on `GameManagerController`. There is also no
-  `GameVeiw`-as-a-class-name match, because the diagram spells it `GameVeiw`.
+  as an attribute *type* on `GameManagerController`. There is also no `GameVeiw`-as-a-class-name
+  match, because the diagram spells it `GameVeiw`.
 - **Deviation**: `PlayerView` is created, with the Czech alias `HracView`, as a
-  real class; and `GameView` is created as a real class for the diagram's
-  `GameVeiw` box. The diagram's spelling is recorded as a typo and not reproduced.
+  real class; the diagram's spelling of `GameVeiw` is recorded as a typo and not
+  reproduced.
+- **There is no `GameView` class.** This section previously recorded one as
+  created, and no such class exists in any form. What is there:
+  - `view/game_view.py` declares `BoardView`, the only part of the program that
+    knows what a square looks like. It draws the grid, the pieces, the
+    coordinates, the selection and legal-move highlights, and the check marker.
+  - `view/player_game_view.py` declares `PlayerGameView`, the window a game is
+    played in. It holds a `BoardView` as `board_view` and composes it with the
+    player panels, the move history, the turn indicator, the status footer and the
+    quest cards.
+- **How the drawn operations are served**: `GameView.aktualizuj_plochu()` —
+  refresh the board when the controller reports a change — is
+  `PlayerGameView.refresh`, which calls `board_view.refresh` and
+  `board_view.set_selection`. `PlayerGameView.reload` and `on_new_game` call the
+  same pair. `GameManagerController.game_view: GameView` is satisfied by the
+  `PlayerGameView` that holds the board view.
+- **Why composition rather than a third class**: the diagram's own
+  generalisation idiom settles what the parent is. `BoardView` is the piece the
+  diagram has no box for, `PlayerGameView` is the `HracGameView` it does, and a
+  `GameView` that wrapped the first inside the second would hold no state and
+  forward every call — a class with a name and no behaviour. FR-65 and FR-66 are
+  satisfied by the two classes that exist.
 - **Rationale**: the controller attribute names a view it must hold, and the
-  requirements render a player panel, so the class has to exist.
+  requirements render a board and a player panel, so both classes have to exist.
 - **Approval**: directed by the user on 2026-10-02.
 
 ### 16. A Configuration Loads as a Package in Its Own Right
@@ -447,50 +484,52 @@ Recorded because the question is fair and the answer is not obvious.
   a class name, a spelling and an import list that the plan wrote down and the code did
   not follow.
 - **Change, five parts.**
-  1. **The fifteen Czech aliases.** None of the fifteen in `PRD.md` section 5 existed.
-     Six now do, in the chess configuration: `Pesak`, `Vez`, `Kun`, `Strelec`, `Dama`
-     and `Kral`. The other nine are engine and view classes whose modules were not in
-     this work's file list, so they remain missing and are listed by name below.
-  2. **`Knight` is canonical and `Horse` is gone.** `games/chess/pieces/horse.py`
-     declared `class Horse(Piece)` and ended with `Knight = Horse`, which made the
-     English name the alias — the reverse of the decision. The class is now `Knight`,
-     the file is `games/chess/pieces/knight.py`, and `Kun` is the alias. There is no
-     `Horse` binding anywhere, per the approved outcome above.
-  3. **`Tower` and `Controller` are removed.** `games/chess/pieces/tower.py` shipped
-     `Tower = Rook` on the reasoning that `Tower` is Czech for the rook; it is not,
-     `Věž` is, and `Vez` is its ASCII spelling. `controller/controller.py` shipped
-     `Controller = GameController`. Both were approved drops.
-  4. **The manager reads `configuration.exporters` and declares no quests.** It no
-     longer imports or names `ChessNotationWriter`, and no longer falls back to the
-     engine's quest roster.
+  1. **The fifteen Czech aliases all exist.** Six are in the chess configuration
+     (`Pesak`, `Vez`, `Kun`, `Strelec`, `Dama`, `Kral`) and nine are in the engine
+     and view modules that own the class each names (`Figurka`, `HerniPlocha`,
+     `Tah`, `Hrac`, `RevizorTahu`, `Uzivatel`, `Kwest`, `HracView`,
+     `HracGameView`). Each is a one-line binding next to the class it names, and
+     each is the same object rather than a lookalike.
+  2. **`Knight` is canonical and `Horse` is gone.** The class is `Knight`, the file
+     is `games/chess/pieces/knight.py`, and `Kun` is the alias. There is no `Horse`
+     binding anywhere, per the approved outcome below.
+  3. **`Tower` and `Controller` are removed.** `Tower` was shipped as `Tower = Rook`
+     on the reasoning that `Tower` is Czech for the rook; it is not, `Věž` is, and
+     `Vez` is its ASCII spelling. `Controller` was shipped as
+     `Controller = GameController`. Both were approved drops, and
+     `games/chess/pieces/tower.py` is deleted.
+  4. **The manager reads `configuration.exporters` and declares no quests.** It does
+     not import or name `ChessNotationWriter`, and does not fall back to the engine's
+     quest roster.
   5. **`games/chess/rules/` imports relatively**, and `promotion.py` builds the
      promoted piece relatively, so a copied configuration composes its own rules and
      promotes into its own pieces. This closes the gap section 16 recorded.
 - **The fifteen-row alias table, as implemented.** `PRD.md` section 5 is
-  authoritative; this is that table checked against the code on 2026-10-03.
+  authoritative; this is that table with the module each alias lives in.
 
-  | Diagram | Canonical | Czech alias | Where the alias lives | State |
-  |---|---|---|---|---|
-  | `Figurka` | `Piece` | `Figurka` | `model/pieces/piece.py` | **missing** |
-  | `Pěšák` | `Pawn` | `Pesak` | `games/chess/pieces/pawn.py` | present |
-  | `Věž` | `Rook` | `Vez` | `games/chess/pieces/rook.py` | present |
-  | `Kůň` | `Knight` | `Kun` | `games/chess/pieces/knight.py` | present |
-  | `Střelec` | `Bishop` | `Strelec` | `games/chess/pieces/bishop.py` | present |
-  | `Dáma` | `Queen` | `Dama` | `games/chess/pieces/queen.py` | present |
-  | `Král` | `King` | `Kral` | `games/chess/pieces/king.py` | present |
-  | `HerníPlocha` | `Board` | `HerniPlocha` | `model/game/board.py` | **missing** |
-  | `Tah` | `Move` | `Tah` | `model/game/move.py` | **missing** |
-  | `Hrac` | `Player` | `Hrac` | `model/game/player.py` | **missing** |
-  | `RevizorTahu` | `MoveValidator` | `RevizorTahu` | `model/game/validator.py` | **missing** |
-  | `Uzivatel` | `User` | `Uzivatel` | `model/users/user.py` | **missing** |
-  | `Kwest` | `Quest` | `Kwest` | `model/game/quest.py` | **missing** |
-  | `HracView` | `PlayerView` | `HracView` | `view/player_view.py` | **missing** |
-  | `HracGameView` | `PlayerGameView` | `HracGameView` | `view/player_game_view.py` | **missing** |
+  | Diagram | Canonical | Czech alias | Where the alias lives |
+  |---|---|---|---|
+  | `Figurka` | `Piece` | `Figurka` | `model/pieces/piece.py` |
+  | `Pěšák` | `Pawn` | `Pesak` | `games/chess/pieces/pawn.py` |
+  | `Věž` | `Rook` | `Vez` | `games/chess/pieces/rook.py` |
+  | `Kůň` | `Knight` | `Kun` | `games/chess/pieces/knight.py` |
+  | `Střelec` | `Bishop` | `Strelec` | `games/chess/pieces/bishop.py` |
+  | `Dáma` | `Queen` | `Dama` | `games/chess/pieces/queen.py` |
+  | `Král` | `King` | `Kral` | `games/chess/pieces/king.py` |
+  | `HerníPlocha` | `Board` | `HerniPlocha` | `model/game/board.py` |
+  | `Tah` | `Move` | `Tah` | `model/game/move.py` |
+  | `Hrac` | `Player` | `Hrac` | `model/game/player.py` |
+  | `RevizorTahu` | `MoveValidator` | `RevizorTahu` | `model/game/validator.py` |
+  | `Uzivatel` | `User` | `Uzivatel` | `model/users/user.py` |
+  | `Kwest` | `Quest` | `Kwest` | `model/game/quest.py` |
+  | `HracView` | `PlayerView` | `HracView` | `view/player_view.py` |
+  | `HracGameView` | `PlayerGameView` | `HracGameView` | `view/player_game_view.py` |
 
-  Each missing alias is one line — the binding, next to the class it names — in a
-  module this work was not given. `tests/test_aliases.py` asserts that this table's
-  *missing* half is still exactly the set that does not resolve, so the gap is
-  tracked rather than forgotten.
+  `tests/test_aliases.py` holds this table against the source: it asserts every name
+  resolves from its stated module, that each alias `is` its canonical class, that
+  the table has exactly fifteen rows, and that `ALIASES_OUTSTANDING` is exactly the
+  set of aliases which do not resolve. That set is empty, so the table cannot drift
+  from the code without the suite failing.
 - **A piece's class name is not its configured kind.** `Knight` declares
   `piece_type="horse"` and that is deliberate. `piece_type` is data a configuration
   chooses and writes into `configuration.json`, so renaming it would silently repoint
@@ -515,6 +554,63 @@ Recorded because the question is fair and the answer is not obvious.
      first as a no-argument stub shadowed by the real one. Nothing called the stub;
      it was a trap for anyone who did.
 
+### 20. The Settings Surface Gains What the Plan Recorded
+
+- **Date**: 2026-10-03
+- **Context**: sections 3 and 9 registered the settings layer and the field declaration
+  framework, and both shipped as `view/settings_dialog.py` rendering per-rule fields and
+  nothing else. The plan records more: a corner selector (FR-30), five sections (FR-31), a
+  code editor for logic (FR-33, FR-34), and configurations that can be created, renamed,
+  duplicated and deleted (FR-28). Of those, only the per-rule form existed, and
+  `SCRATCHPAD.md` item 18 — the default configuration cannot be edited or deleted — was
+  unenforced: `Configuration.save_values()` wrote into the configuration directory with no
+  guard at all.
+- **Change, four things.**
+  1. **The default configuration refuses to be written to.** `Configuration.is_default` names
+     the case and `save_values()` refuses a target inside that directory's own tree. The guard
+     is scoped to the directory rather than to writing: exporting the default's values
+     elsewhere is a read, not an edit. `copy_configuration`, `rename_configuration` and
+     `delete_configuration` are the directory moves FR-28 asks for, and all three refuse the
+     default.
+  2. **The code editor, and the check it stands on.** `view/code_editor.py` is a text area
+     over one file in the configuration directory being edited, and it refuses to save what
+     `model/game/source_validation.py` refuses. This is section 10's bounding being carried
+     out rather than a new mechanism: the validator executes the code it checks, which is what
+     the product does anyway when it loads a configuration.
+  3. **Five sections and the corner selector.** One tab per configurable surface — Board,
+     Pieces, Rules, Quests, Clocks — each assembled from what its subject declares, plus a
+     selector in the corner with a plus button that duplicates the configuration being edited.
+  4. **Declarations where there were none.** `Board.value_fields()`, `Piece.value_fields()`
+     and `Piece.apply_values()`, and `model/game/clock_fields.py`. None of the three declared
+     anything before, so the sections had nothing to render from.
+- **Deviation**: none beyond sections 3, 9 and 10, which already register the settings layer,
+  the declaration framework and the execution of authored code. Everything here is those three
+  being finished.
+- **What this departs from, recorded as required.** Three departures, none of which is a
+  diagram deviation:
+  1. **`model/game/clock_fields.py` is new and has no diagram counterpart.** A clock is the
+     one configurable type that is a plain object rather than a parent class with subclasses —
+     both shipped configurations ship a `Fischer` and neither derives from anything — so there
+     is no `Clock` class for a declaration to hang off. The module declares a clock's fields
+     from what the clock holds, and asks the clock first if it declares its own. Section 13
+     registered a `Clock` parent as the intention; this is a declaration function standing in
+     for the class that has not been written. **A real `Clock` parent remains unbuilt and is
+     recommended.**
+  2. **`Piece.apply_values()` is new.** `value_fields()` is a declaration; something has to
+     write the values back, and two of the declared values are not single attributes — the two
+     symbols are one tuple, and the vectors are a list of pairs shown as text. Parsing them in
+     the piece rather than in the view is what keeps the form a renderer.
+  3. **`Configuration.package` is new.** A configuration now carries the module name it is
+     registered under, so a relative import inside a file being checked resolves against the
+     package the file belongs to. Without it every file in a configuration that imports its
+     siblings reports an ImportError that is an artefact of checking rather than a fault in
+     the code.
+- **Recorded as a limit, not finished**: the Pieces section reads each piece class from a
+  probe instance and writes back to that instance. A configuration's `pieces` are *classes*,
+  so a symbol changed in the form changes the probe and not the class the configuration
+  composes. Making a piece's identity configurable therefore needs the configuration to hold
+  piece instances or declared overrides, which is not built.
+
 ---
 
 ## Naming decisions requiring approval context
@@ -524,11 +620,11 @@ Recorded here because they are deviations from what the diagram draws and
 
 | Decision | Outcome | Approved |
 |---|---|---|
-| `Kůň` maps to `Knight`, not `Horse` | `Knight` is canonical, `Kun` is its Czech alias, `Horse` is removed. **Implemented 2026-10-03** — see section 19. | 2026-10-02 |
-| `Tower` | Dropped. No box in the diagram carries that name, and `Věž` maps to `Rook`. **Implemented 2026-10-03**: `games/chess/pieces/tower.py` deleted. | 2026-10-02 |
-| `Controller` | Dropped. No box carries that name; the diagram's controller box is `GameManagerController`. **Implemented 2026-10-03**: the alias is gone from `controller/controller.py`. | 2026-10-02 |
+| `Kůň` maps to `Knight`, not `Horse` | `Knight` is canonical, `Kun` is its Czech alias, `Horse` is removed — see sections 15 and 19. | 2026-10-02 |
+| `Tower` | Dropped. No box in the diagram carries that name, and `Věž` maps to `Rook`. `games/chess/pieces/tower.py` is deleted. | 2026-10-02 |
+| `Controller` | Dropped. No box carries that name; the diagram's controller box is `GameManagerController`. The alias is gone from `controller/controller.py`. The module is still `controller.py`, not `game_manager_controller.py` — see `SCRATCHPAD.md` planned PR 20. | 2026-10-02 |
 | Czech aliases carry no diacritics | ASCII spellings only | 2026-10-02 |
-| `HracView` is created as `PlayerView` | See section 15. The class exists; its `HracView` alias does not yet. | 2026-10-02 |
+| `HracView` is created as `PlayerView` | See section 15. The class exists, and its `HracView` alias does too. | 2026-10-02 |
 | A piece's configured `piece_type` is not renamed with its class | `Knight` declares `piece_type="horse"`. `piece_type` is persisted configuration data, so renaming it would repoint every stored value. **New, 2026-10-03**; approval not yet on record. | Recorded 2026-10-03; **not approved** |
 | `KingOnlyGame` keeps its chess name | **Not renamed, and recommended for renaming.** The class judges a game in which only one kind of piece ever moved, which is not chess-specific, so `SingleKindGame` would be the honest name — but `royal_kind` is the constructor keyword configurations pass and `tests/test_quest.py` calls with it, and renaming either needs that test updated and every player-authored quest file to change with it. Renaming the class while keeping the keyword would leave the vocabulary in place anyway, so the name stays until the keyword can move with it. | Recorded 2026-10-03; **not approved** |
 | `ChessNotationWriter` keeps its name in the engine | **Not moved, and registered for moving.** Section 7 already places per-format writers in `games/chess/export/`, and section 7's approval covers it. The blocker was `model/game/manager.py`'s import by name, and that is gone as of 2026-10-03, so the move is now unblocked and unperformed. Moving it while leaving a shim behind would make the engine module import the configuration that imports the engine module, which fails on a cycle as soon as any variant configuration is loaded. | Recorded 2026-10-03; **not approved** |
