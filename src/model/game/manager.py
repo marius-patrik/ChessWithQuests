@@ -322,7 +322,13 @@ class GameManager:
         # before the move. Reading the board here would read the position after it, where the
         # destination holds the piece that just arrived and every move looks like a capture.
         piece = move.piece
-        captured = move.captured_piece
+        # A move that chains several captures carries them all, and a quest counting captures
+        # must count each one. Reading the single `captured_piece` scored a three-jump
+        # draughts capture as one.
+        taken = getattr(move, "captured_pieces", None)
+        if taken is None:
+            taken = [move.captured_piece] if move.captured_piece is not None else []
+        captured = taken[0] if taken else None
         return MoveEvent(
             move=move,
             position=self.board,
