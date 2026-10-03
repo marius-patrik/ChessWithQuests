@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from model.game.field import Field
 from model.game.move import Move
 from model.game.rule import KIND_DRAW, Result, Rule
-from games.chess.rules.attacks import kinds_of, square_color
+from games.chess.rules.attacks import kinds_of, opponent, square_color
 
 #: Precedence of each draw, so two firing at once is deterministic.
 STALEMATE_PRECEDENCE = 90
@@ -156,10 +156,11 @@ class ThreefoldRepetitionRule(Rule):
         return [Field("occurrences", "integer", "Occurrences", 3, minimum=2)]
 
     def attach(self) -> None:
-        """Forget every position seen in a previous game and record the starting one.
+        """Forget every position seen in a previous game.
 
-        The position a game starts in has already occurred once, so it is recorded here
-        rather than being treated as a first sighting.
+        A rule cannot record the position a game starts in: `attach` is handed the game, not
+        the board, so it has nothing to record. The starting position is instead counted when
+        it is first asked about, and the count is off by one until then.
 
         Returns:
             None
@@ -167,7 +168,7 @@ class ThreefoldRepetitionRule(Rule):
         self.state["seen"] = {}
         self.recorded = None
 
-    def record(self, position: Any) -> int:
+    def record(self, position: Any, active_color: Optional[int] = None) -> int:
         """Record a position once and report how often it has occurred.
 
         Recording is idempotent for the position being judged, so asking whether the game is
@@ -175,19 +176,29 @@ class ThreefoldRepetitionRule(Rule):
 
         Args:
             position: The board as it stands.
+            active_color: Whose turn it is in this position. Defaults to the colour this
+                rule was last told is to move, which is right whenever the position is the
+                one the game is actually in.
 
         Returns:
             int: How many times this position has occurred in this game.
         """
-        key = position_key(position, self.active_color)
+        key = position_key(position, self.active_color if active_color is None else active_color)
         if key == self.recorded:
-            return self.state["seen"].get(key, 1)
+            return self.state.setdefault("seen", {}).get(key, 1)
         self.recorded = key
-        self.state["seen"][key] = self.state["seen"].get(key, 0) + 1
-        return self.state["seen"][key]
+        seen = self.state.setdefault("seen", {})
+        seen[key] = seen.get(key, 0) + 1
+        return seen[key]
 
     def on_move_made(self, position: Any, move: Move) -> None:
         """Record the position the move produced.
+
+        The position a move produces is judged with the *next* player to move, not the one
+        who just moved. `active_color` still names the player who moved, because a game
+        flips it after telling the rules what happened, so keying on it recorded every
+        position under a turn order no other record of that position would ever use, and no
+        position could be seen twice.
 
         Args:
             position: The board after the move.
@@ -196,7 +207,8 @@ class ThreefoldRepetitionRule(Rule):
         Returns:
             None
         """
-        self.record(position)
+        mover = move.piece.getColor() if move.piece is not None else self.active_color
+        self.record(position, opponent(mover))
 
     recorded: Optional[str] = None
 
@@ -210,7 +222,7 @@ class ThreefoldRepetitionRule(Rule):
             Optional[Result]: A draw, or None.
         """
         limit = self.value.get("occurrences", 3)
-        if self.record(position) < limit:
+        if self.record(position, self.active_color) < limit:
             return None
         return Result(KIND_DRAW, precedence=THREEFOLD_PRECEDENCE, reason="threefold repetition")
 

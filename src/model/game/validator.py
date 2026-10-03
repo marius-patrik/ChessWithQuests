@@ -53,35 +53,40 @@ class MoveValidator:
         rules: Iterable[Rule],
         clock: Any = None,
         active_color: Optional[int] = None,
+        attach: bool = True,
     ) -> None:
         """Replace the rules in force and hand them the game they are joining.
 
         Args:
             rules: The rules in force, in the order the configuration declared them.
-            clock: The game's clock, for a rule about time.
+            clock: The game's clock, for a rule about time. One that is not supplied leaves
+                each rule holding whatever clock it already had, because a question about
+                the game must not take the clock away from the rule that was reading it.
             active_color: Whose turn it is, for a rule that cannot work it out from a board.
+            attach: Whether to attach the rules that are in force. Attaching is what a game
+                does when it starts: it hands each rule the board it will read and clears
+                the history the rule accumulated in the last one. A question asked mid-game
+                composes the rules it was given and passes `False` here, because re-attaching
+                wipes the very history the question is about — the positions a repetition has
+                seen, the colours that have castled, the clock a flag-fall rule reads.
 
         Returns:
             None
         """
-        previous = {id(rule): (rule.clock, rule.active_color) for rule in self.rules}
         self.rules = list(rules)
         for rule in self.rules:
             rule.rules = self.rules
             # Handing a rule its clock or whose turn it is only when one was supplied. A
-            # question like "does anybody have a legal move" composes the same rules again, and
-            # passing no clock used to strip the clock rule of the clock it was reading, so a
-            # flagged player could never lose on time.
-            rule.clock = clock if clock is not None else previous.get(id(rule), (None, None))[0]
+            # question like "does anybody have a legal move" composes the same rules again
+            # from a validator that has never seen them, and passing no clock used to strip
+            # the clock rule of the clock it was reading, so a flagged player could never
+            # lose on time.
+            if clock is not None:
+                rule.clock = clock
             if active_color is not None:
                 rule.active_color = active_color
-            elif id(rule) in previous:
-                rule.active_color = previous[id(rule)][1]
-            if rule not in self.rules[: self.rules.index(rule)]:
-                # Only a rule joining for the first time is attached. Re-attaching a rule that
-                # is already in a game wipes the state it accumulated — the positions a
-                # repetition has seen, the colours that have castled — so asking a question
-                # mid-game reset the very history the question is about.
+        if attach:
+            for rule in dict.fromkeys(self.rules):
                 rule.attach()
 
     def active_rules(self) -> List[Rule]:
@@ -360,10 +365,14 @@ class MoveValidator:
                 if not b.is_within_bounds(nr, nc) or b.get_piece_at((nr, nc)) is not None:
                     continue
                 # A first-only advance is a walk, not a leap: every square between here and
-                # there must be empty, or a pawn steps over whatever is sitting on it.
+                # there must be empty, or the piece steps over whatever is sitting on it.
+                # The square it lands on was just tested, so the squares to test are the
+                # ones strictly between — one step along the walk for each square skipped.
                 blocked = False
-                for step in range(1, max(abs(dr), abs(dc))):
-                    if b.get_piece_at((r + dr // step * step, c + dc // step * step)) is not None:
+                steps = max(abs(dr), abs(dc))
+                for step in range(1, steps):
+                    middle = (r + (dr // steps) * step, c + (dc // steps) * step)
+                    if b.get_piece_at(middle) is not None:
                         blocked = True
                         break
                 if not blocked:
@@ -461,16 +470,15 @@ class MoveValidator:
             if not self.is_permitted(candidate, b):
                 continue
 
-            # Simulate move to ensure it does not leave/place king in check
-            original_target = b.get_piece_at(target_pos)
-            b.set_piece_at(target_pos, piece)
-            b.set_piece_at(start_pos, None)
-
+            # Put the move on the board the way it would really happen, and take it off again
+            # the same way. Swapping the two squares the move names is not enough: an en
+            # passant capture also lifts a piece from a third square, and a castle carries a
+            # rook to a fourth. A simulation that left either behind was looking at a
+            # position with a blocker fewer than reality, and every pin through that blocker
+            # was invisible to it.
+            applied = candidate.apply_to_board(b)
             in_check = self.is_check(color, b)
-
-            # Rollback
-            b.set_piece_at(start_pos, piece)
-            b.set_piece_at(target_pos, original_target)
+            candidate.unapply_from_board(b, applied)
 
             if not in_check:
                 legal_moves.append(target_pos)

@@ -138,5 +138,10 @@ def has_legal_move(position: Position, color: int, rules: Iterable[Any]) -> bool
     """
     from model.game.validator import MoveValidator
 
-    validator = MoveValidator(position, rules=rules)
+    # The rules are composed without being attached. Attaching is what a game does when it
+    # starts, and attaching them again here wiped the history they had accumulated in the
+    # game being asked about: the positions a repetition had seen, the colours that had
+    # castled, the clock a flag-fall rule was reading.
+    validator = MoveValidator(position)
+    validator.set_rules(rules, attach=False)
     return bool(validator.get_all_valid_moves(color, position))

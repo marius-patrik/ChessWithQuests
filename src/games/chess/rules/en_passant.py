@@ -1,12 +1,13 @@
-"""En passant.
+"""The one-off long advance, and the capture in passing it allows.
 
-A capture whose target is not where the capturing piece lands, so it needs the square the
-captured pawn actually stands on. Nothing here knows what a pawn is: the rule recognises a
-one-off long advance from the piece's declared `initial_vectors`, and offers the capture to
-whatever piece takes the right way.
+A long first advance is the one move a piece may make only from the row it starts on, which
+the piece itself does not record: all it declares is an offset it may use once. Nothing here
+knows what a pawn is. The rule recognises a one-off long advance from the piece's declared
+`initial_vectors`, insists it is made from the row it belongs on, and offers the capture in
+passing to whatever piece takes the right way.
 """
 
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 from model.game.field import Field
 from model.game.move import Move
@@ -35,6 +36,57 @@ class EnPassantRule(Rule):
         self.state.setdefault("victim", None)
         self.state.setdefault("victim_color", None)
 
+    def start_row(self, position: Any, piece: Any) -> Optional[int]:
+        """Return the row this piece's one-off advance is offered from.
+
+        A piece that has declared a long advance declares an offset, not a square, and the
+        piece itself keeps no record of where it began. The row is therefore derived from the
+        board the same way the far end of a piece's travel is derived elsewhere: one row in
+        from the edge the advance starts against, which for a pawn is its own starting rank.
+        Without it a pawn that had already reached the middle of the board was offered a
+        fresh two-square advance from wherever it stood.
+
+        Args:
+            position: The board to read.
+            piece: The piece asking.
+
+        Returns:
+            Optional[int]: The row, or None when this piece declares no long advance.
+        """
+        if piece is None:
+            return None
+        for dr, dc in piece.getInitialVectors() or []:
+            if dc != 0 or dr == 0:
+                continue
+            return position.rows - 2 if dr < 0 else 1
+        return None
+
+    def is_first_advance(
+        self, position: Any, piece: Any, start: Tuple[int, int], end: Tuple[int, int]
+    ) -> bool:
+        """Report whether these two squares are this piece's one-off long advance.
+
+        The row is what makes it the *first* advance rather than any move of that shape, so
+        this asks nothing about whether the piece has already moved: it is also asked about a
+        move that has already been played, and by then the piece has.
+
+        Args:
+            position: The board to read.
+            piece: The piece that moves.
+            start: The (row, col) square it leaves.
+            end: The (row, col) square it lands on.
+
+        Returns:
+            bool: True when the offset is one the piece declared for its first move only
+            and the piece is standing on the row that advance belongs on.
+        """
+        if piece is None:
+            return False
+        offset = (end[0] - start[0], end[1] - start[1])
+        if offset not in (piece.getInitialVectors() or []):
+            return False
+        return start[0] == self.start_row(position, piece)
+
     def victim_square(self) -> Optional[tuple]:
         """Return the square the pawn that may be taken in passing stands on.
 
@@ -57,12 +109,33 @@ class EnPassantRule(Rule):
         Returns:
             None
         """
-        if self._is_double_step(position, move):
+        piece = piece_at(position, move.end_pos)
+        if self.is_first_advance(position, piece, move.start_pos, move.end_pos):
             self.state["victim"] = tuple(move.end_pos)
-            self.state["victim_color"] = piece_color(position, move)
+            self.state["victim_color"] = piece.getColor() if piece is not None else None
         else:
             self.state["victim"] = None
             self.state["victim_color"] = None
+
+    def permits_move(self, position: Any, move: Move) -> bool:
+        """Refuse a long first advance made from anywhere but the row it belongs on.
+
+        Args:
+            position: The board the move would be played on.
+            move: The move being considered.
+
+        Returns:
+            bool: False for a declared first-move advance that begins off its own row, True
+            otherwise.
+        """
+        piece = move.piece or piece_at(position, move.start_pos)
+        if piece is None:
+            return True
+        start_row = self.start_row(position, piece)
+        if start_row is None or move.start_pos[0] == start_row:
+            return True
+        offset = (move.end_pos[0] - move.start_pos[0], move.end_pos[1] - move.start_pos[1])
+        return offset not in (piece.getInitialVectors() or [])
 
     def available_moves(self, position: Any, piece: Any) -> List[Move]:
         """Offer the capture in passing when one is available to this piece.
@@ -130,23 +203,18 @@ class EnPassantRule(Rule):
                 destinations.append((nr, nc))
         return destinations
 
-    @staticmethod
-    def _is_double_step(position: Any, move: Move) -> bool:
-        """Report whether a move was a piece's declared one-off long advance.
 
-        Args:
-            position: The board after the move.
-            move: The move that was played.
+def piece_at(position: Any, square: Tuple[int, int]) -> Optional[Any]:
+    """Return whatever stands on a square.
 
-        Returns:
-            bool: True when the move's offset is one the piece only had before its first
-            move.
-        """
-        piece = position.get_piece_at(move.end_pos)
-        if piece is None:
-            return False
-        offset = (move.end_pos[0] - move.start_pos[0], move.end_pos[1] - move.start_pos[1])
-        return offset in piece.getInitialVectors()
+    Args:
+        position: The board to read.
+        square: The (row, col) square to look at.
+
+    Returns:
+        Optional[Any]: The piece standing there, or None.
+    """
+    return position.get_piece_at(square)
 
 
 def piece_origin(position: Any, piece: Any) -> Optional[tuple]:
@@ -164,17 +232,3 @@ def piece_origin(position: Any, piece: Any) -> Optional[tuple]:
             if position.get_piece_at((r, c)) is piece:
                 return (r, c)
     return None
-
-
-def piece_color(position: Any, move: Move) -> Optional[int]:
-    """Return the colour of the piece that just moved.
-
-    Args:
-        position: The board after the move.
-        move: The move that was played.
-
-    Returns:
-        Optional[int]: The colour, or None when the square is empty.
-    """
-    piece = position.get_piece_at(move.end_pos)
-    return None if piece is None else piece.getColor()

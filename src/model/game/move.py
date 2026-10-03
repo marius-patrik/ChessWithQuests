@@ -1,10 +1,62 @@
 """Move representation tracking positions, piece transitions, captures, and promotions."""
 
-from typing import Tuple, Optional, Any
+from typing import Any, List, NamedTuple, Optional, Tuple
+
+#: One disturbed square: where it is, what stood on it, and whether that piece had moved.
+Disturbed = Tuple[Tuple[int, int], Optional[Any], bool]
+
+
+def _square(position: Optional[Tuple[int, int]]) -> Optional[Tuple[int, int]]:
+    """Read a coordinate pair, or nothing at all.
+
+    Args:
+        position: A (row, col) pair, or None for a move that has no such square.
+
+    Returns:
+        Optional[Tuple[int, int]]: The pair as a plain tuple, or None.
+    """
+    return None if position is None else (position[0], position[1])
+
+
+class Applied(NamedTuple):
+    """Everything a move disturbed, so that the position can be put back exactly.
+
+    Attributes:
+        squares: Every square the move wrote to, as (square, piece, had the piece moved)
+            triples, in the order it touched them.
+        captures: How many pieces each side had captured before the move, because a move
+            that is only being looked at must not leave its capture behind on the board.
+    """
+
+    squares: List[Disturbed]
+    captures: Tuple[int, int]
 
 
 class Move:
-    """Encapsulates a chess move with coordinates, piece states, and execution logic."""
+    """Encapsulates a chess move with coordinates, piece states, and execution logic.
+
+    Attributes:
+        start_pos: The (row, col) square the move begins on.
+        end_pos: The (row, col) square the move ends on.
+        piece: The piece that moves, once one has been established.
+        move_type: What kind of move this is, which is what makes it special.
+        captured_piece: The piece this move took, recorded while the board still held it.
+        promotion_piece: The piece that replaces the mover, when it changes kind.
+        capture_from: The square a taken piece stands on when it is not the destination.
+        companion_start: The square a second piece leaves, for a move that carries one along.
+        companion_end: The square that second piece ends on.
+    """
+
+    #: The (row, col) square the move begins on.
+    start_pos: Tuple[int, int]
+    #: The (row, col) square the move ends on.
+    end_pos: Tuple[int, int]
+    #: The square a taken piece stands on when it is not the destination.
+    capture_from: Optional[Tuple[int, int]]
+    #: The square a second piece leaves, for a move that carries one along.
+    companion_start: Optional[Tuple[int, int]]
+    #: The square that second piece ends on.
+    companion_end: Optional[Tuple[int, int]]
 
     def __init__(
         self,
@@ -33,15 +85,15 @@ class Move:
                 along. Castling moves a rook with its king.
             companion_end: Square that second piece ends on.
         """
-        self.start_pos = tuple(start_pos)
-        self.end_pos = tuple(end_pos)
+        self.start_pos = (start_pos[0], start_pos[1])
+        self.end_pos = (end_pos[0], end_pos[1])
         self.piece = piece
         self.move_type = move_type
         self.captured_piece = captured_piece
         self.promotion_piece = promotion_piece
-        self.capture_from = tuple(capture_from) if capture_from else None
-        self.companion_start = tuple(companion_start) if companion_start else None
-        self.companion_end = tuple(companion_end) if companion_end else None
+        self.capture_from = _square(capture_from)
+        self.companion_start = _square(companion_start)
+        self.companion_end = _square(companion_end)
 
     @staticmethod
     def _bounds(board: Optional[Any]) -> Tuple[int, int]:
@@ -86,19 +138,32 @@ class Move:
                 return False
         return True
 
-    def execute(self, board: Any) -> bool:
-        """Execute this move on the given board.
+    def apply_to_board(self, board: Any) -> Optional[Applied]:
+        """Put this move on the board and report everything needed to take it off again.
+
+        One pair does the work for both callers, and that is the point of it. Playing a move
+        and asking whether a move would be legal have to see the same position afterwards,
+        so the rook that castling carries is carried here too and the piece an en passant
+        capture takes is lifted here too. A legality test that only swapped the two squares
+        it named saw a position with one blocker fewer than reality, and every pin through
+        that blocker was invisible.
 
         Args:
-            board: Board instance on which the move is applied.
+            board: The board the move is played on.
 
         Returns:
-            True if the move executed successfully, False otherwise.
+            Optional[Applied]: What the move disturbed, or None when it could not be applied
+            at all because nothing stands on its starting square.
         """
-        if self.piece is None:
-            self.piece = board.get_piece_at(self.start_pos)
-        if self.piece is None:
-            return False
+        piece = self.piece if self.piece is not None else board.get_piece_at(self.start_pos)
+        if piece is None:
+            return None
+        self.piece = piece
+
+        applied = Applied(
+            squares=self._disturbed(board),
+            captures=(len(board.captured_white), len(board.captured_black)),
+        )
 
         if self.capture_from is not None:
             self.captured_piece = board.get_piece_at(self.capture_from)
@@ -106,9 +171,10 @@ class Move:
         else:
             self.captured_piece = board.get_piece_at(self.end_pos)
 
-        success = board.move_piece(self.start_pos, self.end_pos)
-        if not success:
-            return False
+        if not board.move_piece(self.start_pos, self.end_pos):
+            self.unapply_from_board(board, applied)
+            self.captured_piece = None
+            return None
 
         if self.companion_start is not None and self.companion_end is not None:
             companion = board.get_piece_at(self.companion_start)
@@ -118,4 +184,65 @@ class Move:
 
         if self.promotion_piece is not None:
             board.replace_piece(self.end_pos, self.promotion_piece)
-        return True
+        return applied
+
+    def unapply_from_board(self, board: Any, applied: Optional[Applied]) -> None:
+        """Put back everything `apply_to_board` took off the board.
+
+        Each disturbed square gets its own occupant back, and each piece gets its moved flag
+        back, because that flag is what says a piece has spent its one-off first advance and
+        what says a rook has already left its home square. A legality test that left the
+        flag set spent both.
+
+        Args:
+            board: The board the move was applied to.
+            applied: What `apply_to_board` reported. None is accepted and does nothing.
+
+        Returns:
+            None
+        """
+        if applied is None:
+            return
+        for square, occupant, has_moved in reversed(applied.squares):
+            board.set_piece_at(square, occupant)
+            if occupant is not None:
+                occupant.has_moved = has_moved
+        del board.captured_white[applied.captures[0] :]
+        del board.captured_black[applied.captures[1] :]
+
+    def execute(self, board: Any) -> bool:
+        """Execute this move on the given board.
+
+        Args:
+            board: Board instance on which the move is applied.
+
+        Returns:
+            True if the move executed successfully, False otherwise.
+        """
+        return self.apply_to_board(board) is not None
+
+    def _disturbed(self, board: Any) -> List[Disturbed]:
+        """List every square this move is about to write to, and what is on it now.
+
+        Args:
+            board: The board the move would be played on.
+
+        Returns:
+            List[Disturbed]: One entry per square, the starting and ending squares first
+            and the two companion squares last, each recording the piece that stood there
+            and whether that piece had already moved.
+        """
+        squares: List[Tuple[int, int]] = [self.start_pos, self.end_pos]
+        if self.capture_from is not None:
+            squares.append(self.capture_from)
+        for square in (self.companion_start, self.companion_end):
+            if square is not None:
+                squares.append(square)
+
+        disturbed: List[Disturbed] = []
+        for square in squares:
+            if any(recorded[0] == square for recorded in disturbed):
+                continue
+            occupant = board.get_piece_at(square)
+            disturbed.append((square, occupant, occupant.has_moved if occupant else False))
+        return disturbed

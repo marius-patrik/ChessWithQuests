@@ -53,6 +53,23 @@ class CastlingRule(Rule):
         """
         return 0 if color == 1 else position.rows - 1
 
+    def start_file(self, position: Any) -> int:
+        """Return the file a colour's royal piece castles from.
+
+        Castling is not a move to a chosen square: it is a move to one of two squares, and
+        only from the one it started on. Offering it from anywhere else is how a royal piece
+        that has wandered to g1 was offered a castle to c1, dragging a rook across the board
+        to do it. The file is therefore derived from the board rather than assumed, as the
+        middle file of the back rank, which is where a chess king starts.
+
+        Args:
+            position: The board to read.
+
+        Returns:
+            int: The file a castle begins on.
+        """
+        return position.cols // 2
+
     def available_moves(self, position: Any, piece: Any) -> List[Move]:
         """Offer the castles this piece could make right now.
 
@@ -64,24 +81,30 @@ class CastlingRule(Rule):
             List[Move]: The castles that are currently legal.
         """
         kind = self.value.get("royal_kind")
-        rook_kind = self.value.get("rook_kind")
         if not kind or piece.getType() != kind or piece.hasMoved():
             return []
 
         color = piece.getColor()
         row = self.home_row(position, color)
-        if row != piece_row(position, piece):
+        origin = piece_position(position, piece)
+        if origin is None or origin[0] != row or origin[1] != self.start_file(position):
             return []
         castled = self.state.setdefault("castled", set())
         if color in castled:
             return []
 
+        # Everything else follows from where the royal piece stands. It crosses two files
+        # towards one rook or the other, and that rook ends up on the file next to where the
+        # royal piece lands.
+        start = origin[1]
         offered: List[Move] = []
-        for rook_file, rook_dest, king_dest, label in (
-            (position.cols - 1, position.cols - 3, position.cols - 2, CASTLE_KING_SIDE),
-            (0, 3, 2, CASTLE_QUEEN_SIDE),
+        for king_dest, rook_file, rook_dest in (
+            (start + 2, start + 3, start + 1),
+            (start - 2, start - 4, start - 1),
         ):
-            move = self._castle(position, piece, color, row, rook_file, rook_dest, king_dest, label)
+            if not (0 <= rook_file < position.cols and 0 <= king_dest < position.cols):
+                continue
+            move = self._castle(position, piece, color, row, rook_file, rook_dest, king_dest)
             if move is not None:
                 offered.append(move)
         return offered
@@ -95,7 +118,6 @@ class CastlingRule(Rule):
         rook_file: int,
         rook_dest: int,
         king_dest: int,
-        label: str,
     ) -> Optional[Move]:
         """Build one castle if it is legal, and return None if it is not.
 
@@ -106,8 +128,7 @@ class CastlingRule(Rule):
             row: Its back rank.
             rook_file: The file the rook stands on.
             rook_dest: The file the rook lands on.
-            king_dest: The file the king lands on.
-            label: The notation for the castle.
+            king_dest: The file the royal piece lands on.
 
         Returns:
             Optional[Move]: The castle, or None when any condition fails.
@@ -127,16 +148,20 @@ class CastlingRule(Rule):
         ):
             return None
 
-        low, high = sorted((origin[1], king_dest))
-        for file in range(low, high + 1):
+        # Every square either piece crosses must be empty. The royal piece crosses two files
+        # and the rook crosses three, so testing only the royal piece's span left the file
+        # the rook has to travel down untested — which is why a pawn on b1 did not stop a
+        # castle to c1.
+        span = range(min(origin[1], king_dest), max(origin[1], king_dest) + 1)
+        span = set(span) | set(range(min(rook_file, rook_dest), max(rook_file, rook_dest) + 1))
+        for file in span:
             occupant = position.get_piece_at((row, file))
             if occupant is not None and occupant is not piece and occupant is not rook:
                 return None
-        if position.get_piece_at((row, rook_dest)) is not None:
-            return None
 
-        if is_attacked(position, origin, opponent(color)):
-            return None
+        # The royal piece may not start in check, nor cross a square that is attacked, nor
+        # land on one. The rook's own squares are not judged: the rook is being carried by a
+        # king that may not be harmed, and chess does not ask whether a rook would be safe.
         for file in range(min(origin[1], king_dest), max(origin[1], king_dest) + 1):
             if is_attacked(position, (row, file), opponent(color)):
                 return None
@@ -206,17 +231,3 @@ def piece_position(position: Any, piece: Any) -> Optional[Tuple[int, int]]:
             if position.get_piece_at((r, c)) is piece:
                 return (r, c)
     return None
-
-
-def piece_row(position: Any, piece: Any) -> Optional[int]:
-    """Return the row a piece stands on.
-
-    Args:
-        position: The board to read.
-        piece: The piece to find.
-
-    Returns:
-        Optional[int]: Its row, or None when it is not on the board.
-    """
-    square = piece_position(position, piece)
-    return None if square is None else square[0]
