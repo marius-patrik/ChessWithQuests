@@ -178,6 +178,15 @@ user request adds it.
 - **Approval**: recorded with explicit user approval, 2026-10-02 — *"for pieces we should use
   unicode icons declared with the rest of the data"* — and the checkers
   requirement, which cannot be built while a king is hard-coded.
+- **Implemented on the FEN side, 2026-10-03.** The glyph half was already done
+  and this section already claimed it removed the pawn fallback; it had not. The
+  writer still carried `PIECE_CHARS = {"king": "k", ...}` and still wrote
+  `PIECE_CHARS.get(ptype, "p")`, so the sentence above was true of the renderer
+  and false of the writer. `ChessNotationWriter` now asks the piece —
+  `piece.getFen()` — and raises `ValueError` when a piece declares no character.
+  An undeclared piece has no place in a position record, and the record is no
+  longer willing to call it a pawn. **No deviation**: this is this section's
+  decision being carried out, and the recorded approval covers it.
 
 ---
 
@@ -348,6 +357,80 @@ Recorded because the question is fair and the answer is not obvious.
   requirements render a player panel, so the class has to exist.
 - **Approval**: directed by the user on 2026-10-02.
 
+### 16. A Configuration Loads as a Package in Its Own Right
+
+- **Date**: 2026-10-03
+- **Context**: section 5 makes a configuration a copyable directory, and
+  `SCRATCHPAD.md` section 2 makes duplication the extension mechanism: `cp -r
+  games/chess games/house`, change what differs, a variant exists. Nothing about
+  that works. Every module inside a configuration imported `games.chess.…` by
+  absolute path, so a copy loaded the *original* configuration's board, pieces,
+  clocks and quests while looking like it had loaded its own — no error, no
+  warning, and a variant that plays orthodox chess after being edited into
+  something else.
+- **Change**: two halves, both needed together.
+  - Inside `games/chess/`, every module this change touched now imports
+    relatively (`from .board import …`, `from .pieces.horse import Horse`), so a
+    copy's imports resolve inside the copy. The modules under
+    `games/chess/rules/` still import absolutely and are listed as the remaining
+    gap below.
+  - `model/game/configuration.py` registers a loaded configuration as a *package*
+    rooted at its own directory (`spec_from_file_location(..., submodule_search_locations=[directory])`).
+    Without that search path a relative import fails outright, and the tempting
+    repair — an absolute `games.chess.…` import inside a copy — loads the
+    original. The synthetic module name stays path-derived and unique, so a
+    variant named `house` never shadows the shipped `games.chess` package.
+- **Deviation**: none beyond section 10, which already registers the loading
+  mechanism and its bounding. This is that mechanism working for a copy rather
+  than only for the shipped directory.
+- **Remaining gap, recorded so it is not mistaken for done**: `games/chess/rules/__init__.py`,
+  `attacks.py`, `bishop_colour.py`, `castling.py`, `check.py`, `draws.py`,
+  `en_passant.py`, `flag.py`, `promotion.py` and `royal.py` import each other by
+  absolute path, so a copied configuration currently composes *chess's* rules. A
+  consequence beyond the imports themselves:
+  `games/chess/rules/promotion.py` builds the promoted piece from
+  `games.chess.pieces.…`, so a promotion in a copy yields a piece class belonging
+  to the original configuration. `tests/test_configuration_copying.py` pins this
+  gap in a test that fails the day it is closed.
+
+### 17. The Engine Quest Roster Names No Piece
+
+- **Date**: 2026-10-03
+- **Context**: `SCRATCHPAD.md` constraint 1.4 says the engine holds no chess, and
+  the module docstring of `model/game/quests.py` said its quests name none. The
+  roster it exports contradicted both: it composed `CaptureOfType("queen")` and
+  `KingOnlyGame("king")`.
+- **Change**: the roster is seventeen quests rather than nineteen. `CaptureOfType`
+  and `KingOnlyGame` are absent for the same stated reason `CompositeQuest` is —
+  a roster entry must be decidable without a configuration, and these two cannot
+  be, because both *require* a piece type and raise without one. `games/chess/`
+  names both, with chess's own piece names, so chess loses no quest.
+- **Deviation**: none. The roster is not drawn in the diagram; quests themselves
+  are registered in section 4, and this narrows what the engine volunteers rather
+  than adding structure. The roster is still the fallback
+  `model/game/manager.py` reaches for when a configuration declares no quests,
+  which is the only reason it cannot simply be deleted — and that fallback should
+  go with the manager's other chess defaults.
+
+### 18. Dead Configuration State Is Populated, Not Dropped
+
+- **Date**: 2026-10-03
+- **Context**: `Configuration.pieces` and `Configuration.exporters` were written
+  as empty lists by every configuration and read by nothing.
+- **Change**: populated rather than dropped. `games/chess/pieces/__init__.py`
+  declares `PIECES` and `build_pieces()`, and `games/chess/__init__.py` declares
+  `build_exporters()`. Section 4 registers a configuration as a bundle of *pieces*
+  and per-configuration export writers, so removing either attribute would
+  contradict a registered decision while filling them in carries it out.
+- **Consequence recorded**: `Configuration.exporters` is populated but still read
+  by nothing, because `model/game/manager.py` hard-codes `ChessNotationWriter()`
+  instead of taking the first exporter from `configuration.exporters`. The writer
+  class itself also still lives in the engine module
+  `model/misc/export_writers.py`, and section 7 registers that it belongs in
+  `games/chess/export/`; `model/game/manager.py`'s import by name is what blocks
+  the move, and the same file blocks deleting `model/misc/notation.py`, which is
+  now a re-export shim for the moved algebraic conversion.
+
 ---
 
 ## Naming decisions requiring approval context
@@ -362,3 +445,5 @@ Recorded here because they are deviations from what the diagram draws and
 | `Controller` | Dropped. No box carries that name; the diagram's controller box is `GameManagerController` | 2026-10-02 |
 | Czech aliases carry no diacritics | ASCII spellings only | 2026-10-02 |
 | `HracView` is created as `PlayerView` | See section 15 | 2026-10-02 |
+| `KingOnlyGame` keeps its chess name | **Not renamed, and recommended for renaming.** The class judges a game in which only one kind of piece ever moved, which is not chess-specific, so `SingleKindGame` would be the honest name — but `royal_kind` is the constructor keyword configurations pass and `tests/test_quest.py` calls with it, and renaming either needs that test updated and every player-authored quest file to change with it. Renaming the class while keeping the keyword would leave the vocabulary in place anyway, so the name stays until the keyword can move with it. | Recorded 2026-10-03; **not approved** |
+| `ChessNotationWriter` keeps its name in the engine | **Not moved, and registered for moving.** Section 7 already places per-format writers in `games/chess/export/`, and section 7's approval covers it. `model/game/manager.py` imports the class by name from the engine module, so the move is blocked on that one import. Moving it while leaving a shim behind would make the engine module import the configuration that imports the engine module, which fails on a cycle as soon as any variant configuration is loaded. | Recorded 2026-10-03; **not approved** |
