@@ -308,3 +308,8 @@ class PlayerGameView(ttk.Frame):
             self.after(REFRESH_INTERVAL_MS, self._auto_refresh)
         except tk.TclError:  # pragma: no cover - the window may already be closing
             return
+
+
+#: Czech alias for `PlayerGameView`, as `PRD.md` section 5 and `HracGameView` in the diagram
+#: require.
+HracGameView = PlayerGameView

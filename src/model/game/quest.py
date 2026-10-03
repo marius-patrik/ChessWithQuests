@@ -176,3 +176,7 @@ class Quest:
             str: The quest name, when it is judged, and whether it is complete.
         """
         return f"{type(self).__name__}(name={self.name!r}, when={self.when!r}, done={self.is_completed})"
+
+
+#: Czech alias for `Quest`, as `PRD.md` section 5 and `Kwest` in the diagram require.
+Kwest = Quest

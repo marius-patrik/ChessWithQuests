@@ -11,10 +11,11 @@ way round — `games/chess/pieces/knight.py` declared `class Knight(Piece)` with
 at the bottom, so English and Czech were swapped. `Tower = Rook` and `Controller =
 GameController` were shipped as aliases for names the project does not use.
 
-Six of the fifteen live in a chess piece module and are covered below. The other nine are
-engine and view classes in modules this work did not own, so they are still missing and are
-listed in `ALIASES_OUTSTANDING` rather than quietly claimed here. A test that asserted they
-exist would fail; a test that asserts what is true, and says what is not, is worth more.
+All fifteen now resolve: six in the chess piece modules, and nine in the engine and view
+modules that hold `Piece`, `Board`, `Move`, `Player`, `MoveValidator`, `User`, `Quest`,
+`PlayerView` and `PlayerGameView`. `ALIASES_OUTSTANDING` is the mechanism that keeps that
+true — it must be exactly the set of aliases that do not resolve, so an alias added without
+its record being updated fails here rather than passing quietly.
 """
 
 import importlib
@@ -42,20 +43,10 @@ REQUIRED_ALIASES = (
     ("HracGameView", "view.player_game_view", "PlayerGameView", "HracGameView"),
 )
 
-#: The nine aliases still missing, with the module each belongs in. They are absent because
-#: that module was not in this work's file list, not because the decision was dropped: each is
-#: a one-line binding in the module that defines the class, next to the English name.
-ALIASES_OUTSTANDING = (
-    ("Figurka", "model.pieces.piece"),
-    ("HerniPlocha", "model.game.board"),
-    ("Tah", "model.game.move"),
-    ("Hrac", "model.game.player"),
-    ("RevizorTahu", "model.game.validator"),
-    ("Uzivatel", "model.users.user"),
-    ("Kwest", "model.game.quest"),
-    ("HracView", "view.player_view"),
-    ("HracGameView", "view.player_game_view"),
-)
+#: The aliases that still do not resolve, with the module each belongs in. It is empty,
+#: which is the point: adding an alias to its module empties it here, and the test below
+#: fails until the row is dropped. Nothing may be left quietly unaliased.
+ALIASES_OUTSTANDING: tuple = ()
 
 #: The six chess pieces, whose aliases this work added.
 CHESS_ALIASES = (
@@ -210,7 +201,30 @@ def test_the_outstanding_aliases_are_recorded_rather_than_silently_absent():
     }
 
     assert set(ALIASES_OUTSTANDING) == still_missing
-    assert len(ALIASES_OUTSTANDING) == 9
+    assert not still_missing, f"aliases still absent: {sorted(still_missing)}"
+
+
+@pytest.mark.parametrize("diagram, module_name, canonical, alias", REQUIRED_ALIASES)
+def test_every_required_alias_is_the_canonical_object(diagram, module_name, canonical, alias):
+    """An alias binds the same object, so the diagram name reaches the English class.
+
+    Identity rather than equality: `Kun is Knight` is what makes the diagram-to-code mapping
+    discoverable, and a copy — a subclass of the same name, or a re-import under another
+    module name — would leave two objects and one drawing.
+
+    Args:
+        diagram: The name the diagram gives the class.
+        module_name: The module that defines it.
+        canonical: The canonical English name.
+        alias: The Czech ASCII spelling of it.
+
+    Returns:
+        None
+    """
+    module = importlib.import_module(module_name)
+
+    assert getattr(module, alias) is getattr(module, canonical)
+    assert getattr(module, alias).__name__ == canonical
 
 
 def test_no_module_in_the_tree_still_names_the_dropped_horse_or_tower():

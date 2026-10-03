@@ -140,3 +140,7 @@ class PlayerView(ttk.Frame):
         captured = board.captured_white if colour == 1 else board.captured_black
         lost = " ".join(piece.getSymbol() or "?" for piece in captured)
         return f"Lost: {lost}" if lost else "Lost:"
+
+
+#: Czech alias for `PlayerView`, as `PRD.md` section 5 and `HracView` in the diagram require.
+HracView = PlayerView

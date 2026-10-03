@@ -53,3 +53,7 @@ class User:
             Current integer Elo rating.
         """
         return self.elo
+
+
+#: Czech alias for `User`, as `PRD.md` section 5 and `Uzivatel` in the diagram require.
+Uzivatel = User

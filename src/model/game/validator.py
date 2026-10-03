@@ -607,3 +607,8 @@ class MoveValidator:
         ]
         m.execute(b)
         return saved_state
+
+
+#: Czech alias for `MoveValidator`, as `PRD.md` section 5 and `RevizorTahu` in the diagram
+#: require.
+RevizorTahu = MoveValidator

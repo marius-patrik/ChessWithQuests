@@ -175,3 +175,7 @@ class Piece:
             str: Piece name.
         """
         return self._name
+
+
+#: Czech alias for `Piece`, as `PRD.md` section 5 and `Figurka` in the diagram require.
+Figurka = Piece

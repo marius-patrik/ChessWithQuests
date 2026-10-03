@@ -147,3 +147,7 @@ class Board:
         self.captured_black.clear()
         for position, piece in placement:
             self.set_piece_at(position, piece)
+
+
+#: Czech alias for `Board`, as `PRD.md` section 5 and `HerníPlocha` in the diagram require.
+HerniPlocha = Board

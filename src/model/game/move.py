@@ -246,3 +246,7 @@ class Move:
             occupant = board.get_piece_at(square)
             disturbed.append((square, occupant, occupant.has_moved if occupant else False))
         return disturbed
+
+
+#: Czech alias for `Move`, as `PRD.md` section 5 and `Tah` in the diagram require.
+Tah = Move

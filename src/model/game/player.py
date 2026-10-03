@@ -54,3 +54,7 @@ class Player:
             if callable(get_rating):
                 return int(get_rating())
         return 1200
+
+
+#: Czech alias for `Player`, as `PRD.md` section 5 and `Hrac` in the diagram require.
+Hrac = Player
