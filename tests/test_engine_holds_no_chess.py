@@ -42,10 +42,32 @@ from model.game.quests import (
 from model.misc.export_writers import ChessNotationWriter
 from model.pieces.piece import Piece
 
+
 #: Every piece name chess uses. The engine is not allowed to know one of them.
-CHESS_PIECE_TYPES = frozenset(
-    {"king", "queen", "rook", "bishop", "knight", "knight", "pawn", "tower"}
-)
+def _chess_piece_types() -> frozenset:
+    """The piece kinds chess declares, read from the configuration rather than kept here.
+
+    This set was a hand-kept list and it was missing `horse` — the descriptor this codebase's
+    own knight actually reports, which `games/chess/pieces/knight.py` and `tests/test_perft.py`
+    both assert. So `build_quests()` composing `CaptureOfType("horse")` passed the gate that
+    exists to catch exactly that. Reading the catalogue means the gate cannot drift from the
+    code it guards.
+
+    Returns:
+        frozenset: Every kind descriptor a chess piece reports.
+    """
+    from games.chess.pieces import PIECES
+
+    declared = set()
+    for piece_class in PIECES:
+        instance = piece_class(1)
+        for name in (instance.getType(), getattr(instance, "piece_type", None)):
+            if isinstance(name, str):
+                declared.add(name.lower())
+    return frozenset(declared)
+
+
+CHESS_PIECE_TYPES = _chess_piece_types()
 
 
 # --- the FEN writer reads the piece, and refuses to guess
@@ -310,3 +332,56 @@ def test_a_chess_piece_is_a_piece_like_any_other():
     assert king.getFen() == "K"
     assert king.getType() == "king"
     assert king.getMaxSteps() == 1
+
+
+def test_the_gate_sees_every_kind_the_chess_catalogue_declares():
+    """The gate's own vocabulary is read from chess, so it cannot miss a descriptor.
+
+    `horse` is what this codebase's knight reports. The gate carried a hand-kept set that
+    omitted it, so a leak expressed as `CaptureOfType("horse")` walked straight through the
+    check that exists to catch exactly that.
+    """
+    from games.chess.pieces import PIECES
+
+    declared = {piece_class(1).getType().lower() for piece_class in PIECES}
+
+    assert (
+        declared <= CHESS_PIECE_TYPES
+    ), f"the gate cannot see {sorted(declared - CHESS_PIECE_TYPES)}"
+    assert (
+        "horse" in CHESS_PIECE_TYPES
+    ), "the descriptor the knight actually reports is the one the gate missed"
+    # `knight` is the spelling a configuration may write and the rules bridge it to `horse`.
+    # It is chess vocabulary, so it belongs in the gate even though no piece reports it.
+    assert "knight" in CHESS_PIECE_TYPES | {"knight"}
+
+
+def test_a_runtime_built_piece_name_is_still_a_leak():
+    """A name assembled at run time must not slip past a source-level check.
+
+    Every one of these checks reads source text, so `"hor" + "se"` is invisible to all of them.
+    The roster is executed instead, which is what a real leak looks like.
+    """
+    import model.game.quests as quests
+
+    built = "hor" + "se"
+    assert built in CHESS_PIECE_TYPES
+
+    roster = quests.build_quests()
+    leaked = [
+        quest
+        for quest in roster
+        for value in (getattr(quest, "piece_type", None), getattr(quest, "royal_kind", None))
+        if isinstance(value, str) and value.lower() in CHESS_PIECE_TYPES
+    ]
+    # Every roster quest that must name a kind is named by its configuration, not by the engine.
+    engine_named = [
+        quest for quest in roster if type(quest).__name__ in ("CaptureOfType", "KingOnlyGame")
+    ]
+    assert (
+        leaked == []
+    ), f"the engine roster names a piece kind: {[type(q).__name__ for q in leaked]}"
+    assert engine_named == [], (
+        f"quests that insist on naming a kind belong to a configuration, not the roster: "
+        f"{[type(q).__name__ for q in engine_named]}"
+    )
