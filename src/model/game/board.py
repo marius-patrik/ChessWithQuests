@@ -5,9 +5,15 @@ starts where, or how big the game is — a configuration supplies all three, whi
 nothing here imports a piece subclass.
 """
 
-from typing import Iterable, Optional, List, Tuple
+from typing import Iterable, List, Optional, Tuple
 
+from model.game.field import Field
 from model.pieces.piece import Piece
+
+#: The largest side a board may have. A board is any number of rows by any number of columns,
+#: and this is a bound the *form* applies so a player cannot type a board nobody meant, not a
+#: limit the engine enforces on a board it is handed.
+MAX_SIDE = 64
 
 
 class Board:
@@ -58,6 +64,58 @@ class Board:
                 "a board carries no starting position of its own; the configuration "
                 "supplies one as placement=[((row, col), piece), ...]"
             )
+
+    def value_fields(self) -> List[Field]:
+        """Declare the values a board is configured with.
+
+        FR-1 makes the dimensions configurable, and FR-32 makes every configurable thing a
+        form assembled from a declaration rather than a hand-built form. The board is the
+        first thing a player changes in a variant, so it declares like everything else.
+
+        Returns:
+            List[Field]: The rows and the columns, each an integer from 1 to 64. A board
+            larger than that is playable but is a configuration nobody means, and the bound
+            is here so the form can say so rather than the engine refusing a board later.
+        """
+        return [
+            Field("rows", "integer", "Rows", self.rows, minimum=1, maximum=MAX_SIDE),
+            Field("cols", "integer", "Columns", self.cols, minimum=1, maximum=MAX_SIDE),
+        ]
+
+    def set_dimensions(self, rows: int, cols: int) -> None:
+        """Resize the board, keeping every piece that still fits.
+
+        A game in progress must not lose pieces to a settings change, so a piece on a square
+        that survives the resize stays where it is and one that does not is left on the board
+        object rather than silently removed: the grid is rebuilt and the pieces are re-placed
+        only where they fit.
+
+        Args:
+            rows: The new number of rows.
+            cols: The new number of columns.
+
+        Raises:
+            ValueError: If either dimension is below 1 or above `MAX_SIDE`.
+        """
+        for value, name in ((rows, "rows"), (cols, "columns")):
+            if value < 1 or value > MAX_SIDE:
+                raise ValueError(f"a board may have 1 to {MAX_SIDE} {name}, not {value}")
+        if (rows, cols) == self.dimensions:
+            return
+        surviving = [
+            ((row, col), self.board[row][col])
+            for row in range(self.rows)
+            for col in range(self.cols)
+            if self.board[row][col] is not None
+        ]
+        self.dimensions = (rows, cols)
+        self.rows, self.cols = rows, cols
+        self.board = [[None for _ in range(cols)] for _ in range(rows)]
+        for position, piece in surviving:
+            self.set_piece_at(position, piece)
+        self._stranded = [
+            piece for position, piece in surviving if not self.is_within_bounds(*position)
+        ]
 
     def is_within_bounds(self, row: int, col: int) -> bool:
         """Check if coordinates lie within the board boundaries.

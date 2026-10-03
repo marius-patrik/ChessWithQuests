@@ -1,6 +1,58 @@
 """Base piece module defining the foundational Piece abstraction for chess."""
 
-from typing import Any, List, Optional, Tuple
+import re
+from typing import Any, Dict, List, Optional, Tuple
+
+from model.game.field import Field
+
+
+def _vectors_from_text(text: str) -> Optional[List[Tuple[int, int]]]:
+    """Return movement vectors parsed from the text a form shows them as.
+
+    Empty means "as the piece already moves", which is how a blank field says the player wants
+    nothing changed rather than nothing at all.
+
+    Args:
+        text: The field's text, for example `"(1, 2), (2, 1)"`.
+
+    Returns:
+        Optional[List[Tuple[int, int]]]: The pairs, or None for blank text.
+
+    Raises:
+        ValueError: If the text is not a list of `(row, col)` pairs.
+    """
+    stripped = str(text).strip()
+    if not stripped:
+        return None
+    if "(" not in stripped and "," not in stripped:
+        raise ValueError(f"{stripped} is not a list of (row, col) pairs")
+    vectors: List[Tuple[int, int]] = []
+    for part in re.findall(r"\(([^)]*)\)", stripped):
+        pair = part.split(",")
+        if len(pair) != 2:
+            raise ValueError(f"({part}) is not a (row, col) pair")
+        try:
+            vectors.append((int(pair[0].strip()), int(pair[1].strip())))
+        except ValueError:
+            raise ValueError(f"({part}) is not a (row, col) pair") from None
+    if not vectors:
+        raise ValueError(f"{stripped} is not a list of (row, col) pairs")
+    return vectors
+
+
+def _vectors_as_text(vectors: Optional[List[Tuple[int, int]]]) -> str:
+    """Return movement vectors as the text a form shows them as.
+
+    Args:
+        vectors: The offsets the piece may move by, or None for a piece that may move any
+            distance along its own vectors.
+
+    Returns:
+        str: `"(1, 0), (-1, 0)"`, or "" for None.
+    """
+    if vectors is None:
+        return ""
+    return ", ".join(f"({row}, {col})" for row, col in vectors)
 
 
 class Piece:
@@ -67,6 +119,95 @@ class Piece:
         self.has_moved = has_moved
         self._symbols = tuple(symbols) if symbols else None
         self._fen = fen
+
+    def value_fields(self) -> List[Field]:
+        """Declare what this piece is configured with.
+
+        FR-3 lists what a piece declares and FR-32 makes each of those form-exposed from one
+        declaration. A piece is data all the way down — the engine holds no table of piece
+        types, so this declaration is the whole of what the form needs to know about it.
+
+        Returns:
+            List[Field]: The name, the two symbols, the movement and attack vectors, the jump
+            flag, the kind and the optional FEN character. Movement vectors are declared as
+            text because they are a list of pairs, and the form reads them as the player
+            writes them; `Field` has no list kind and inventing one is a decision FR-32 does
+            not need yet.
+        """
+        return [
+            Field("name", "text", "Name", self._name),
+            Field("white_symbol", "text", "White symbol", self._symbol_for(1)),
+            Field("black_symbol", "text", "Black symbol", self._symbol_for(-1)),
+            Field(
+                "vectors",
+                "text",
+                "Movement vectors",
+                _vectors_as_text(self._vectors),
+                help="(row, col) pairs, comma separated; blank means any distance.",
+            ),
+            Field(
+                "attack_vectors",
+                "text",
+                "Attack vectors",
+                _vectors_as_text(self._attack_vectors),
+                help="Blank means it takes wherever it moves.",
+            ),
+            Field("can_jump", "boolean", "May jump over pieces", self._can_jump),
+            Field("kind", "text", "Kind", "" if self._type is None else str(self._type)),
+            Field("fen", "text", "FEN character", self._fen or ""),
+        ]
+
+    def apply_values(self, values: Dict[str, Any]) -> None:
+        """Write configured values onto this piece, parsing the ones declared as text.
+
+        The form reads and writes a piece through `value_fields`, so this is the other half of
+        that declaration. Two of the declared values are not single attributes — the two
+        symbols are one pair, and the vectors are a list of pairs shown as text — so they are
+        parsed here rather than in the view, which is what keeps the form a renderer and not a
+        place where the meaning of a piece lives.
+
+        Args:
+            values: The declared field names and what the player chose. A name this piece does
+                not declare is ignored, so an older form cannot set something newer.
+
+        Returns:
+            None
+
+        Raises:
+            ValueError: If a vector list is not a list of `(row, col)` pairs. A piece that
+                cannot move is not a piece the player meant to write, and the alternative is a
+                piece that silently cannot move at all.
+        """
+        if "name" in values:
+            self._name = str(values["name"])
+        if "white_symbol" in values or "black_symbol" in values:
+            white = str(values.get("white_symbol", self._symbol_for(1)))
+            black = str(values.get("black_symbol", self._symbol_for(-1)))
+            self._symbols = (white, black)
+        if "vectors" in values:
+            self._vectors = _vectors_from_text(values["vectors"])
+        if "attack_vectors" in values:
+            self._attack_vectors = _vectors_from_text(values["attack_vectors"])
+        if "can_jump" in values:
+            self._can_jump = bool(values["can_jump"])
+        if "kind" in values:
+            self._type = str(values["kind"]) or None
+        if "fen" in values:
+            self._fen = str(values["fen"]) or None
+
+    def _symbol_for(self, color: Any) -> str:
+        """Return this piece's declared symbol for one side.
+
+        Args:
+            color: 1 for White, -1 for Black.
+
+        Returns:
+            str: The glyph, or "" when the piece declares none. The renderer falls back to the
+            name, so a piece with no glyph is still playable and still visible.
+        """
+        if not self._symbols:
+            return ""
+        return self._symbols[0] if color == 1 else self._symbols[1]
 
     def getDirections(self) -> Optional[List[Tuple[int, int]]]:
         """Return the standard movement vectors for this piece.

@@ -40,6 +40,7 @@ from model.game.configuration import (
 from model.game.games import DEFAULT_GAME, games_root
 from model.game.source_validation import validate_source
 from view.code_editor import CodeEditor, editable_sources
+from view.settings_dialog import SECTIONS, SettingsDialog
 
 
 @pytest.fixture
@@ -1052,3 +1053,514 @@ def test_editable_sources_lists_what_a_player_may_edit(games_dir):
     )
     assert all(path.endswith(".py") for path in found)
     assert editable_sources(os.path.join(variant.path, "nowhere"), "rules") == []
+
+
+# --- the five sections and the corner selector
+
+
+def test_the_form_has_a_section_for_each_configurable_surface(tk_root, games_dir):
+    """FR-31: Board, Pieces, Rules, Quests, Clocks — in that order, all of them present.
+
+    The form had one tab per rule that declared anything and no board, pieces, quests or
+    clocks at all, so a variant's board size and time control were unreachable.
+
+    Args:
+        tk_root: The session's Tk root.
+        games_dir: A throwaway `games/` root holding the default configuration.
+
+    Returns:
+        None
+    """
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    dialog = SettingsDialog(tk_root, variant, root=games_dir)
+    tk_root.update()
+
+    assert [dialog.notebook.tab(tab, "text") for tab in dialog.notebook.tabs()] == list(SECTIONS)
+    dialog.cancel()
+
+
+def test_the_board_section_asks_for_the_dimensions_the_board_declares(tk_root, games_dir):
+    """FR-1 and FR-32: the board is configured through its declaration like everything else.
+
+    Args:
+        tk_root: The session's Tk root.
+        games_dir: A throwaway `games/` root holding the default configuration.
+
+    Returns:
+        None
+    """
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    dialog = SettingsDialog(tk_root, variant, root=games_dir)
+    tk_root.update()
+
+    board, values = dialog.section_values("Board")[0]
+    assert board is variant.board
+    assert set(values) == {field.name for field in variant.board.value_fields()}
+    assert values["rows"] == 8 and values["cols"] == 8
+    dialog.cancel()
+
+
+def test_the_board_section_resizes_the_board_it_configures(tk_root, games_dir):
+    """A form that shows the rows and columns and does not apply them configures nothing.
+
+    Args:
+        tk_root: The session's Tk root.
+        games_dir: A throwaway `games/` root holding the default configuration.
+
+    Returns:
+        None
+    """
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    dialog = SettingsDialog(tk_root, variant, root=games_dir)
+    tk_root.update()
+    editors = dialog.entries_by_section["Board"][0][2]
+    editors["rows"].set("10")
+    editors["cols"].set("12")
+
+    assert dialog.save() is True
+    assert variant.board.dimensions == (10, 12)
+    assert variant.board.get_piece_at((9, 11)) is None
+
+
+def test_the_pieces_section_configures_each_piece_separately(tk_root, games_dir):
+    """Six pieces each declare a `name`; one widget per name would configure one of them six times.
+
+    Args:
+        tk_root: The session's Tk root.
+        games_dir: A throwaway `games/` root holding the default configuration.
+
+    Returns:
+        None
+    """
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    dialog = SettingsDialog(tk_root, variant, root=games_dir)
+    tk_root.update()
+
+    entries = dialog.section_values("Pieces")
+    assert [type(piece).__name__ for piece, _values in entries] == [
+        piece.__name__ for piece in variant.pieces
+    ]
+    by_name = {type(piece).__name__: (piece, values) for piece, values in entries}
+    assert by_name["Knight"][1]["white_symbol"] == "♘"
+    assert by_name["Rook"][1]["white_symbol"] == "♖"
+    assert by_name["Knight"][1]["vectors"] != by_name["Rook"][1]["vectors"]
+
+    _knight, _knight_fields, editors = next(
+        entry
+        for entry in dialog.entries_by_section["Pieces"]
+        if type(entry[0]).__name__ == "Knight"
+    )
+    editors["white_symbol"].set("X")
+    assert dialog.save() is True
+    assert by_name["Knight"][0]._symbol_for(1) == "X"
+    assert by_name["Rook"][0]._symbol_for(1) == "♖"
+
+
+def test_the_rules_section_asks_for_what_each_rule_declares_and_can_switch_it_off(
+    tk_root, games_dir
+):
+    """FR-21: `enabled` is added by the framework, so the form's switch is part of the form.
+
+    Args:
+        tk_root: The session's Tk root.
+        games_dir: A throwaway `games/` root holding the default configuration.
+
+    Returns:
+        None
+    """
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    dialog = SettingsDialog(tk_root, variant, root=games_dir)
+    tk_root.update()
+
+    entries = {
+        rule.label: (rule, fields) for rule, fields, _e in dialog.entries_by_section["Rules"]
+    }
+    check_rule, _fields, editors = next(
+        entry
+        for entry in dialog.entries_by_section["Rules"]
+        if type(entry[0]).__name__ == "CheckRule"
+    )
+    assert "enabled" in editors
+    editors["enabled"].set(False)
+    assert dialog.save() is True
+    assert check_rule.enabled is False
+    assert check_rule not in variant.enabled_rules()
+    assert entries  # every rule in the configuration is in the section
+
+
+def test_the_quests_section_asks_for_each_quest_parameters(tk_root, games_dir):
+    """FR-20: a quest's parameters are what the settings form asks the player for.
+
+    Args:
+        tk_root: The session's Tk root.
+        games_dir: A throwaway `games/` root holding the default configuration.
+
+    Returns:
+        None
+    """
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    dialog = SettingsDialog(tk_root, variant, root=games_dir)
+    tk_root.update()
+
+    entries = dialog.section_values("Quests")
+    assert [quest.name for quest, _values in entries] == [quest.name for quest in variant.quests]
+    hunting = next(values for quest, values in entries if quest.name == "Hunting a kind")
+    assert hunting["piece_type"] == "queen"
+    assert "count" in hunting and "reward" in hunting and "enabled" in hunting
+
+
+def test_the_clocks_section_asks_for_a_clock_time_control(tk_root, games_dir):
+    """FR-6: a clock declares an initial time and an increment, and the form asks for both.
+
+    Args:
+        tk_root: The session's Tk root.
+        games_dir: A throwaway `games/` root holding the default configuration.
+
+    Returns:
+        None
+    """
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    dialog = SettingsDialog(tk_root, variant, root=games_dir)
+    tk_root.update()
+
+    clock, values = dialog.section_values("Clocks")[0]
+    assert values == {"initial_seconds": 600, "increment_seconds": 5}
+
+    _clock, _fields, editors = dialog.entries_by_section["Clocks"][0]
+    editors["initial_seconds"].set("30")
+    assert dialog.save() is True
+    assert clock.initial_seconds == 30
+    assert clock.timer.initial_time == 30, "the countdown must start from the time the form saved"
+
+
+def test_the_selector_offers_every_configuration_and_defaults_to_the_one_being_edited(
+    tk_root, games_dir
+):
+    """FR-30: the selector says which configuration is being edited, so it lists them all.
+
+    Args:
+        tk_root: The session's Tk root.
+        games_dir: A throwaway `games/` root holding the default configuration.
+
+    Returns:
+        None
+    """
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    dialog = SettingsDialog(tk_root, variant, root=games_dir)
+    tk_root.update()
+
+    assert dialog.choice.get() == "house"
+    assert set(dialog.selector.cget("values")) == {DEFAULT_GAME, "house"}
+    assert dialog.configuration_names()[0] == DEFAULT_GAME
+    dialog.cancel()
+
+
+def test_choosing_another_configuration_edits_that_one(tk_root, games_dir):
+    """The selector is only worth having if choosing one changes what the form is over.
+
+    Args:
+        tk_root: The session's Tk root.
+        games_dir: A throwaway `games/` root holding the default configuration.
+
+    Returns:
+        None
+    """
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    dialog = SettingsDialog(tk_root, variant, root=games_dir)
+    tk_root.update()
+
+    dialog.choice.set(DEFAULT_GAME)
+    chosen = dialog._selected()
+
+    assert chosen is not None
+    assert chosen.name == DEFAULT_GAME
+    assert dialog.configuration is chosen
+    assert [dialog.notebook.tab(tab, "text") for tab in dialog.notebook.tabs()] == list(SECTIONS)
+    dialog.cancel()
+
+
+def test_the_plus_button_duplicates_the_configuration_being_edited(tk_root, games_dir):
+    """FR-27: a variant starts by duplicating, so the button next to the selector does that.
+
+    Args:
+        tk_root: The session's Tk root.
+        games_dir: A throwaway `games/` root holding the default configuration.
+
+    Returns:
+        None
+    """
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    dialog = SettingsDialog(tk_root, variant, root=games_dir)
+    tk_root.update()
+
+    created = dialog.add_configuration()
+
+    assert created is not None
+    assert created.name == "house_copy"
+    assert created.path != variant.path
+    assert os.path.isdir(os.path.join(games_dir, "house_copy"))
+    assert dialog.choice.get() == "house_copy"
+    assert "house_copy" in dialog.selector.cget("values")
+    dialog.cancel()
+
+
+def test_the_plus_button_picks_a_name_nothing_is_using(tk_root, games_dir):
+    """Duplicating twice must not fail on the second attempt because the name was taken.
+
+    Args:
+        tk_root: The session's Tk root.
+        games_dir: A throwaway `games/` root holding the default configuration.
+
+    Returns:
+        None
+    """
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    dialog = SettingsDialog(tk_root, variant, root=games_dir)
+    tk_root.update()
+
+    first = dialog.add_configuration()
+    second = dialog.add_configuration()
+
+    assert first is not None and second is not None
+    assert (first.name, second.name) == ("house_copy", "house_copy_copy")
+    dialog.cancel()
+
+
+def test_deleting_a_variant_removes_it_and_falls_back_to_the_default(tk_root, games_dir):
+    """FR-28: a configuration can be deleted, and the form must be left over something real.
+
+    Args:
+        tk_root: The session's Tk root.
+        games_dir: A throwaway `games/` root holding the default configuration.
+
+    Returns:
+        None
+    """
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    dialog = SettingsDialog(tk_root, variant, root=games_dir)
+    tk_root.update()
+
+    assert dialog.delete_configuration() == "house"
+
+    assert not os.path.exists(os.path.join(games_dir, "house"))
+    assert dialog.configuration.name == DEFAULT_GAME
+    assert dialog.choice.get() == DEFAULT_GAME
+    dialog.cancel()
+
+
+def test_the_form_refuses_to_save_the_default_and_says_why(tk_root, games_dir):
+    """The guard, reached the way a player reaches it: open settings, press Save.
+
+    This is the whole point of the guard being in `save_values` as well as in the library
+    functions: the form is the path a player takes, and a permission error they are told about
+    is a lesson while a traceback is a bug.
+
+    Args:
+        tk_root: The session's Tk root.
+        games_dir: A throwaway `games/` root holding the default configuration.
+
+    Returns:
+        None
+    """
+    default = load_configuration(DEFAULT_GAME, root=games_dir)
+    dialog = SettingsDialog(tk_root, default, root=games_dir)
+    tk_root.update()
+
+    assert dialog.save() is False
+
+    assert "cannot be edited" in dialog.message.get()
+    assert not os.path.exists(os.path.join(default.path, "configuration.json"))
+    dialog.cancel()
+
+
+def test_saving_a_variant_writes_its_values_to_disk(tk_root, games_dir):
+    """A variant's settings survive, which is FR-29 and the point of writing them at all.
+
+    Args:
+        tk_root: The session's Tk root.
+        games_dir: A throwaway `games/` root holding the default configuration.
+
+    Returns:
+        None
+    """
+    import json
+
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    dialog = SettingsDialog(tk_root, variant, root=games_dir)
+    tk_root.update()
+    check_entry = next(
+        entry
+        for entry in dialog.entries_by_section["Rules"]
+        if type(entry[0]).__name__ == "CheckRule"
+    )
+    check_entry[2]["royal_kind"].set("monarch")
+
+    assert dialog.save() is True
+
+    with open(os.path.join(variant.path, "configuration.json"), encoding="utf-8") as handle:
+        written = json.load(handle)
+    assert written["rules"]["Check"]["royal_kind"] == "monarch"
+    assert "state" not in json.dumps(written)
+
+
+def test_reset_returns_a_field_to_its_declaration(tk_root, games_dir):
+    """FR-35: settings can be reset to the shipped defaults.
+
+    Args:
+        tk_root: The session's Tk root.
+        games_dir: A throwaway `games/` root holding the default configuration.
+
+    Returns:
+        None
+    """
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    dialog = SettingsDialog(tk_root, variant, root=games_dir)
+    tk_root.update()
+    _subject, fields, editors = dialog.entries_by_section["Rules"][0]
+    royal = next(field for field in fields if field.name == "royal_kind")
+    editors["royal_kind"].set("monarch")
+
+    dialog.reset()
+
+    assert editors["royal_kind"].get() == royal.default
+    dialog.cancel()
+
+
+def test_reset_returns_each_rule_to_its_own_declaration(tk_root, games_dir):
+    """Several rules declare `royal_kind`; resetting one must not reset another's widget.
+
+    Args:
+        tk_root: The session's Tk root.
+        games_dir: A throwaway `games/` root holding the default configuration.
+
+    Returns:
+        None
+    """
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    dialog = SettingsDialog(tk_root, variant, root=games_dir)
+    tk_root.update()
+    declaring = [
+        (fields, editors)
+        for _rule, fields, editors in dialog.entries_by_section["Rules"]
+        if any(field.name == "royal_kind" for field in fields)
+    ]
+    assert len(declaring) > 1, "chess declares royal_kind on more than one rule"
+    for _fields, editors in declaring:
+        editors["royal_kind"].set("monarch")
+
+    dialog.reset()
+
+    for fields, editors in declaring:
+        royal = next(field for field in fields if field.name == "royal_kind")
+        assert editors["royal_kind"].get() == royal.default
+    dialog.cancel()
+
+
+def test_the_rules_section_offers_the_editor_for_every_rule_it_shows(tk_root, games_dir):
+    """FR-33: the Rules section offers a code editor, because a rule's logic is code.
+
+    Args:
+        tk_root: The session's Tk root.
+        games_dir: A throwaway `games/` root holding the default configuration.
+
+    Returns:
+        None
+    """
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    dialog = SettingsDialog(tk_root, variant, root=games_dir)
+    tk_root.update()
+    pages = {
+        dialog.notebook.tab(tab, "text"): dialog.notebook.nametowidget(tab)
+        for tab in dialog.notebook.tabs()
+    }
+
+    assert set(_button_labels(pages["Rules"])) >= {"Edit logic"}
+    dialog.cancel()
+
+
+def test_the_quests_section_says_so_when_a_quest_is_declared_by_the_engine(tk_root, games_dir):
+    """FR-33 asks for an editor in the Quests section, and chess's quests are the engine's.
+
+    `FirstBlood` and its siblings live in `model/game/quests.py`, so offering to edit them
+    would write to the engine from a variant's settings form. Saying so is the honest answer,
+    and it is what the section does.
+
+    Args:
+        tk_root: The session's Tk root.
+        games_dir: A throwaway `games/` root holding the default configuration.
+
+    Returns:
+        None
+    """
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    dialog = SettingsDialog(tk_root, variant, root=games_dir)
+    tk_root.update()
+    pages = {
+        dialog.notebook.tab(tab, "text"): dialog.notebook.nametowidget(tab)
+        for tab in dialog.notebook.tabs()
+    }
+    labels = list(_labels(pages["Quests"]))
+
+    assert "Declared by the engine; not editable here." in labels
+    assert "Edit logic" not in set(_button_labels(pages["Quests"]))
+    dialog.cancel()
+
+
+def test_a_quest_declared_by_the_engine_is_not_offered_for_editing(tk_root, games_dir):
+    """`FirstBlood` lives in `model/game/quests.py`; editing it would write to the engine.
+
+    Args:
+        tk_root: The session's Tk root.
+        games_dir: A throwaway `games/` root holding the default configuration.
+
+    Returns:
+        None
+    """
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    dialog = SettingsDialog(tk_root, variant, root=games_dir)
+    tk_root.update()
+
+    editor_buttons = 0
+    for _quest, _fields, editors in dialog.entries_by_section["Quests"]:
+        del editors
+    dialog.cancel()
+    for quest in variant.quests:
+        path = os.path.abspath(inspect.getfile(type(quest)))
+        inside = os.path.commonpath([os.path.abspath(variant.path), path]) == os.path.abspath(
+            variant.path
+        )
+        if inside:
+            editor_buttons += 1
+    assert (
+        editor_buttons == 0
+    ), "chess's quests are all declared by the engine, so none is editable in the variant"
+
+
+def _labels(widget):
+    """Yield the text of every label under a widget.
+
+    Args:
+        widget: The widget to walk.
+
+    Yields:
+        str: Each label's text.
+    """
+    for child in widget.winfo_children():
+        if child.winfo_class() in ("TLabel", "Label"):
+            yield str(child.cget("text"))
+        yield from _labels(child)
+
+
+def _button_labels(widget):
+    """Yield the label of every button under a widget.
+
+    Args:
+        widget: The widget to walk.
+
+    Yields:
+        str: Each button's text.
+    """
+    for child in widget.winfo_children():
+        if child.winfo_class() in ("TButton", "Button"):
+            yield child.cget("text")
+        yield from _button_labels(child)

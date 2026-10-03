@@ -66,6 +66,11 @@ def build_application(root: tk.Tk, game: str = DEFAULT_GAME, show_modal: bool = 
 def open_settings(root: tk.Tk, controller: WindowController) -> SettingsDialog:
     """Open the settings form over the game being played.
 
+    The form is pointed at the shipped `games/` directory, which is where the corner selector
+    reads the configurations it offers from and where creating, renaming and deleting write.
+    A caller driving the window from a test passes its own root so the shipped directory is
+    left alone.
+
     Args:
         root: The window the form belongs to.
         controller: The controller whose game is being configured.
@@ -81,6 +86,7 @@ def open_settings(root: tk.Tk, controller: WindowController) -> SettingsDialog:
             controller.set_status(f"{saved.name} settings saved."),
             root.game_view.refresh(),
         ),
+        root=getattr(root, "games_root", None),
     )
     root.settings_dialog = dialog  # type: ignore[attr-defined]
     return dialog
