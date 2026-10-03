@@ -44,3 +44,51 @@ def test_move_execute_promotion():
     move = Move((6, 0), (7, 0), piece=pawn, move_type="promotion", promotion_piece=queen)
     assert move.execute(board) is True
     assert board.get_piece_at((7, 0)) is queen
+
+
+def test_an_en_passant_victim_reaches_the_capture_lists():
+    """The victim does not stand on the destination, so `move_piece` cannot record it.
+
+    An en passant capture was invisible to the board's capture lists: the pawn vanished from
+    the board and nothing appeared in the tray, so the player's Taken and Lost panels silently
+    disagreed with the position.
+    """
+    from games.chess.pieces.king import King
+    from games.chess.pieces.pawn import Pawn
+    from model.game.board import Board
+
+    board = Board((8, 8), setup_pieces=False)
+    board.set_piece_at((4, 3), Pawn(1))  # d5, the pawn that captures
+    board.set_piece_at((5, 4), Pawn(-1))  # e6, the pawn that advanced e7-e5
+    board.set_piece_at((0, 4), King(1))
+    board.set_piece_at((7, 4), King(-1))
+
+    capture = Move((4, 3), (5, 4), move_type="en_passant", capture_from=(5, 4))
+    assert capture.apply_to_board(board) is not None
+
+    assert capture.captured_piece is not None
+    assert capture.captured_piece.getColor() == -1
+    assert board.captured_white == [capture.captured_piece]
+    assert board.captured_black == []
+
+
+def test_undoing_an_en_passant_capture_restores_the_capture_lists():
+    """The undo truncates to what it recorded, and the victim comes back."""
+    from games.chess.pieces.king import King
+    from games.chess.pieces.pawn import Pawn
+    from model.game.board import Board
+
+    board = Board((8, 8), setup_pieces=False)
+    board.set_piece_at((4, 3), Pawn(1))
+    victim = Pawn(-1)
+    board.set_piece_at((5, 4), victim)
+    board.set_piece_at((0, 4), King(1))
+    board.set_piece_at((7, 4), King(-1))
+
+    capture = Move((4, 3), (5, 4), move_type="en_passant", capture_from=(5, 4))
+    applied = capture.apply_to_board(board)
+    capture.unapply_from_board(board, applied)
+
+    assert board.captured_white == []
+    assert board.captured_black == []
+    assert board.get_piece_at((5, 4)) is victim

@@ -11,6 +11,7 @@ differs, load it by name, and hold the loaded configuration to the copy's own fi
 
 import os
 import pathlib
+import re
 import shutil
 import textwrap
 
@@ -250,3 +251,71 @@ def test_a_board_a_configuration_declares_is_not_the_engine_default():
     """
     assert Board.DEFAULT_DIMENSIONS == (8, 8)
     assert Board((10, 10), setup_pieces=False).dimensions == (10, 10)
+
+
+def test_editing_a_rule_file_is_visible_on_reload_in_the_same_process(tmp_path):
+    """The code editor's save must reach the running game, not only a fresh interpreter.
+
+    The loader registered the configuration package under a unique name but never removed the
+    previous load's submodules, so `from .rules.check import CheckRule` resolved to the cached
+    module and handed back the same class object. A player saved an edit, the editor reported
+    "No problems found", and the game — and every later reload — kept the old rule.
+    """
+    from model.game.configuration import load_configuration_at
+
+    games = tmp_path / "games"
+    shutil.copytree(
+        pathlib.Path(games_root()) / "chess",
+        games / "house",
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
+    source = games / "house" / "rules" / "check.py"
+
+    first = load_configuration_at(str(games / "house"), root=str(games))
+    before = [rule.default_name for rule in first.enabled_rules()]
+
+    source.write_text(
+        source.read_text(encoding="utf-8").replace(
+            'default_name = "Check"', 'default_name = "Checked"', 1
+        ),
+        encoding="utf-8",
+    )
+
+    second = load_configuration_at(str(games / "house"), root=str(games))
+    after = [rule.default_name for rule in second.enabled_rules()]
+
+    assert "Checked" in after, "the edit did not reach a reload in this process"
+    assert len(after) == len(before)
+
+
+def test_a_purged_configuration_leaves_nothing_behind_in_sys_modules(tmp_path):
+    """Reloading must not accumulate a module per load, nor keep the old one reachable."""
+    import sys
+
+    from model.game.configuration import load_configuration_at
+
+    games = tmp_path / "games"
+    shutil.copytree(
+        pathlib.Path(games_root()) / "chess",
+        games / "house",
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
+    for _attempt in range(3):
+        load_configuration_at(str(games / "house"), root=str(games))
+
+    mine = "_configuration_" + re.sub(r"\W", "_", str((games / "house").resolve()))
+
+    # Three loads of the same directory must not leave three copies: the package name is
+    # derived from the path, so a reload replaces it rather than adding beside it. Only this
+    # test's own copy is counted — other tests have loaded their copies and left those behind.
+    # The package itself, plus one module per file it imported. Three loads must not make
+    # three sets: the name is derived from the path, so a reload replaces rather than adds.
+    loaded = sorted(name for name in sys.modules if name == mine or name.startswith(mine + "."))
+
+    assert mine in loaded, "the configuration registered nothing"
+    assert (
+        len([name for name in loaded if "." not in name[len(mine) :]]) == 1
+    ), f"three loads registered {len(loaded)} modules for one directory"
+    assert (
+        len([name for name in loaded if name.endswith(".board")]) == 1
+    ), "board.py was loaded more than once"

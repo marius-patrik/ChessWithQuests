@@ -81,7 +81,23 @@ class BoardView(ttk.Frame):
         """
         if board is not None:
             self.board = board
+        # The canvas was sized once, when it was built. A board whose size has changed — from
+        # the settings form, or from a configuration with different dimensions — drew its extra
+        # rows and files outside the widget, where they were clipped and their clicks landed
+        # nowhere.
+        self._fit_canvas()
         self.redraw()
+
+    def _fit_canvas(self) -> None:
+        """Size the canvas to the board it is drawing.
+
+        Returns:
+            None
+        """
+        self.canvas.configure(
+            width=self.board.cols * self.square_size,
+            height=self.board.rows * self.square_size,
+        )
 
     def set_selection(self, selected: Optional[Square], targets: List[Square]) -> None:
         """Show which piece is selected and where it may go.

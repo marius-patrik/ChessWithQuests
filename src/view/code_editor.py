@@ -36,6 +36,7 @@ class CodeEditor:
         kind: str = "rule",
         package: str = "",
         root: Optional[str] = None,
+        readonly_reason: Optional[str] = None,
         on_saved: Optional[Callable[[str], None]] = None,
     ):
         """Build the editor over a file.
@@ -46,6 +47,9 @@ class CodeEditor:
             kind: `"rule"` to hold the file to the rule interface, `"quest"` for the quest one.
             package: The configuration's registered module name, so a relative import inside
                 the file resolves while the code is checked.
+            readonly_reason: When set, the editor refuses every save and says why. The
+                default configuration is protected this way as well as by the form, so the
+                guard does not depend on which door the editor was opened through.
             root: The configuration directory. Defaults to the file's grandparent, which is
                 what a file in `rules/` or `quests/` has.
             on_saved: Called with the path after a save that passed the check.
@@ -58,6 +62,7 @@ class CodeEditor:
         self.kind = kind
         self.package = package
         self.root = os.path.abspath(root or os.path.dirname(os.path.dirname(self.path)))
+        self.readonly_reason = readonly_reason
         if not self._within(self.path, self.root):
             raise ValueError(
                 f"{self.path} is outside {self.root}; only files in the "
@@ -169,6 +174,9 @@ class CodeEditor:
             was written. Returning rather than raising is deliberate: refusing is the ordinary
             outcome of editing code, not an exceptional one.
         """
+        if self.readonly_reason:
+            self.verdict.set(self.readonly_reason)
+            return None
         report = self.check()
         if not report.ok:
             return None

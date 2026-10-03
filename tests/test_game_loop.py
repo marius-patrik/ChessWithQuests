@@ -254,3 +254,96 @@ def test_a_capture_quest_completes_on_the_capture_and_not_before():
 
     assert first_blood.validate() is True
     assert first_blood in game.quest_manager.get_completed_quests()
+
+
+def test_a_new_game_starts_every_rule_from_nothing():
+    """`attach` is what a new game calls, so it must clear the state, not default it.
+
+    Two rules only *defaulted* their state, so a rule that had already been seen kept it: the
+    fifty-move counter carried the last game's count into the next one, and a draw offer left
+    standing in draughts was accepted by the next game, which drew instantly.
+    """
+    game = GameManager()
+    fifty = next(
+        rule for rule in game.move_validator.active_rules() if "Fifty" in rule.default_name
+    )
+    fifty.state["plies"] = 97
+
+    game.new_game()
+
+    fresh = next(
+        rule for rule in game.move_validator.active_rules() if "Fifty" in rule.default_name
+    )
+    assert fresh.state.get("plies") == 0, "the fifty-move counter survived into the new game"
+
+
+def test_a_draw_offer_does_not_carry_into_the_next_draughts_game():
+    from model.game.configuration import load_configuration
+
+    game = GameManager(configuration=load_configuration("checkers"))
+    agreement = next(
+        rule
+        for rule in game.move_validator.active_rules()
+        if rule.default_name == "Draw by agreement"
+    )
+    agreement.offer()
+    agreement.accept()
+    assert agreement.state.get("offered") is True
+    assert agreement.state.get("accepted") is True
+
+    game.new_game()
+
+    fresh = next(
+        rule
+        for rule in game.move_validator.active_rules()
+        if rule.default_name == "Draw by agreement"
+    )
+    assert fresh.state.get("offered") is False
+    assert fresh.state.get("accepted") is False
+
+
+def test_a_clock_asked_often_still_runs_at_the_speed_of_real_time():
+    """Asking the clock four times a second must not make it lose three quarters of the time.
+
+    Each charge rounded down to whole seconds and restarted from now, so up to a second was
+    thrown away per call. A window's redraw timer asks twice a second, which is how a clock came
+    to run at roughly a quarter speed.
+    """
+    game = GameManager()
+    game.start_turn_clock(monotonic=0.0)
+
+    charged = 0
+    for tenth in range(1, 35):  # 3.4 seconds, asked every tenth of a second
+        charged += game.charge_turn(monotonic=tenth / 10)
+
+    assert charged == 3, f"3.4 seconds of asking charged {charged}"
+    assert game.timer.get_time(1) == 600 - 3
+
+
+def test_the_window_asks_the_clock_so_it_runs_without_a_click():
+    """Nothing was asking, so a clock stood still while the window was open.
+
+    The manager times a turn from a monotonic reading, but only when it is asked, and the only
+    thing that asked was a move.
+    """
+    import time
+
+    import tkinter as tk
+
+    from view.app import build_application
+
+    root = tk.Tk()
+    root.withdraw()
+    build_application(root, game="chess", show_modal=False)
+    root.update()
+    try:
+        manager = root.game_view.manager
+        assert root.game_view._refresh_job_id is not None, "no redraw timer was armed"
+        before = manager.timer.get_time(1)
+        deadline = time.time() + 2.2
+        while time.time() < deadline:
+            root.update()
+            time.sleep(0.01)
+        assert manager.timer.get_time(1) < before, "the clock did not move without a click"
+    finally:
+        root.destroy()

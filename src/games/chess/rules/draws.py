@@ -103,7 +103,10 @@ class FiftyMoveRule(Rule):
         Returns:
             None
         """
-        self.state.setdefault("plies", 0)
+        # Assign, not setdefault: `attach` is what a new game calls, and a rule that
+        # only defaults its state on first sight carries the last game's counter into
+        # the next one.
+        self.state["plies"] = 0
 
     def on_move_made(self, position: Any, move: Move) -> None:
         """Count the move, resetting the count when it made progress.

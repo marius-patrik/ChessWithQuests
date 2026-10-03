@@ -278,6 +278,7 @@ class PlayerGameView(ttk.Frame):
         Returns:
             None
         """
+        self.stop_auto_refresh()
         self.window_controller.stop()
         # The master is the shell frame, not the window: destroying it left the process alive
         # with a blank window and a running mainloop.
@@ -293,21 +294,43 @@ class PlayerGameView(ttk.Frame):
             Optional[str]: The `after` job id, so a caller can cancel the refresh.
         """
         try:
-            return self.after(interval_ms, self._auto_refresh)
+            self._refresh_job_id = self.after(interval_ms, self._auto_refresh)
+            return self._refresh_job_id
         except tk.TclError:  # pragma: no cover - the window may already be closing
             return None
 
     def _auto_refresh(self) -> None:
-        """Redraw, then queue the next redraw.
+        """Charge the player to move, redraw, then queue the next pass.
+
+        The charge is what makes a clock a clock: the manager times a turn from a monotonic
+        reading, but only when it is asked, and nothing was asking. So the clock stood still
+        while the window was open and a player thought, and moved when they finally clicked.
 
         Returns:
             None
         """
         try:
+            if self.manager.get_state() in (GameManager.STATE_IN_PROGRESS, GameManager.STATE_CHECK):
+                self.manager.charge_turn()
             self.refresh()
             self.after(REFRESH_INTERVAL_MS, self._auto_refresh)
         except tk.TclError:  # pragma: no cover - the window may already be closing
             return
+
+    def stop_auto_refresh(self) -> None:
+        """Stop redrawing on a timer.
+
+        Returns:
+            None
+        """
+        self._refresh_job = None
+        for job in (getattr(self, "_refresh_job_id", None),):
+            if job is not None:
+                try:
+                    self.after_cancel(job)
+                except tk.TclError:  # pragma: no cover - the job may already be gone
+                    pass
+        self._refresh_job_id = None
 
 
 #: Czech alias for `PlayerGameView`, as `PRD.md` section 5 and `HracGameView` in the diagram

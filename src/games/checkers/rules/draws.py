@@ -67,7 +67,10 @@ class FiftyMoveRule(Rule):
         Returns:
             None
         """
-        self.state.setdefault("plies", 0)
+        # Assign, not setdefault: `attach` is what a new game calls, and a rule that
+        # only defaults its state on first sight carries the last game's counter into
+        # the next one.
+        self.state["plies"] = 0
 
     def reset_count(self) -> None:
         """Start the count again from zero, for a new game.
@@ -163,8 +166,8 @@ class MutualAgreementRule(Rule):
         Returns:
             None
         """
-        self.state.setdefault("offered", False)
-        self.state.setdefault("accepted", False)
+        self.state["offered"] = False
+        self.state["accepted"] = False
 
     def offer(self) -> None:
         """Offer a draw.

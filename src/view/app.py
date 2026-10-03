@@ -57,6 +57,9 @@ def build_application(root: tk.Tk, game: str = DEFAULT_GAME, show_modal: bool = 
     root.game_view = view  # type: ignore[attr-defined]
     root.window_controller = controller  # type: ignore[attr-defined]
     root.available_games = games  # type: ignore[attr-defined]
+    # The clock runs on real time, so something has to ask for it. Nothing was, and a clock
+    # that only moved when a player clicked was not a clock.
+    view.start_auto_refresh()
 
     if show_modal:
         root.after(50, lambda: _offer_modal(root, games, controller))

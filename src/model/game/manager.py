@@ -282,19 +282,28 @@ class GameManager:
             monotonic: A monotonic clock reading, in seconds. Defaults to `time.monotonic`.
 
         Returns:
-            int: The whole seconds charged. Zero when no turn has been started, which is the
-            case for a game that has not begun.
+            int: The whole seconds charged, which is zero for a turn shorter than a second or
+            a game that has not begun.
         """
         import time
 
         if self.turn_started is None:
             return 0
         now = monotonic if monotonic is not None else time.monotonic()
-        elapsed = int(now - self.turn_started)
-        self.turn_started = None
-        if elapsed > 0:
-            self.timer.tick(color if color is not None else self.active_player, elapsed)
-        return elapsed
+        elapsed = now - self.turn_started
+        # Carry the remainder rather than discarding it. Rounding each call to whole seconds
+        # loses up to a second per call, so a clock asked four times a second fell roughly four
+        # times slower than real time. The turn is still *ended* — a move charges it once and
+        # hands the turn on — but asking mid-turn must not throw away what has accrued.
+        whole = int(elapsed)
+        # Keep the fraction that has not been charged yet, by moving the start forward by only
+        # what was charged. Rounding each call to whole seconds and restarting from now lost up
+        # to a second per call, so a clock asked four times a second fell about four times
+        # slower than real time.
+        self.turn_started = now - (elapsed - whole)
+        if whole > 0:
+            self.timer.tick(color if color is not None else self.active_player, whole)
+        return whole
 
     def credit_increment(self, color: int) -> None:
         """Add the increment a player earns by completing a move.

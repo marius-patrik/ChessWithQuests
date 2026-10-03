@@ -6,8 +6,12 @@ none they skip rather than fail, so the suite still runs headless. `format_secon
 neither a display nor tkinter and is always checked.
 """
 
+import os
 import tkinter as tk
+
 import pytest
+
+from model.game.board import Board
 
 from model.game.games import available_games
 from view.player_game_view import PlayerGameView, STATE_LABELS
@@ -34,6 +38,24 @@ def window(tk_root):
     yield tk_root.game_view
     for child in tk_root.winfo_children():
         child.destroy()
+
+
+def build_for(tk_root):
+    """Build a fresh application on the shared root and return its view.
+
+    Args:
+        tk_root: The session's Tk root.
+
+    Returns:
+        PlayerGameView: The view of a freshly dealt chess game.
+    """
+    from view.app import build_application
+
+    for child in tk_root.winfo_children():
+        child.destroy()
+    build_application(tk_root, show_modal=False)
+    tk_root.update()
+    return tk_root.game_view
 
 
 def _button_labels(widget):
@@ -348,3 +370,106 @@ def test_the_modal_lists_the_shipped_games_and_starts_one(tk_root):
     modal.start()
     root.update()
     assert not modal.window.winfo_exists()
+
+
+def test_the_default_configuration_cannot_be_edited_through_the_form(tk_root):
+    """Every door into the shipped configuration is shut, not just the one the form uses.
+
+    `save_values` refuses to write the default's values, but the Rules tab created files in
+    the default's directory anyway and the code editor would overwrite them. A player could
+    therefore drop a rule refusing every move into `games/chess` and be told the default cannot
+    be edited.
+    """
+    import os
+
+    from view.app import open_settings
+
+    view = build_for(tk_root)
+    dialog = open_settings(tk_root, view.window_controller)
+    tk_root.update()
+
+    assert dialog.configuration.is_default
+    rules_dir = os.path.join(dialog.configuration.path, "rules")
+    before = set(os.listdir(rules_dir))
+
+    assert dialog.create_source("sneaky", "rule") is None
+    assert set(os.listdir(rules_dir)) == before, "a file was created in the default"
+    assert "cannot be edited" in dialog.message.get()
+
+    dialog.cancel()
+    tk_root.update()
+
+
+def test_the_editor_refuses_to_save_when_it_is_told_why(tk_root):
+    """The guard does not depend on which door opened the editor."""
+    from view.code_editor import CodeEditor
+
+    build_for(tk_root)
+    target = os.path.join(str(tk_root), "some_rule.py")
+    with open(target, "w", encoding="utf-8") as handle:
+        handle.write("")
+
+    editor = CodeEditor(
+        tk_root,
+        target,
+        kind="rule",
+        readonly_reason="the default configuration cannot be edited",
+    )
+    editor.text.insert("1.0", "# an edit that must not land")
+    tk_root.update()
+
+    assert editor.save() is None
+    with open(target, encoding="utf-8") as handle:
+        assert handle.read() == "", "the file was written despite the refusal"
+    assert "cannot be edited" in editor.verdict.get()
+
+    editor.close()
+    tk_root.update()
+
+
+def test_a_refused_save_applies_nothing(tk_root):
+    """The guard is asked before any section is applied, not after.
+
+    Every section used to be applied first and the refusal consulted last. `configuration.board`
+    is the board a running game plays on, so typing a row count resized the live board, dropped
+    sixteen pieces off it, and *then* told the player nothing had been written.
+    """
+    from view.app import open_settings
+
+    view = build_for(tk_root)
+    manager = view.manager
+    dialog = open_settings(tk_root, view.window_controller)
+    tk_root.update()
+
+    before_dimensions = manager.board.dimensions
+    before_pieces = sum(1 for row in manager.board.board for square in row if square is not None)
+
+    # Reach the board's row entry the way the form built it: one variable per declared field.
+    board_editors = next(
+        editors
+        for subject, _fields, editors in dialog.entries_by_section["Board"]
+        if subject is dialog.configuration.board
+    )
+    rows_variable = board_editors["rows"]
+    rows_variable.set("4")
+    saved = dialog.save()
+
+    assert saved is False
+    assert "cannot be edited" in dialog.message.get()
+    assert manager.board.dimensions == before_dimensions
+    assert sum(1 for row in manager.board.board for square in row if square is not None) == (
+        before_pieces
+    )
+
+    dialog.cancel()
+    tk_root.update()
+
+
+def test_the_canvas_follows_a_board_that_changed_size(window):
+    """A board resized from settings drew outside its canvas, and the extra squares were dead."""
+    view = window
+    board_view = view.board_view
+    board_view.refresh(Board((10, 10), setup_pieces=False))
+
+    assert board_view.canvas.winfo_reqwidth() == 10 * board_view.square_size
+    assert board_view.canvas.winfo_reqheight() == 10 * board_view.square_size
