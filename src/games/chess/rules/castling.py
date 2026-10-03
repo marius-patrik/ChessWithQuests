@@ -10,7 +10,7 @@ from typing import Any, List, Optional, Tuple
 from model.game.field import Field
 from model.game.move import Move
 from model.game.rule import Rule
-from games.chess.rules.attacks import is_attacked, opponent
+from .attacks import is_attacked, opponent
 
 #: Precedence is unused here; castling never ends a game.
 CASTLE_KING_SIDE = "O-O"

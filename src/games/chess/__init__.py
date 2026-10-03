@@ -13,11 +13,8 @@ is a copyable unit: `cp -r games/chess games/house` and a variant exists. An abs
 `games.chess.…` import inside a copy would still reach back here, so the copy would load this
 board, these pieces and these rules while looking like it had loaded its own — silently, with
 no error and no warning. `model/game/configuration.py` loads a configuration as a package in
-its own right for the same reason.
-
-One gap remains, and it is recorded in `notes/object_model.md`: the modules under
-`games/chess/rules/` still import each other by absolute path, so a copy currently shares
-chess's rules with the original. Their imports are the last chess coupling in the tree.
+its own right for the same reason, and `rules/` and `pieces/` import relatively for the same
+reason: the rules a copy composes, and the pieces its promotions produce, are the copy's.
 """
 
 from typing import Any, List

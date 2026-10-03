@@ -2,13 +2,35 @@
 
 The far rank is derived from the piece's own declared forward vector rather than from the
 number eight, so the rule works on a board of any size.
+
+The replacement pieces are imported relatively, at module level. They used to be imported by
+absolute path inside `_make_promotion`, which meant a promoted pawn became a piece class
+belonging to the original `games/chess` even when the game being played was a copied
+configuration that had declared pieces of its own. Importing them here keeps the promotion
+inside the configuration that is being played.
 """
 
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional, Type
 
 from model.game.field import Field
 from model.game.move import Move
 from model.game.rule import Rule
+
+from ..pieces.bishop import Bishop
+from ..pieces.knight import Knight
+from ..pieces.queen import Queen
+from ..pieces.rook import Rook
+
+#: The kinds a pawn may be promoted to, and the class each becomes. Both spellings of the
+#: knight's kind are accepted: the piece declares `horse`, and a configuration may write
+#: `knight` instead.
+PROMOTION_PIECES: Dict[str, Type[Any]] = {
+    "queen": Queen,
+    "rook": Rook,
+    "bishop": Bishop,
+    "knight": Knight,
+    "horse": Knight,
+}
 
 
 class PromotionRule(Rule):
@@ -189,14 +211,13 @@ def _make_promotion(piece: Any, kind: str) -> Any:
 
     Returns:
         Any: A piece of that kind and colour, or None when the kind is unknown.
-    """
-    from games.chess.pieces.bishop import Bishop
-    from games.chess.pieces.horse import Horse
-    from games.chess.pieces.queen import Queen
-    from games.chess.pieces.rook import Rook
 
-    catalogue = {"queen": Queen, "rook": Rook, "bishop": Bishop, "knight": Horse, "horse": Horse}
-    factory = catalogue.get(kind)
+    Raises:
+        ValueError: If `kind` is not one of `PROMOTION_PIECES`. A promotion has to produce a
+            piece, and guessing which would silently promote a pawn into something the
+            configuration never offered.
+    """
+    factory = PROMOTION_PIECES.get(kind)
     if factory is None:
         raise ValueError(f"{kind!r} is not a piece kind a pawn can promote to")
     return factory(piece.getColor())

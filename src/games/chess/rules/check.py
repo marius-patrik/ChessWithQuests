@@ -7,7 +7,7 @@ piece attacked, and does the player have any legal move at all.
 from typing import Any, List, Optional
 
 from model.game.rule import KIND_WIN, Result, Rule
-from games.chess.rules.attacks import find_piece, has_legal_move, is_attacked, opponent
+from .attacks import find_piece, has_legal_move, is_attacked, opponent
 
 #: Precedence of each proposal, so two rules firing at once is deterministic.
 CHECKMATE_PRECEDENCE = 100

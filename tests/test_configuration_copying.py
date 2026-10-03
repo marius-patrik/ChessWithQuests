@@ -7,11 +7,6 @@ original — the worst failure mode available, because nothing errors and nothin
 
 These tests copy the shipped chess configuration into a throwaway `games/` root, edit what
 differs, load it by name, and hold the loaded configuration to the copy's own files.
-
-One leak remains and is recorded in `notes/object_model.md`: the modules under
-`games/chess/rules/` import each other by absolute path, so a copy currently shares chess's
-rules with the original. `test_a_copied_configuration_still_shares_chess_rules` pins that
-known gap rather than hiding it.
 """
 
 import os
@@ -43,9 +38,9 @@ COPY_BOARD = textwrap.dedent('''
         Returns:
             Board: A ten by ten board.
         """
-        from .pieces.horse import Horse
+        from .pieces.knight import Knight
 
-        return Board((rows, cols), placement=[((0, 0), Horse(1))])
+        return Board((rows, cols), placement=[((0, 0), Knight(1))])
     ''')
 
 
@@ -117,9 +112,9 @@ def test_a_copied_configuration_places_the_copies_own_pieces(copied_chess):
     configuration = load_configuration("house", root=copied_chess)
     piece_class = _loaded_piece_class(configuration)
 
-    assert piece_class.__name__ == "Horse"
+    assert piece_class.__name__ == "Knight"
     assert piece_class.__module__.startswith("_configuration_")
-    assert piece_class.__module__.endswith("house.pieces.horse")
+    assert piece_class.__module__.endswith("house.pieces.knight")
 
 
 def test_a_copied_configuration_declares_its_own_piece_catalogue(copied_chess):
@@ -194,13 +189,14 @@ def test_the_shipped_configuration_imports_under_its_own_package_name_too():
     )
 
 
-def test_a_copied_configuration_still_shares_chess_rules(copied_chess):
-    """Pin the known remaining gap: the rules tree still imports chess by absolute path.
+def test_a_copied_configuration_keeps_its_own_rules(copied_chess):
+    """A copy composes the copy's rules, including the ones its promotions produce.
 
-    `games/chess/rules/__init__.py` and its nine sibling modules say
-    `from games.chess.rules.… import …`, so a copy composes the *original's* rules. The board,
-    pieces, clocks and quests are the copy's; the rules are not, and this test fails loudly
-    the moment someone converts those imports and the gap is closed.
+    `games/chess/rules/` used to say `from games.chess.rules.… import …`, so a copy was
+    handed the *original's* rule objects — while its board, pieces, clocks and quests were
+    its own, and nothing said so. `games/chess/rules/promotion.py` went further and built the
+    promoted piece out of `games.chess.pieces`, so a promotion in a copy produced a piece
+    class belonging to a configuration that was not being played.
 
     Args:
         copied_chess: The throwaway `games/` root holding the copy.
@@ -210,9 +206,40 @@ def test_a_copied_configuration_still_shares_chess_rules(copied_chess):
     """
     configuration = load_configuration("house", root=copied_chess)
 
-    assert all(
-        type(rule).__module__.startswith("games.chess.rules") for rule in configuration.rules
-    )
+    assert configuration.rules
+    for rule in configuration.rules:
+        module = type(rule).__module__
+        assert module.startswith("_configuration_"), type(rule).__name__
+        assert ".rules." in module, type(rule).__name__
+
+
+def test_a_promotion_in_a_copied_configuration_yields_the_copies_piece(copied_chess):
+    """The replacement piece belongs to the configuration being played.
+
+    `games/chess/rules/promotion.py` used to build the promoted piece out of
+    `games.chess.pieces.…`, so a promotion in a copy produced a piece class belonging to a
+    configuration that was not being played. The module a class came from is the proof,
+    exactly as it is for the board's pieces: a class loaded through `games.chess` says so,
+    and one loaded through the copy says `_configuration_…` instead.
+
+    Args:
+        copied_chess: The throwaway `games/` root holding the copy.
+
+    Returns:
+        None
+    """
+    import sys
+
+    from games.chess.pieces.pawn import Pawn
+
+    configuration = load_configuration("house", root=copied_chess)
+    rule = next(rule for rule in configuration.rules if type(rule).__name__ == "PromotionRule")
+    copy_module = sys.modules[type(rule).__module__]
+
+    promoted = copy_module._make_promotion(Pawn(1), "queen")
+
+    assert type(promoted).__module__.startswith("_configuration_")
+    assert type(promoted).__module__.endswith("house.pieces.queen")
 
 
 def test_a_board_a_configuration_declares_is_not_the_engine_default():

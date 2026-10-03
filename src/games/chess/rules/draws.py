@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from model.game.field import Field
 from model.game.move import Move
 from model.game.rule import KIND_DRAW, Result, Rule
-from games.chess.rules.attacks import kinds_of, opponent, square_color
+from .attacks import kinds_of, opponent, square_color
 
 #: Precedence of each draw, so two firing at once is deterministic.
 STALEMATE_PRECEDENCE = 90
@@ -318,10 +318,10 @@ def position_key(position: Any, active_color: int) -> str:
     return "|".join(parts)
 
 
-#: The knight is spelled two ways in this codebase: the piece reports `horse` today, and the
-#: rename that gives every Czech alias its English canonical name will make it `knight`. A
-#: configured kind matches whichever spelling is in force, so a setting written for either
-#: keeps working across that rename.
+#: The knight's class was renamed to `Knight` on 2026-10-03, and its *configured* kind was
+#: not renamed with it: `piece_type` is data this configuration chooses and persists, so a
+#: stored value of `horse` still has to mean the knight. Both spellings are therefore accepted,
+#: and a setting written for `knight` keeps working either way.
 _KIND_ALIASES = {"knight": "horse", "horse": "horse"}
 
 
