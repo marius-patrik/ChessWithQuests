@@ -1,5 +1,5 @@
 import pytest
-from controller.controller import GameController, Controller
+from controller.controller import GameController
 from model.game.manager import GameManager
 
 

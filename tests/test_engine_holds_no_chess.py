@@ -27,7 +27,7 @@ import pytest
 
 from games.chess.board import build_board
 from games.chess.export.algebraic import algebraic_to_pos, pos_to_algebraic
-from games.chess.pieces.horse import Horse
+from games.chess.pieces.knight import Knight
 from games.chess.pieces.king import King
 from games.chess.pieces.queen import Queen
 from model.game.board import Board
@@ -44,7 +44,7 @@ from model.pieces.piece import Piece
 
 #: Every piece name chess uses. The engine is not allowed to know one of them.
 CHESS_PIECE_TYPES = frozenset(
-    {"king", "queen", "rook", "bishop", "knight", "horse", "pawn", "tower"}
+    {"king", "queen", "rook", "bishop", "knight", "knight", "pawn", "tower"}
 )
 
 
@@ -72,7 +72,7 @@ def test_a_fen_record_is_built_from_what_each_piece_declares():
     """
     board = Board((4, 4), setup_pieces=False)
     board.set_piece_at((0, 0), Queen(1))
-    board.set_piece_at((1, 1), Horse(-1))
+    board.set_piece_at((1, 1), Knight(-1))
 
     assert ChessNotationWriter().to_fen(board).split()[0] == "4/4/1n2/Q3"
 

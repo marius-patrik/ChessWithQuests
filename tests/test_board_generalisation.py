@@ -186,7 +186,7 @@ def test_the_shipped_board_still_serialises_unchanged():
     record = ChessNotationWriter().to_fen(board)
 
     assert record.split(" ")[0] == "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
-    assert board.get_piece_at((0, 1)).getName() == "Horse"
+    assert board.get_piece_at((0, 1)).getName() == "Knight"
     assert board.get_piece_at((7, 7)).getName() == "Rook"
 
 

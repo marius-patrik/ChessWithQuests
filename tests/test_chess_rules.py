@@ -9,7 +9,7 @@ from model.game.board import Board
 from model.game.move import Move
 from model.game.validator import MoveValidator
 from games.chess.pieces.bishop import Bishop
-from games.chess.pieces.horse import Horse
+from games.chess.pieces.knight import Knight
 from games.chess.pieces.king import King
 from games.chess.pieces.pawn import Pawn
 from games.chess.pieces.queen import Queen
@@ -248,7 +248,15 @@ def test_promotion_is_offered_to_the_four_choices():
 
     assert offered != []
     assert all(m.promotion_piece is not None for m in offered)
+    # The promoted knight reports the `horse` descriptor; the class is `Knight`. The two
+    # spellings are bridged where a rule compares kinds, and `Horse` is not a name here.
     assert {m.promotion_piece.getType() for m in offered} == {"queen", "rook", "bishop", "horse"}
+    assert {type(m.promotion_piece).__name__ for m in offered} == {
+        "Queen",
+        "Rook",
+        "Bishop",
+        "Knight",
+    }
 
 
 def test_the_validator_asks_the_rules_rather_than_guessing():
@@ -266,9 +274,9 @@ def test_the_validator_asks_the_rules_rather_than_guessing():
 
 
 def test_a_knight_is_judged_by_its_declared_vectors_not_its_name():
-    """The horse is a knight to the player and only a leaping piece to the engine."""
+    """The knight is a knight to the player and only a leaping piece to the engine."""
     board = empty_board()
-    board.set_piece_at((4, 4), Horse(1))
+    board.set_piece_at((4, 4), Knight(1))
 
     assert in_check(board, -1, royal_kind="king") is False
     assert MoveValidator(board).get_valid_moves((4, 4)) != []
@@ -305,19 +313,19 @@ def test_insufficient_material_draws_the_positions_that_cannot_be_mated():
     # (4, 4) and (4, 5) are one square colour apart; (4, 4) and (4, 3) are too, but the
     # bishops below are placed on squares of the same parity on purpose.
     assert insufficient_outcome() is not None
-    assert insufficient_outcome(((4, 4), Horse(1))) is not None
+    assert insufficient_outcome(((4, 4), Knight(1))) is not None
     assert insufficient_outcome(((4, 4), Bishop(1))) is not None
     assert insufficient_outcome(((4, 0), Bishop(1)), ((5, 1), Bishop(1))) is not None
 
     assert insufficient_outcome(((4, 4), Rook(1))) is None
-    assert insufficient_outcome(((4, 4), Horse(1)), ((3, 4), Horse(1))) is None
+    assert insufficient_outcome(((4, 4), Knight(1)), ((3, 4), Knight(1))) is None
     assert insufficient_outcome(((4, 0), Bishop(1)), ((4, 1), Bishop(1))) is None
 
 
 def test_the_knight_is_recognised_by_either_spelling_of_its_kind():
-    """A setting written for `knight` still matches the piece that reports `horse`."""
+    """A setting written for `knight` still matches the piece that reports `knight`."""
     board = kings_only_board()
-    board.set_piece_at((4, 4), Horse(1))
+    board.set_piece_at((4, 4), Knight(1))
     rule = InsufficientMaterialRule()
     rule.attach()
     rule.active_color = 1

@@ -504,13 +504,13 @@ def _piece(character: str) -> Any:
         Any: A piece of that kind and colour.
     """
     from games.chess.pieces.bishop import Bishop
-    from games.chess.pieces.horse import Horse
+    from games.chess.pieces.knight import Knight
     from games.chess.pieces.king import King
     from games.chess.pieces.pawn import Pawn
     from games.chess.pieces.queen import Queen
     from games.chess.pieces.rook import Rook
 
-    catalogue = {"p": Pawn, "r": Rook, "n": Horse, "b": Bishop, "q": Queen, "k": King}
+    catalogue = {"p": Pawn, "r": Rook, "n": Knight, "b": Bishop, "q": Queen, "k": King}
     return catalogue[character.lower()](1 if character.isupper() else -1)
 
 

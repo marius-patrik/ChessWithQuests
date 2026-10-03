@@ -9,12 +9,11 @@ import pytest
 from games.chess.board import DIMENSIONS, build_board, starting_placement
 from games.chess.clocks.fischer import Fischer
 from games.chess.pieces.bishop import Bishop
-from games.chess.pieces.horse import Horse, Knight
+from games.chess.pieces.knight import Knight, Knight
 from games.chess.pieces.king import King
 from games.chess.pieces.pawn import Pawn
 from games.chess.pieces.queen import Queen
 from games.chess.pieces.rook import Rook
-from games.chess.pieces.tower import Tower
 from model.pieces.piece import Piece
 
 CHESS_PIECES = (Pawn, Knight, Bishop, Rook, Queen, King)
@@ -87,11 +86,18 @@ def test_the_engine_declares_no_chess_and_asks_pieces_for_what_they_do_not_know(
 
 
 def test_the_czech_aliases_are_the_same_piece():
-    """`Tower` is Czech for the rook, and `Horse` is Czech for the knight."""
-    assert Tower is Rook
-    assert Knight is Horse
-    assert Tower(1).getFen() == "R"
-    assert Knight(1).getFen() == "N"
+    """Each Czech alias is another name for the piece whose English name is canonical.
+
+    `Tower` was recorded as dropped and is deliberately absent; `Kun` is the knight's Czech
+    name, and `Knight` is the canonical one.
+    """
+    from games.chess.pieces.knight import Kun, Knight as KnightClass
+    from games.chess.pieces.rook import Rook, Vez
+
+    assert Kun is KnightClass
+    assert Vez is Rook
+    assert KnightClass(1).getFen() == "N"
+    assert Vez(1).getFen() == "R"
 
 
 def test_a_chess_clock_adds_its_increment_only_after_a_move():

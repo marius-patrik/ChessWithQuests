@@ -7,7 +7,7 @@ authoritative table: fifteen diagram names, their canonical English names, and t
 Czech spelling of each. English is canonical; Czech is an alias.
 
 None of the fifteen existed when this file was written, and the two chess ones were the wrong
-way round — `games/chess/pieces/horse.py` declared `class Horse(Piece)` with `Knight = Horse`
+way round — `games/chess/pieces/knight.py` declared `class Knight(Piece)` with `Knight = Knight`
 at the bottom, so English and Czech were swapped. `Tower = Rook` and `Controller =
 GameController` were shipped as aliases for names the project does not use.
 
@@ -110,10 +110,10 @@ def test_every_chess_alias_is_spelled_without_diacritics():
 
 
 def test_the_knight_is_canonical_and_its_czech_alias_is_kun():
-    """`Horse` is the name this project does not use, so it must not exist to alias.
+    """`Knight` is the name this project does not use, so it must not exist to alias.
 
-    The code had this the other way round: `games/chess/pieces/horse.py` declared
-    `class Horse(Piece)` and ended with `Knight = Horse`, which made Czech the class and
+    The code had this the other way round: `games/chess/pieces/knight.py` declared
+    `class Knight(Piece)` and ended with `Knight = Knight`, which made Czech the class and
     English the alias.
 
     Returns:
@@ -123,6 +123,7 @@ def test_the_knight_is_canonical_and_its_czech_alias_is_kun():
 
     assert knight.Knight.__name__ == "Knight"
     assert knight.Kun is knight.Knight
+    # `Horse` was the old canonical name and is gone entirely, not aliased.
     assert not hasattr(knight, "Horse")
     with pytest.raises(ModuleNotFoundError):
         importlib.import_module("games.chess.pieces.horse")
@@ -133,7 +134,8 @@ def test_the_knights_configured_kind_is_not_its_class_name():
 
     `piece_type` is data a configuration chooses and writes into its saved values, so
     renaming it would silently repoint every stored configuration that says `horse`. The
-    class name is the thing `PRD.md` section 5 decides; the descriptor is not.
+    class name is the thing `PRD.md` section 5 decides; the descriptor is not. The two
+    spellings are bridged where a rule compares kinds.
 
     Returns:
         None
