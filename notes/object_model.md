@@ -29,12 +29,19 @@ user request adds it.
   do not constitute architecture or object model deviations.
 - **English is canonical.** All code, class names, method names, attributes,
   variables, comments and docstrings are written in English.
-- **Czech aliases are permitted.** The classes the diagram names in Czech
-  additionally expose a Czech alias bound to the same object, so the
-  diagram-to-code mapping is discoverable from the source and the generated
-  documentation. Aliases use ASCII spellings without diacritics:
-  `HerniPlocha`, `Kun`, `Kral`, `Dama`, `Strelec`, `Pesak`, `Vez`. Comments,
-  docstrings, commit messages and documentation remain English.
+- **Czech aliases are required, not merely permitted.** The classes the
+  diagram names in Czech additionally expose a Czech alias bound to the same
+  object, so the diagram-to-code mapping is discoverable from the source and
+  the generated documentation. Aliases use ASCII spellings without diacritics.
+  Comments, docstrings, commit messages and documentation remain English.
+- **Implemented 2026-10-03, partially — see section 19.** This section listed
+  seven alias spellings as though they were the whole set, which they are not:
+  they are the seven whose Czech spelling *differs* from the English one. The
+  other eight (`Figurka`, `Tah`, `Hrac`, `RevizorTahu`, `Uzivatel`, `Kwest`,
+  `HracView`, `HracGameView`) have the same spelling in both languages and were
+  never listed at all, which is how all fifteen went unimplemented while this
+  section read as if they did not. `PRD.md` section 5 holds the authoritative
+  fifteen-row table; section 19 carries it as corrected against the code.
 - **Approval**: recorded with user approval, and re-approved for the alias
   allowance on 2026-10-02.
 
@@ -369,11 +376,11 @@ Recorded because the question is fair and the answer is not obvious.
   warning, and a variant that plays orthodox chess after being edited into
   something else.
 - **Change**: two halves, both needed together.
-  - Inside `games/chess/`, every module this change touched now imports
-    relatively (`from .board import …`, `from .pieces.horse import Horse`), so a
-    copy's imports resolve inside the copy. The modules under
-    `games/chess/rules/` still import absolutely and are listed as the remaining
-    gap below.
+  - Inside `games/chess/`, every module now imports relatively
+    (`from .board import …`, `from .pieces.knight import Knight`), so a copy's
+    imports resolve inside the copy. The gap that was left here — the modules
+    under `games/chess/rules/` importing each other by absolute path — was
+    closed on 2026-10-03; see section 19.
   - `model/game/configuration.py` registers a loaded configuration as a *package*
     rooted at its own directory (`spec_from_file_location(..., submodule_search_locations=[directory])`).
     Without that search path a relative import fails outright, and the tempting
@@ -383,15 +390,15 @@ Recorded because the question is fair and the answer is not obvious.
 - **Deviation**: none beyond section 10, which already registers the loading
   mechanism and its bounding. This is that mechanism working for a copy rather
   than only for the shipped directory.
-- **Remaining gap, recorded so it is not mistaken for done**: `games/chess/rules/__init__.py`,
-  `attacks.py`, `bishop_colour.py`, `castling.py`, `check.py`, `draws.py`,
-  `en_passant.py`, `flag.py`, `promotion.py` and `royal.py` import each other by
-  absolute path, so a copied configuration currently composes *chess's* rules. A
-  consequence beyond the imports themselves:
-  `games/chess/rules/promotion.py` builds the promoted piece from
-  `games.chess.pieces.…`, so a promotion in a copy yields a piece class belonging
-  to the original configuration. `tests/test_configuration_copying.py` pins this
-  gap in a test that fails the day it is closed.
+- **Gap closed 2026-10-03.** The remaining gap recorded below is closed;
+  section 19 carries the change. Nothing in a copied configuration reaches back
+  into `games/chess` any more — with one exception outside the configuration:
+  `model/misc/export_writers.py` reaches `games.chess.export.algebraic` by
+  absolute path inside `_to_algebraic()`, so a copy that keeps using the shipped
+  writer still borrows the original's square naming. That is harmless for a
+  chess-derived copy and wrong for a copy whose squares are not chess's, and it
+  disappears when the writer itself moves to `games/chess/export/` as section 7
+  already decided.
 
 ### 17. The Engine Quest Roster Names No Piece
 
@@ -407,10 +414,12 @@ Recorded because the question is fair and the answer is not obvious.
   names both, with chess's own piece names, so chess loses no quest.
 - **Deviation**: none. The roster is not drawn in the diagram; quests themselves
   are registered in section 4, and this narrows what the engine volunteers rather
-  than adding structure. The roster is still the fallback
-  `model/game/manager.py` reaches for when a configuration declares no quests,
-  which is the only reason it cannot simply be deleted — and that fallback should
-  go with the manager's other chess defaults.
+  than adding structure. The roster was the fallback
+  `model/game/manager.py` reached for when a configuration declared no quests,
+  and that fallback is gone as of 2026-10-03 — a configuration that declares no
+  quests now gets none. `model/game/quests.py` remains as a library of quest
+  classes a configuration composes from, and `BUILT_IN_QUESTS` remains a
+  catalogue a caller may read, but nothing in the engine hands it to a game.
 
 ### 18. Dead Configuration State Is Populated, Not Dropped
 
@@ -422,14 +431,89 @@ Recorded because the question is fair and the answer is not obvious.
   `build_exporters()`. Section 4 registers a configuration as a bundle of *pieces*
   and per-configuration export writers, so removing either attribute would
   contradict a registered decision while filling them in carries it out.
-- **Consequence recorded**: `Configuration.exporters` is populated but still read
-  by nothing, because `model/game/manager.py` hard-codes `ChessNotationWriter()`
-  instead of taking the first exporter from `configuration.exporters`. The writer
-  class itself also still lives in the engine module
-  `model/misc/export_writers.py`, and section 7 registers that it belongs in
-  `games/chess/export/`; `model/game/manager.py`'s import by name is what blocks
-  the move, and the same file blocks deleting `model/misc/notation.py`, which is
-  now a re-export shim for the moved algebraic conversion.
+- **Consequence recorded, and closed on 2026-10-03.** `Configuration.exporters`
+  is now read: `model/game/manager.py` takes its writers from it instead of
+  constructing `ChessNotationWriter()` unconditionally, so the engine no longer
+  names a chess writer at all and the move section 7 describes is unblocked —
+  see section 19. `model/misc/notation.py` is still a re-export shim for the
+  moved algebraic conversion, but no longer for the manager's sake: its one
+  remaining consumer outside this repository's configuration layer is
+  `view/player_game_view.py`.
+
+### 19. The Engine Names No Notation, and a Copy Keeps Its Own Rules
+
+- **Date**: 2026-10-03
+- **Context**: two recorded decisions and one wiring gap, all in the same direction —
+  a class name, a spelling and an import list that the plan wrote down and the code did
+  not follow.
+- **Change, five parts.**
+  1. **The fifteen Czech aliases.** None of the fifteen in `PRD.md` section 5 existed.
+     Six now do, in the chess configuration: `Pesak`, `Vez`, `Kun`, `Strelec`, `Dama`
+     and `Kral`. The other nine are engine and view classes whose modules were not in
+     this work's file list, so they remain missing and are listed by name below.
+  2. **`Knight` is canonical and `Horse` is gone.** `games/chess/pieces/horse.py`
+     declared `class Horse(Piece)` and ended with `Knight = Horse`, which made the
+     English name the alias — the reverse of the decision. The class is now `Knight`,
+     the file is `games/chess/pieces/knight.py`, and `Kun` is the alias. There is no
+     `Horse` binding anywhere, per the approved outcome above.
+  3. **`Tower` and `Controller` are removed.** `games/chess/pieces/tower.py` shipped
+     `Tower = Rook` on the reasoning that `Tower` is Czech for the rook; it is not,
+     `Věž` is, and `Vez` is its ASCII spelling. `controller/controller.py` shipped
+     `Controller = GameController`. Both were approved drops.
+  4. **The manager reads `configuration.exporters` and declares no quests.** It no
+     longer imports or names `ChessNotationWriter`, and no longer falls back to the
+     engine's quest roster.
+  5. **`games/chess/rules/` imports relatively**, and `promotion.py` builds the
+     promoted piece relatively, so a copied configuration composes its own rules and
+     promotes into its own pieces. This closes the gap section 16 recorded.
+- **The fifteen-row alias table, as implemented.** `PRD.md` section 5 is
+  authoritative; this is that table checked against the code on 2026-10-03.
+
+  | Diagram | Canonical | Czech alias | Where the alias lives | State |
+  |---|---|---|---|---|
+  | `Figurka` | `Piece` | `Figurka` | `model/pieces/piece.py` | **missing** |
+  | `Pěšák` | `Pawn` | `Pesak` | `games/chess/pieces/pawn.py` | present |
+  | `Věž` | `Rook` | `Vez` | `games/chess/pieces/rook.py` | present |
+  | `Kůň` | `Knight` | `Kun` | `games/chess/pieces/knight.py` | present |
+  | `Střelec` | `Bishop` | `Strelec` | `games/chess/pieces/bishop.py` | present |
+  | `Dáma` | `Queen` | `Dama` | `games/chess/pieces/queen.py` | present |
+  | `Král` | `King` | `Kral` | `games/chess/pieces/king.py` | present |
+  | `HerníPlocha` | `Board` | `HerniPlocha` | `model/game/board.py` | **missing** |
+  | `Tah` | `Move` | `Tah` | `model/game/move.py` | **missing** |
+  | `Hrac` | `Player` | `Hrac` | `model/game/player.py` | **missing** |
+  | `RevizorTahu` | `MoveValidator` | `RevizorTahu` | `model/game/validator.py` | **missing** |
+  | `Uzivatel` | `User` | `Uzivatel` | `model/users/user.py` | **missing** |
+  | `Kwest` | `Quest` | `Kwest` | `model/game/quest.py` | **missing** |
+  | `HracView` | `PlayerView` | `HracView` | `view/player_view.py` | **missing** |
+  | `HracGameView` | `PlayerGameView` | `HracGameView` | `view/player_game_view.py` | **missing** |
+
+  Each missing alias is one line — the binding, next to the class it names — in a
+  module this work was not given. `tests/test_aliases.py` asserts that this table's
+  *missing* half is still exactly the set that does not resolve, so the gap is
+  tracked rather than forgotten.
+- **A piece's class name is not its configured kind.** `Knight` declares
+  `piece_type="horse"` and that is deliberate. `piece_type` is data a configuration
+  chooses and writes into `configuration.json`, so renaming it would silently repoint
+  every stored configuration that says `horse` at nothing. `games/chess/rules/draws.py`
+  already accepted both spellings for exactly this reason, and still does. The
+  display name did change to `Knight`, because a display name is not persisted.
+- **What this departs from, recorded as required.** Three departures, none of which
+  is a diagram deviation:
+  1. **`ExportWriter.formats()` is new.** The engine must be able to tell "this
+     configuration does not export that notation" from "this writer had nothing to
+     write", and the two used to be indistinguishable because both arrived as `""` —
+     a stenographic record of a game with no moves really is empty. A writer declaring
+     what it writes is therefore the base class's business, not a chess detail.
+     `model/misc/export_writers.py` is an engine module this work was not given; the
+     addition is `ExportWriter.formats()` returning `()` and `ChessNotationWriter`
+     overriding it.
+  2. **`GameManager.transcript()` lost its default argument.** It was `fmt: str =
+     "PGN"`, which was chess in a signature, and it now defaults to the first notation
+     the configuration offers; `save_log()` names its default file from that notation
+     instead of hard-coding `.pgn`. A caller that passed a format is unaffected.
+  3. **A dead duplicate was removed.** `GameManager` defined `save_log` twice, the
+     first as a no-argument stub shadowed by the real one. Nothing called the stub;
+     it was a trap for anyone who did.
 
 ---
 
@@ -440,10 +524,11 @@ Recorded here because they are deviations from what the diagram draws and
 
 | Decision | Outcome | Approved |
 |---|---|---|
-| `Kůň` maps to `Knight`, not `Horse` | `Knight` is canonical, `Kun` is its Czech alias, `Horse` is removed | 2026-10-02 |
-| `Tower` | Dropped. No box in the diagram carries that name, and `Věž` maps to `Rook` | 2026-10-02 |
-| `Controller` | Dropped. No box carries that name; the diagram's controller box is `GameManagerController` | 2026-10-02 |
+| `Kůň` maps to `Knight`, not `Horse` | `Knight` is canonical, `Kun` is its Czech alias, `Horse` is removed. **Implemented 2026-10-03** — see section 19. | 2026-10-02 |
+| `Tower` | Dropped. No box in the diagram carries that name, and `Věž` maps to `Rook`. **Implemented 2026-10-03**: `games/chess/pieces/tower.py` deleted. | 2026-10-02 |
+| `Controller` | Dropped. No box carries that name; the diagram's controller box is `GameManagerController`. **Implemented 2026-10-03**: the alias is gone from `controller/controller.py`. | 2026-10-02 |
 | Czech aliases carry no diacritics | ASCII spellings only | 2026-10-02 |
-| `HracView` is created as `PlayerView` | See section 15 | 2026-10-02 |
+| `HracView` is created as `PlayerView` | See section 15. The class exists; its `HracView` alias does not yet. | 2026-10-02 |
+| A piece's configured `piece_type` is not renamed with its class | `Knight` declares `piece_type="horse"`. `piece_type` is persisted configuration data, so renaming it would repoint every stored value. **New, 2026-10-03**; approval not yet on record. | Recorded 2026-10-03; **not approved** |
 | `KingOnlyGame` keeps its chess name | **Not renamed, and recommended for renaming.** The class judges a game in which only one kind of piece ever moved, which is not chess-specific, so `SingleKindGame` would be the honest name — but `royal_kind` is the constructor keyword configurations pass and `tests/test_quest.py` calls with it, and renaming either needs that test updated and every player-authored quest file to change with it. Renaming the class while keeping the keyword would leave the vocabulary in place anyway, so the name stays until the keyword can move with it. | Recorded 2026-10-03; **not approved** |
-| `ChessNotationWriter` keeps its name in the engine | **Not moved, and registered for moving.** Section 7 already places per-format writers in `games/chess/export/`, and section 7's approval covers it. `model/game/manager.py` imports the class by name from the engine module, so the move is blocked on that one import. Moving it while leaving a shim behind would make the engine module import the configuration that imports the engine module, which fails on a cycle as soon as any variant configuration is loaded. | Recorded 2026-10-03; **not approved** |
+| `ChessNotationWriter` keeps its name in the engine | **Not moved, and registered for moving.** Section 7 already places per-format writers in `games/chess/export/`, and section 7's approval covers it. The blocker was `model/game/manager.py`'s import by name, and that is gone as of 2026-10-03, so the move is now unblocked and unperformed. Moving it while leaving a shim behind would make the engine module import the configuration that imports the engine module, which fails on a cycle as soon as any variant configuration is loaded. | Recorded 2026-10-03; **not approved** |
