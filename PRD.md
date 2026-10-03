@@ -1,7 +1,8 @@
 # ChessWithQuests — Product Requirements Document
 
-**Status:** Draft, awaiting review
-**Version:** 1.0
+**Status:** the specification the product is measured against. Implementation state
+is tracked in `SCRATCHPAD.md` section 4, one entry per planned pull request.
+**Version:** 1.1
 
 Planning material — current state, work streams, risks, acceptance criteria and
 the decision log — lives in `SCRATCHPAD.md`. This document states only what the
@@ -208,7 +209,7 @@ the game manager. Only configuration-specific implementations live in
 | FR-13 | A move may consist of **several hops**. A capture chain in checkers is one move the player makes, not several. |
 | FR-14 | No piece type is special to the engine. Whether a position has a king is a rule, not a lookup by type name. |
 | FR-15 | Board size is not restricted to 8×8. Rank-relative rules are **generalised, not disabled**: the home rank and the castling and knight-forward files are derived from the configured board. |
-| FR-16 | Every orthodox rule in `notes/chess_rules.md` is expressible in those hooks: castling, en passant, promotion, check, checkmate, stalemate, insufficient material, the fifty-move rule, threefold repetition, mutual-agreement draw, and loss on time only where the opponent retains mating material. |
+| FR-16 | Every orthodox rule in `notes/chess_rules.md` is expressible in those hooks: castling, en passant, promotion, check, checkmate, stalemate, insufficient material, the fifty-move rule, threefold repetition, mutual-agreement draw, loss on time only where the opponent retains mating material, and the confinement of each bishop to the shade of square it started on. |
 | FR-17 | Logic beyond any shipped set is expressible without extending the engine: a piece that may move to any square satisfies `available_moves`; a piece that must capture if able satisfies `permits_move`; a game that ends when a named piece is lost satisfies `outcome`. |
 
 ### 7.3 Quests — also code-driven
@@ -314,27 +315,27 @@ this project adds beyond the diagram is registered in `notes/object_model.md`.
 | `HerníPlocha` · `vrat_obsah`, `posun_figurky`, `nahrad_figurku` | FR-37, FR-15, FR-16 |
 | `Figurka` · `název`, `barva(tým)`, `vektory`, `vektory_utoku` | FR-3, FR-4, FR-5 |
 | `Pěšák` `Věž` `Kůň` `Král` `Dáma` `Střelec` | FR-3 |
-| `Hrac` · `barva`, `uzivatel`, `getEloRating` | FR-59 |
+| `Hrac` · `barva`, `uzivatel`, `getEloRating` | FR-60 |
 | `Tah` · `vychozi pozice`, `cilova pozice`, `figurka`, `typ tahu` | FR-15, FR-16, FR-52 |
 | `Tah` · `over platnost()`, `proved tah()` | FR-15 |
 | `RevizorTahu` · `herni_plocha`, `tah` | FR-15 |
-| `RevizorTahu` · `simulate_Move()`, `check_Šach()`, `check_Mat`, `check_Pat` | FR-8, FR-16, FR-19, FR-60 |
-| `GameManager` · `plocha`, `aktivni_hrac`, `hraci`, `aktualni_tah`, `casovac`, `game_logger`, `revizor_tahu` | FR-61 |
-| `GameManager` · `zacni_tah()`, `mozne_tahy()`, `zrus_tah()`, `uloz_log()`, `get_stav()` | FR-61 |
-| `GameManager` · `najdi_uzivatele(id)` | FR-59 |
-| `Timer` · `cas_hrac`, `nuluj_cas()`, `pocitej_cas()` | FR-6, FR-62 |
-| `GameLogger` · `soubor`, `uloz_tah()`, `vytvor_soubor()` | FR-50, FR-63 |
-| `Uzivatel` · `uzivatelske_jmeno`, `jmeno`, `email`, `elo`, `splnene_kwesty`, `pridej_quest()` | FR-59, FR-24 |
-| `User Manager` · `Id_uzivatele`, `log_uzivatelu`, `historie_uzivatele`, `proveď_tah()` | FR-59 |
+| `RevizorTahu` · `simulate_Move()`, `check_Šach()`, `check_Mat`, `check_Pat` | FR-8, FR-16, FR-61 |
+| `GameManager` · `plocha`, `aktivni_hrac`, `hraci`, `aktualni_tah`, `casovac`, `game_logger`, `revizor_tahu` | FR-62 |
+| `GameManager` · `zacni_tah()`, `mozne_tahy()`, `zrus_tah()`, `uloz_log()`, `get_stav()` | FR-62 |
+| `GameManager` · `najdi_uzivatele(id)` | FR-60 |
+| `Timer` · `cas_hrac`, `nuluj_cas()`, `pocitej_cas()` | FR-6, FR-63 |
+| `GameLogger` · `soubor`, `uloz_tah()`, `vytvor_soubor()` | FR-50, FR-64 |
+| `Uzivatel` · `uzivatelske_jmeno`, `jmeno`, `email`, `elo`, `splnene_kwesty`, `pridej_quest()` | FR-60, FR-24 |
+| `User Manager` · `Id_uzivatele`, `log_uzivatelu`, `historie_uzivatele`, `proveď_tah()` | FR-60 |
 | `Quest` · `nazev`, `popis`, `validate()` | FR-18, FR-20 |
 | `QuestManager` | FR-23 |
 | `ChessNotationWriter` · format list, `item` | FR-43 to FR-52 |
 | `MetadataWriter` | FR-48 |
 | `export writers` · `field` | FR-43 |
-| `GameManagerController` · `vyber_pole()` | FR-64 |
-| `GameView` · `controller`, `aktualizuj_plochu()` | FR-37, FR-65 |
-| `HracGameView` · `controller`, `akutalizuj_hrace()` | FR-38, FR-66 |
-| `HracView` | FR-38 |
+| `GameManagerController` · `vyber_pole()` | FR-65 |
+| `GameVeiw` · `controller`, `aktualizuj_plochu()` | FR-37, FR-66. The diagram spells the class `GameVeiw`; no `GameView` class exists — `notes/object_model.md` section 15 |
+| `HracGameView` · `controller`, `akutalizuj_hrace()` | FR-38, FR-67 |
+| `HracView` | FR-38, FR-67 |
 
 ### 7.11 Requirements added to close gaps in diagram coverage
 

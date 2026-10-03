@@ -176,21 +176,52 @@ def test_on_files_appends_every_generated_page():
     assert docs_hooks.on_files(files, config) is files
 
 
-def test_notes_are_published_with_a_hub_page():
-    _, pages = docs_hooks.build_nav({"docs_dir": os.path.join(repo_root, ".docs")})
+def test_every_note_is_published_verbatim_and_linked_from_a_hub(tmp_path):
+    """Each Markdown file in a notes directory becomes a page carrying its bytes.
+
+    Driven from a fixture the test owns, so it asserts what the hook does rather than
+    what this repository happens to have written in `notes/`.
+    """
+    notes_dir = tmp_path / "notes"
+    notes_dir.mkdir()
+    (notes_dir / "chess_rules.md").write_text("# Chess\n\nRank one is White's.\n", encoding="utf-8")
+    (notes_dir / "object_model.md").write_text(
+        "# Object Model\n\nDeviations live here.\n", encoding="utf-8"
+    )
+    (tmp_path / "properdocs.yml").write_text("site_name: t\n", encoding="utf-8")
+
+    _, pages = docs_hooks.build_nav(
+        {"config_file_path": str(tmp_path / "properdocs.yml"), "docs_dir": str(tmp_path / ".docs")}
+    )
     by_path = {doc_path: body for doc_path, _, body in pages}
 
-    for name in sorted(os.listdir(os.path.join(repo_root, "notes"))):
-        if not name.endswith(".md") or name == "index.md":
-            continue
-        doc_path = f"notes/{name}"
-        assert doc_path in by_path
-        with open(os.path.join(repo_root, "notes", name), encoding="utf-8") as handle:
-            assert by_path[doc_path] == handle.read()
+    assert by_path["notes/chess_rules.md"] == "# Chess\n\nRank one is White's.\n"
+    assert by_path["notes/object_model.md"] == "# Object Model\n\nDeviations live here.\n"
 
     hub = by_path["notes/index.md"]
-    assert "# Architecture & Design Notes" in hub
-    assert "chess_rules.md" in hub
+    assert hub.startswith("# Architecture & Design Notes")
+    assert "- [Chess Rules](chess_rules.md)" in hub
+    assert "- [Object Model](object_model.md)" in hub
+
+
+def test_a_notes_index_supplied_by_hand_replaces_the_generated_hub(tmp_path):
+    """A stored `notes/index.md` wins over the generated hub, and is published verbatim."""
+    notes_dir = tmp_path / "notes"
+    notes_dir.mkdir()
+    (notes_dir / "chess_rules.md").write_text("# Chess\n", encoding="utf-8")
+    (notes_dir / "index.md").write_text("# My Notes\n\nHand written.\n", encoding="utf-8")
+    (tmp_path / "properdocs.yml").write_text("site_name: t\n", encoding="utf-8")
+
+    _, pages = docs_hooks.build_nav(
+        {"config_file_path": str(tmp_path / "properdocs.yml"), "docs_dir": str(tmp_path / ".docs")}
+    )
+    by_path = {doc_path: body for doc_path, _, body in pages}
+
+    # The hook joins the stored index and terminates it, so a hand-written hub gains a
+    # trailing newline it did not have. Harmless for Markdown, and pinned so a change to it
+    # is deliberate.
+    assert by_path["notes/index.md"] == "# My Notes\n\nHand written.\n\n"
+    assert "notes/chess_rules.md" in by_path
 
 
 def test_existing_notes_index_is_preserved_exactly(tmp_path):

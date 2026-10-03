@@ -1,81 +1,82 @@
 # ChessWithQuests
 
-School project of a chess engine with quests on top of it.
+A desktop board game engine and application in Python, built as an MVC
+application, in which **the configuration is the product**. Chess and English
+draughts ship as two directories under `src/games/` and share one engine.
 
-**Status: mid-build.** What the repository contains today is the chess *engine* — the
-board, the pieces, move generation and validation, check, checkmate, stalemate,
-clocks, logging, notation and export prototypes, user records and the MVC
-controller. There is no graphical interface yet, so nothing is playable by
-clicking on it. The product requirements (`PRD.md`) and the implementation manual
-(`SCRATCHPAD.md`) describe the finished product and track the remaining work,
-issue by issue, in that order.
+**Status: playable, incomplete.** Chess is playable from the entry point through
+a tkinter window, and the settings surface is delivered. The export writers are
+prototypes. `PRD.md` states what the product must be and `SCRATCHPAD.md` records
+what is built, what is partial, and what is owed — one entry per planned pull
+request.
 
 ## What works today
 
 Every item below is exercised by a test in `tests/`.
 
-| Capability | Where it lives | Test |
-|---|---|---|
-| Board with the standard 8×8 starting position, bounds checking, moving, capture recording and piece replacement | `model/game/board.py` | `tests/test_board.py` |
-| Pieces declaring their own movement vectors, attack vectors and jump flag: pawn, rook, knight, bishop, queen, king | `model/pieces/` | `tests/test_piece.py`, `tests/test_pawn.py`, `tests/test_rook.py`, `tests/test_horse.py`, `tests/test_bishop.py`, `tests/test_queen.py`, `tests/test_king.py` |
-| Moves carrying a start square, a target square, a move type and an optional promotion piece, validated and executed on the board | `model/game/move.py` | `tests/test_move.py` |
-| Legal move generation per piece and for a whole side, rejecting any move that would leave the mover's own king attacked | `model/game/validator.py` | `tests/test_validator.py`, `tests/test_game_manager.py` |
-| Check, checkmate and stalemate detection, reported through the game manager's state constants | `model/game/validator.py`, `model/game/manager.py` | `tests/test_validator.py`, `tests/test_game_manager.py` |
-| Turn alternation and illegal-move rejection in the game manager | `model/game/manager.py` | `tests/test_game_manager.py` |
-| Per-player clocks that count down, take an increment, reset and report expiry, with expiry reaching the game state | `model/game/timer.py` | `tests/test_timer.py`, `tests/test_game_manager.py` |
-| Move logging in memory and, when a path is given, appended to a log file | `model/game/logger.py` | `tests/test_logger.py`, `tests/test_game_manager.py` |
-| Players, optionally linked to a user, whose Elo rating the player reads through that link | `model/game/player.py`, `model/users/` | `tests/test_player.py`, `tests/test_user.py`, `tests/test_user_manager.py` |
-| Algebraic coordinate conversion in both directions | `model/misc/notation.py` | `tests/test_notation_and_writers.py` |
-| Export writers: a FEN string built from board placement, coordinate-pair "stenographic" movetext, and a PGN-shaped export carrying a seven-tag header roster | `model/misc/export_writers.py`, `model/misc/metadata.py` | `tests/test_notation_and_writers.py`, `tests/test_metadata.py` |
-| Quests with a name, a description, a condition and a reward, and a quest manager that registers quests and credits the completing user — standalone types, not yet wired into a game | `model/game/quest.py`, `model/misc/quest_manager.py` | `tests/test_quest.py`, `tests/test_quest_manager.py` |
-| MVC controller: a square click selects a piece, reports its legal destinations, plays the move and switches the turn; a window controller maps those events onto status text and ticks the clock | `controller/controller.py`, `controller/window_controller.py` | `tests/test_controller.py`, `tests/test_window_controller.py` |
+| Capability | Where it lives |
+|---|---|
+| A board of any dimensions, with bounds checking, moving, capture recording and piece replacement | `src/model/game/board.py` |
+| Moves carrying a start square, a target square, a move type and an optional promotion piece, validated and executed atomically | `src/model/game/move.py` |
+| Legal move generation per piece and per side, refusing any move that leaves the mover's own piece attacked | `src/model/game/validator.py` |
+| Thirteen orthodox chess rules as `Rule` subclasses — castling, en passant, promotion, check, checkmate, stalemate, insufficient material, the fifty-move rule, threefold repetition, mutual agreement, flag fall, bishop colour confinement, and which piece kind is royal | `src/games/chess/rules/` |
+| A rule layer of five hooks — `permits_move`, `available_moves`, `outcome`, `on_move_made`, `status` — with an outcome type carrying a kind, a precedence and a winner | `src/model/game/rule.py` |
+| A configuration loaded from a directory as a package in its own right, so a copy composes its own board, pieces, rules, clocks and quests | `src/model/game/configuration.py` |
+| A full game loop from `new_game()` to a result, driving the quest manager, the user manager, the clocks, the transcript and the logger | `src/model/game/manager.py` |
+| Twenty built-in quest classes, twelve judged a move at a time and eight judging the finished game | `src/model/game/quests.py` |
+| English draughts: twelve pieces a side, flying kings, mandatory capture including chains, crowning without removal, a win by immobilisation or by losing every piece — held to the published perft counts | `src/games/checkers/` |
+| A capture chain as one move, carried by `HopMove(Move)` rather than by the engine's own `Move` | `src/games/checkers/moves.py` |
+| A tkinter window: a start modal with a configuration selector, Settings and Start; the board drawn from White's side with coordinates, symbols, selection and legal-move highlights; player panels with clocks and captured pieces; the turn; a notated move history; a status footer; quest cards with progress | `src/view/` |
+| A settings surface: a corner selector for which configuration is being edited, sections for Board, Pieces, Rules, Quests and Clocks built from declared fields, create/rename/duplicate/delete, and a code editor for rule and quest source | `src/view/settings_dialog.py`, `src/view/code_editor.py`, `src/model/game/field.py` |
+| Configuration copy, rename and delete, all of which refuse the default configuration | `src/model/game/configuration.py` |
+| Fifteen Czech aliases, each the same object as its canonical English class | throughout; `PRD.md` section 5 lists them |
+| An installable package with a `python -m chesswithquests` entry point | `pyproject.toml`, `src/chesswithquests/` |
 
-### Known limitations of the code above
+## What is partial
 
-- The engine assumes 8×8. `Board` accepts other dimensions, but the move and
-  validator paths still hard-code eight, and no test covers a board of another
-  size.
-- The export writers are early. The FEN string carries the placement and the
-  side to move; its remaining fields are placeholders. The PGN export writes
-  destination squares as movetext rather than algebraic notation, and the header
-  roster defaults to `Player 1` and `Player 2`.
-- The quest, user and export subsystems are standalone: a game never constructs
-  them yet, so no single call path exercises a game and its quests together.
-- `view/` is a single docstring. No widget, renderer or entry point exists.
+- **Export is the largest hole.** `ChessNotationWriter` still switches on a
+  format-name string instead of there being one writer class per format. FEN
+  writes `- - 0 1` for castling rights, the en passant square, the halfmove clock
+  and the fullmove number. PGN movetext is destination squares rather than SAN,
+  and its header falls back to placeholder strings. The stenographic writer emits
+  coordinate pairs with no compression. No configuration ships a per-format
+  writer, and `src/games/checkers/` ships no writer at all.
+- **`pyproject.toml` does not ship `src/games/checkers`.** The package list names
+  `games.chess` and its subpackages and omits the second configuration, so a clean
+  install finds chess and not draughts.
+- **`src/controller/controller.py` is not renamed** to `game_manager_controller.py` to
+  match the diagram's `GameManagerController`.
 
 ## Not built yet
 
-No claims are made for any of this; it is listed so a reader knows the gap.
-
-- No graphical interface. `view/` is empty and there is no entry point.
-- No settings surface and no configuration pattern — no board or piece editor,
-  no configurable board dimensions in practice, no variant directories.
-- No pluggable rule system and no rule subclasses. Of the orthodox rules, only
-  check, checkmate and stalemate are implemented; castling, en passant,
-  promotion in the rules, the fifty-move rule, threefold repetition, insufficient
-  material and drawn agreements are absent.
-- No checkers, and no `games/` directory: the engine is chess-specific today.
-- No packaging. The repository is imported from its checkout, not installed.
-- No multi-hop moves, so a checkers capture chain cannot be expressed yet.
+- No FEN import, so nothing round-trips a position.
+- No keyboard-navigation guarantee for the view layer.
+- No network play, and no persistence of a game in progress. Neither is in the
+  reference diagram.
 
 ## Documentation and architecture
 
 - **Generated documentation**: [ChessWithQuests Documentation](https://marius-patrik.github.io/ChessWithQuests/)
-  — every page is emitted from the source docstrings at build time; this file is
-  its overview page.
+  — every page is emitted from the source docstrings at build time by
+  `properdocs` with `mkdocstrings`; this file is its overview page. Nothing about
+  the documentation is stored: `docs_dir` points at a generated, git-ignored
+  directory and `.github/scripts/docs_hooks.py` builds the whole navigation from
+  the source tree.
 - **Reference architecture diagram**:
   [Draw.io diagram](https://app.diagrams.net/#G19OY7iySOQWRAZDFKy1r-7tJKG_L-_Qn8#%7B%22pageId%22%3A%22C5RBs43oDa-KdzZeNtuy%22%7D)
   — the class hierarchy and the Model-View-Controller split the object model
-  follows.
+  follows. Every deviation from it is registered in `notes/object_model.md`.
 - **Product requirements**: `PRD.md`.
+- **Implementation state and remaining work**: `SCRATCHPAD.md`.
 - **Notes**: `notes/chess_rules.md`, `notes/object_model.md`,
   `notes/reference_diagram.md`.
 
 ## Development
 
-Python 3.10 or newer. The engine itself uses the standard library only; the tools
-below are development dependencies and never ship. Clone the repository and
-install those tools into a virtual environment:
+Python 3.10 or newer. The runtime uses the standard library and `tkinter`, and
+nothing else; `python-chess` is banned and FEN, PGN, SAN and coordinate
+conversion are hand-rolled. The tools below are development dependencies and
+never ship:
 
 ```
 python -m venv .venv
@@ -83,11 +84,14 @@ source .venv/bin/activate
 python -m pip install -r requirements-dev.txt
 ```
 
-The package is not installed — `pyproject.toml` configures `pytest` with
-`pythonpath = ["."]`, so run everything from the repository root:
+Everything runs from the repository root — `pyproject.toml` configures `pytest`
+with `pythonpath = ["."]`, and the package is also installable with `pip install .`:
 
 ```
 python -m pytest -q
 python -m black --check .
 python -m properdocs build --strict
 ```
+
+`tkinter` needs a display. Tests stay within `tkinter.Tcl()` and `ttk.Style()`,
+which work without one, or run under `xvfb-run`.
