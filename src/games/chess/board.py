@@ -3,18 +3,23 @@
 This is the chess configuration speaking about its own board. The engine's `Board` knows how
 to hold a rectangle of pieces; only this file knows what a chess board is, how big it is, and
 who stands where on the first move.
+
+Every import here is relative. A configuration is a directory that can be copied to create a
+variant, and an absolute `games.chess.…` import would leave a copy loading the pieces of the
+original: a variant that looks edited and plays the original.
 """
 
 from typing import List, Tuple
 
 from model.game.board import Board
 from model.pieces.piece import Piece
-from games.chess.pieces.bishop import Bishop
-from games.chess.pieces.horse import Horse
-from games.chess.pieces.king import King
-from games.chess.pieces.pawn import Pawn
-from games.chess.pieces.queen import Queen
-from games.chess.pieces.rook import Rook
+
+from .pieces.bishop import Bishop
+from .pieces.horse import Horse
+from .pieces.king import King
+from .pieces.pawn import Pawn
+from .pieces.queen import Queen
+from .pieces.rook import Rook
 
 #: A chess board is eight ranks by eight files.
 DIMENSIONS: Tuple[int, int] = (8, 8)

@@ -195,15 +195,22 @@ def load_configuration_at(path: str, root: Optional[str] = None) -> Configuratio
 
 
 def _import_from_path(entry_point: str, directory: str) -> Any:
-    """Import a configuration's `__init__.py` from where it lives.
+    """Import a configuration's `__init__.py` as a package rooted where it lives.
 
     Loading by file location rather than by package name is what lets a player create a
     variant called whatever they like: the name is a directory, not an identifier the
     engine has to agree with.
 
+    The module is registered as a *package* — its spec carries the configuration directory
+    as its search path — because that is what makes `from .board import build_board` resolve
+    against the copy that wrote it. Without the search path a relative import fails outright,
+    and the tempting repair is an absolute `from games.chess.board import …`, which loads the
+    original configuration while the copy looks like it loaded its own. So a variant gets its
+    own modules here, and nothing in it needs to know what the original is called.
+
     Args:
         entry_point: Absolute path to the configuration's `__init__.py`.
-        directory: The configuration directory, used to give the module a stable name.
+        directory: The configuration directory, used to give the module a stable unique name.
 
     Returns:
         Any: The imported module.
@@ -212,7 +219,9 @@ def _import_from_path(entry_point: str, directory: str) -> Any:
         ImportError: If the module cannot be loaded.
     """
     module_name = "_configuration_" + re.sub(r"\W", "_", os.path.abspath(directory))
-    spec = importlib.util.spec_from_file_location(module_name, entry_point)
+    spec = importlib.util.spec_from_file_location(
+        module_name, entry_point, submodule_search_locations=[directory]
+    )
     if spec is None or spec.loader is None:  # pragma: no cover - defensive
         raise ImportError(f"cannot load a configuration from {entry_point}")
     module = importlib.util.module_from_spec(spec)
