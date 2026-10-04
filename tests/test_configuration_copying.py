@@ -19,7 +19,7 @@ import pytest
 
 from model.game.board import Board
 from model.game.configuration import load_configuration
-from model.game.games import games_root
+from model.game.games import available_games, games_root
 
 #: The copied board. Ten by ten, with one of the copy's own pieces on it.
 COPY_BOARD = textwrap.dedent('''
@@ -319,3 +319,25 @@ def test_a_purged_configuration_leaves_nothing_behind_in_sys_modules(tmp_path):
     assert (
         len([name for name in loaded if name.endswith(".board")]) == 1
     ), "board.py was loaded more than once"
+
+
+def test_no_two_rules_or_quests_of_a_shipped_configuration_share_a_label():
+    """Saved values are keyed by label, so two rules with one label lose one of them.
+
+    `Configuration.values()` writes `{rule.label: ...}`, and the settings form lists rules by the
+    same label. A configuration that declared the same `default_name` twice would save one of
+    them over the other with nothing to show for it — a rule that vanishes from its own values
+    file and no error anywhere. Nothing enforces uniqueness, so both shipped configurations are
+    checked here.
+    """
+    for name in available_games():
+        configuration = load_configuration(name)
+
+        rule_labels = [rule.label for rule in configuration.rules]
+        quest_labels = [quest.name for quest in configuration.quests]
+
+        assert len(set(rule_labels)) == len(rule_labels), f"{name}: two rules share a label"
+        assert len(set(quest_labels)) == len(quest_labels), f"{name}: two quests share a name"
+        assert (
+            "name" not in rule_labels and "board" not in rule_labels
+        ), f"{name}: a rule is labelled like a top-level key of the values file"
