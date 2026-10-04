@@ -6,15 +6,23 @@ executable form of that line. Each one fails against the code as it was before t
 asserts the absence of was removed, which is what makes them worth having rather than
 decoration.
 
-Three separate leaks are covered, because they were removed separately:
+Four separate leaks are covered, because they were removed separately:
 
-- a piece-type table in the FEN writer, with a pawn as the fallback for anything undeclared;
+- a piece-type table in the position-record writer, with a pawn as the fallback for anything
+  undeclared;
 - algebraic square naming in an engine module, which cannot describe a board of any other
   width because a file is one letter and a rank is one digit;
-- a chess piece named in the engine's own quest roster.
+- a chess piece named in the engine's own quest roster;
+- a chess writer, or a notation, or a configuration import, anywhere under `model/`.
 
-`tests/test_configuration_copying.py` covers the fourth: a configuration that can be copied
-and still load its own files.
+The first two were found by reading the code. The last one is a **walk over the files**, with
+its vocabulary read from the chess configuration at run time, because a gate written beside
+the code it guards drifts from it: this file's own piece vocabulary was hand-kept once and
+omitted `horse`, which is the descriptor this codebase's knight actually reports, so
+`CaptureOfType("horse")` walked straight through the check meant to catch exactly that.
+
+`tests/test_configuration_copying.py` covers the fifth: a configuration that can be copied and
+still load its own files — including its own writers and its own naming of a square.
 """
 
 import ast
@@ -25,6 +33,7 @@ import textwrap
 
 import pytest
 
+import model
 from games.chess.board import build_board
 from games.chess.export.algebraic import algebraic_to_pos, pos_to_algebraic
 from games.chess.export.fen import ExportFEN
@@ -88,6 +97,123 @@ def _engine_modules():
     for path in sorted(root.rglob("*.py")):
         if "__pycache__" not in path.parts:
             yield path
+
+
+def _declared_field_names(path):
+    """Return the configurable field names a module declares for itself.
+
+    A name a module hands to `Field(...)` is that module's own data — something a player edits
+    in a form — rather than a reference to a game, so it is the module's own to use. Everything
+    else in a module is held to the forbidden vocabulary.
+
+    Args:
+        path: The module's path.
+
+    Returns:
+        frozenset: Every declared field name, in lower case.
+    """
+    names = set()
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if not isinstance(node, ast.Call):
+            continue
+        function = node.func
+        if not (isinstance(function, ast.Name) and function.id == "Field"):
+            continue
+        first = node.args[0] if node.args else None
+        if isinstance(first, ast.Constant) and isinstance(first.value, str):
+            names.add(first.value.lower())
+    return frozenset(names)
+
+
+def _code_without_docstrings(path):
+    """Return a module's source with every docstring removed.
+
+    Docstrings are prose, and prose is allowed to name a game in order to say that the engine
+    holds none — `model/game/manager.py` opens by saying exactly that. Dropping them through
+    the AST rather than by searching the text is what makes the remainder safe to match:
+    identifiers, imports and string literals are all that is left.
+
+    Args:
+        path: The module's path.
+
+    Returns:
+        str: The module unparsed without its docstrings.
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        body = getattr(node, "body", [])
+        if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+            if isinstance(body[0].value.value, str):
+                # Replaced rather than removed: a class or a function whose only statement was
+                # its docstring would otherwise be left with no body at all.
+                body[0] = ast.copy_location(ast.Pass(), body[0])
+    return ast.unparse(tree)
+
+
+def _chess_writer_class_names():
+    """Return the writer class names the chess export package defines.
+
+    Read from the modules rather than written here. A gate holding a list of class names would
+    have to be edited every time a writer is renamed, and a gate that is not edited is a gate
+    that has stopped looking.
+
+    Returns:
+        frozenset: Every class name under `games/chess/export/` that subclasses `ExportWriter`,
+        in lower case.
+    """
+    import games.chess.export
+
+    names = set()
+    export_root = pathlib.Path(games.chess.export.__file__).parent
+    for path in sorted(export_root.rglob("*.py")):
+        if "__pycache__" in path.parts:
+            continue
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            bases = {base.id for base in node.bases if isinstance(base, ast.Name)}
+            bases |= {base.attr for base in node.bases if isinstance(base, ast.Attribute)}
+            if "ExportWriter" in bases:
+                names.add(node.name.lower())
+    return frozenset(names)
+
+
+def _importable_engine_modules():
+    """Yield the file of every module Python can import under `model/`.
+
+    The walk's own witness. Whatever the walk cannot see, this can, so the walk is held to
+    covering it: a walk that silently matches nothing is the same defect as the hand-kept
+    vocabulary this file already had, and it passes forever.
+
+    Yields:
+        pathlib.Path: Each importable module's file.
+    """
+    import importlib
+    import pkgutil
+
+    for entry in pkgutil.walk_packages(model.__path__, prefix="model."):
+        # Python 3.12 started yielding a `ModuleInfo` here where earlier versions yielded the
+        # name itself, and the suite runs on both.
+        yield pathlib.Path(importlib.import_module(getattr(entry, "name", entry)).__file__)
+
+
+def _chess_format_names():
+    """Return the notations the chess configuration's writers declare.
+
+    Read through `load_configuration("chess").exporters`, so it is the formats a caller can
+    actually ask for rather than a string copied out of a writer's source.
+
+    Returns:
+        frozenset: Every declared notation name, in lower case.
+    """
+    from model.game.configuration import load_configuration
+
+    names = set()
+    for writer in load_configuration("chess").exporters:
+        names |= {str(name).lower() for name in writer.formats()}
+    return frozenset(names)
 
 
 # --- the FEN writer reads the piece, and refuses to guess
@@ -250,6 +376,115 @@ def test_the_writer_still_writes_coordinates_in_chess_algebra():
 
     assert ExportStenographic().to_stenographic(moves) == "e2e4 e7e5"
     assert "1. e4 e5" in ExportPGN().to_pgn(moves)
+
+
+# --- the export writers, the notations they write, and the tree they must not reach
+
+
+def test_no_module_under_the_engine_names_a_chess_writer_or_a_notation():
+    """The whole tree, with its vocabulary read from the chess configuration.
+
+    The gate this replaces was per-module and piece-name-oriented: it would not have
+    flagged `class ChessNotationWriter`, and its hand-kept vocabulary is how `horse`
+    slipped through a check meant to catch exactly that. So the vocabulary is read at run
+    time — the writer class names the chess export package defines, and the notations
+    those writers declare — and the walk is over the files on disk, not a list of modules
+    somebody remembered.
+
+    The match is case-insensitive because the leak is a spelling: `GameManager.writer_for`
+    compares without regard to case, so `fen`, `Fen` and `FEN` are one leak and catching
+    only the capitalised one would be catching the one nobody writes.
+
+    Docstrings are exempt, the way `test_the_roster_composition_names_no_piece_either`
+    exempts them: `model/game/manager.py` is allowed to *talk* about a notation in order
+    to say that the engine names none.
+
+    Returns:
+        None
+    """
+    writers = _chess_writer_class_names()
+    formats = _chess_format_names()
+    vocabulary = writers | formats
+    visited = set(_engine_modules())
+    importable = set(_importable_engine_modules())
+
+    # The witness comes first, because a walk that matches nothing looks exactly like a tree
+    # with no leak in it. Every module Python can import under `model/` must be a file this
+    # walk read, and the vocabulary it reads them against must not be empty.
+    assert importable and importable <= visited
+    assert writers and formats
+
+    offenders = []
+    for path in sorted(visited):
+        # A name a module declares as one of its own configurable fields is that field's
+        # name rather than a reference to a format, and the engine declares one: a piece
+        # declares the character it is written as in a position record, and the engine
+        # calls that field `fen`. Only the module that declares it is exempt, so the same
+        # word anywhere else — a comparison, a default, a dispatch — is still a leak.
+        declared = _declared_field_names(path)
+        source = _code_without_docstrings(path).lower()
+        for name in sorted(vocabulary):
+            if name in declared:
+                continue
+            if re.search(rf"\b{re.escape(name)}\b", source):
+                offenders.append(f"{path.name}: {name}")
+
+    assert offenders == [], f"the engine names a chess writer or notation: {offenders}"
+
+
+def test_no_module_under_the_engine_defines_an_export_writer():
+    """Asserted structurally, so a writer moved back fails without anyone naming it.
+
+    The check is on the shape rather than on the class's name: a contributor who moved a
+    writer back into `model/` would have to remember which names the gate is holding, and
+    the gate's own list is derived — so the shape is what is asserted. `ExportWriter`
+    itself defines no subclass of itself, so the base is not caught by this.
+
+    Returns:
+        None
+    """
+    offenders = []
+    for path in _engine_modules():
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            for base in node.bases:
+                name = base.id if isinstance(base, ast.Name) else getattr(base, "attr", "")
+                if name == "ExportWriter":
+                    offenders.append(f"{path.name}:{node.lineno} {node.name}")
+
+    assert offenders == [], f"a concrete export writer is defined in the engine: {offenders}"
+
+
+def test_no_module_under_the_engine_imports_a_configuration():
+    """An engine module that reaches into a game is the coupling `SCRATCHPAD.md` forbids.
+
+    The shape this replaces was `model/misc/notation.py`, sixteen lines re-exporting two
+    chess names, and before it a function-local import inside the engine's writer. An
+    engine import of any configuration is worse than either: the configuration imports the
+    engine, so the pair fails on a cycle as soon as a second variant is loaded.
+
+    Checked through the import nodes rather than the source text, because prose explaining
+    why not to write such an import is exactly what `model/game/configuration.py` holds.
+
+    Returns:
+        None
+    """
+    offenders = []
+    for path in _engine_modules():
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                named = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+                named = [node.module]
+            else:
+                continue
+            for module in named:
+                if module.split(".")[0] == "games":
+                    offenders.append(f"{path.name}:{node.lineno} {module}")
+
+    assert offenders == [], f"the engine imports a configuration: {offenders}"
 
 
 # --- the engine's quest roster names no piece
