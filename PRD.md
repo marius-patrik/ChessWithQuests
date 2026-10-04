@@ -100,17 +100,17 @@ everywhere.
 
 ```python
 Field(name, kind, label, default, ...)
-
-class Configurable:
-    @classmethod
-    def spec(cls) -> list[Field]: ...
 ```
+
+A configurable type declares its fields by a method named `value_fields()`, except
+a `Quest`, which declares `parameters()`, and a clock, which `model/game/clock_fields.py`
+describes by asking what the clock object holds. `Field` is the declaration type.
 
 | Configurable | Declares |
 |---|---|
 | `Board` | rows, columns, placement |
 | `Piece` | name, symbols, movement vectors, attack vectors, jump flag, kind, optional FEN character |
-| `Clock` | initial time, increment |
+| A clock | initial time, increment |
 | `Rule` subclass | its own value fields; `enabled` is added by the framework |
 | `Quest` subclass | its `parameters()`; `name`, `description` and `reward` are added by the framework |
 
@@ -165,23 +165,34 @@ games/chess/
   board.py      rows, columns, starting placement — one board per game
   pieces/       one file per piece: identity, symbols, vectors
   rules/        one file per rule: logic and configuration
-  quests/       one file per quest: logic and parameters
+  quests/       one file per quest: logic and parameters   ← see below
   clocks/       clock configuration
 ```
 
+**`quests/` holds no quest files in either shipped configuration.** The twenty
+quest classes live in `model/game/quests.py` and a configuration instantiates them:
+`build_quests()` is declared in `games/chess/__init__.py`, and
+`games/chess/quests/__init__.py` is a single docstring line and nothing else.
+`games/checkers/quests/__init__.py` declares its own `build_quests()` and its
+directory holds no quest file either. This is a recorded departure from the line
+above, in `notes/object_model.md` §22, and it is the reason the line above is
+stated here rather than quietly dropped.
+
 Everything in a configuration is a Python file. It could not all be data,
-because rules and quests carry logic, and one language avoids a format split and
-the `tomllib` availability problem on Python 3.10.
+because rules and quests carry logic, and one language avoids a format split
+and the `tomllib` availability problem on Python 3.10.
 
 **A configuration is a folder that can be copied.** `cp -r games/chess
-games/house`, change what differs, and a new variant exists. Duplication is the
-extension mechanism: to change the board, duplicate the configuration and change
+games/house`, change what differs, and a new variant exists. Duplication is
+the extension mechanism: to change the board, duplicate the configuration and change
 the board. One game runs one board.
 
-`model/` keeps the parent classes — `Piece`, `Rule`, `Quest`, `Board`, `Clock` —
-and the machinery every configuration needs, such as the move, the validator and
-the game manager. Only configuration-specific implementations live in
-`games/`.
+`model/` keeps the parent classes — `Piece`, `Rule`, `Quest`, `Board` — and the
+machinery every configuration needs, such as the move, the validator and the game
+manager. Only configuration-specific implementations live in `games/`. **There is
+no `Clock` class.** `notes/object_model.md` §13 registers one as the intention and
+§20 records that it is unbuilt; both shipped clocks derive from nothing, and
+`model/game/clock_fields.py` describes one by asking what it holds.
 
 ## 7. Functional requirements
 
@@ -291,7 +302,7 @@ deviation in its own right — see `notes/object_model.md` section 7.
 | ID | Requirement |
 |---|---|
 | FR-53 | `games/chess/` is a complete, correct orthodox chess configuration. |
-| FR-54 | `games/checkers/` is a complete, correct English draughts configuration: twelve pieces a side, men moving one square forward diagonally, kings sliding any distance diagonally, **mandatory capture including chains**, promotion to king on reaching the far rank, and a win by immobilisation or by losing all pieces. |
+| FR-54 | `games/checkers/` is a complete, correct English draughts configuration: twelve pieces a side, men moving one square forward diagonally, kings sliding any distance diagonally, **mandatory capture including chains**, promotion to king on reaching the far rank, and a win by immobilisation or by losing all pieces. **Five points of this are not what ships, and `notes/object_model.md` §21 records each**: the king flies where WCDF English steps one square; the fifty-move rule defaults to 100 plies where WCDF says 80; there is no threefold repetition; insufficient material draws two-king-against-one, which the rulebook does not; and `LimitedKingsRule` and `CaptureRule` are variants no rulebook has (`CaptureRule`'s maximum-capture restriction is, correctly, off by default). Planned PR 17 owns closing this gap. |
 | FR-55 | Adding `games/checkers/` requires **no engine change**. If it does, the abstraction is wrong — and that is the point of shipping it. |
 
 ### 7.9 Application
@@ -328,10 +339,10 @@ this project adds beyond the diagram is registered in `notes/object_model.md`.
 | `Uzivatel` · `uzivatelske_jmeno`, `jmeno`, `email`, `elo`, `splnene_kwesty`, `pridej_quest()` | FR-60, FR-24 |
 | `User Manager` · `Id_uzivatele`, `log_uzivatelu`, `historie_uzivatele`, `proveď_tah()` | FR-60 |
 | `Quest` · `nazev`, `popis`, `validate()` | FR-18, FR-20 |
-| `QuestManager` | FR-23 |
-| `ChessNotationWriter` · format list, `item` | FR-43 to FR-52 |
-| `MetadataWriter` | FR-48 |
-| `export writers` · `field` | FR-43 |
+| `QuestManager` · `field`, `method(type): type` | FR-23. **`QuestManager` exists** (`model/misc/quest_manager.py`) but holds **neither** drawn member — see `notes/object_model.md` §23 |
+| `ChessNotationWriter` · format list, `item` | FR-43 to FR-52. **`item: attribute` is drawn but no member named `item` exists** in `ChessNotationWriter` (`model/misc/export_writers.py`) — see `notes/object_model.md` §23 |
+| `MetadataWriter` · `method(type): type` | FR-48. **Drawn, and no `method` member exists** in `MetadataWriter` (`model/misc/metadata.py`) — see `notes/object_model.md` §23 |
+| `export writers` · `field` | FR-43 — `ExportWriter.field` is declared at `model/misc/export_writers.py:46` |
 | `GameManagerController` · `vyber_pole()` | FR-65 |
 | `GameVeiw` · `controller`, `aktualizuj_plochu()` | FR-37, FR-66. The diagram spells the class `GameVeiw`; no `GameView` class exists — `notes/object_model.md` section 15 |
 | `HracGameView` · `controller`, `akutalizuj_hrace()` | FR-38, FR-67 |

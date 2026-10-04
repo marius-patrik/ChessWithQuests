@@ -12,7 +12,8 @@ request.
 
 ## What works today
 
-Every item below is exercised by a test in `tests/`.
+Every item below is exercised by a test in `tests/`, except where the row says
+what the test actually reaches.
 
 | Capability | Where it lives |
 |---|---|
@@ -24,13 +25,13 @@ Every item below is exercised by a test in `tests/`.
 | A configuration loaded from a directory as a package in its own right, so a copy composes its own board, pieces, rules, clocks and quests | `src/model/game/configuration.py` |
 | A full game loop from `new_game()` to a result, driving the quest manager, the user manager, the clocks, the transcript and the logger | `src/model/game/manager.py` |
 | Twenty built-in quest classes, twelve judged a move at a time and eight judging the finished game | `src/model/game/quests.py` |
-| English draughts: twelve pieces a side, flying kings, mandatory capture including chains, crowning without removal, a win by immobilisation or by losing every piece — held to the published perft counts | `src/games/checkers/` |
+| English draughts: twelve pieces a side, flying kings, mandatory capture including chains, crowning without removal, a win by immobilisation or by losing every piece — the engine's move generator is held to the published perft counts to depth 7, and an independent counter written from the rules corroborates those figures to depth 8 | `src/games/checkers/` |
 | A capture chain as one move, carried by `HopMove(Move)` rather than by the engine's own `Move` | `src/games/checkers/moves.py` |
 | A tkinter window: a start modal with a configuration selector, Settings and Start; the board drawn from White's side with coordinates, symbols, selection and legal-move highlights; player panels with clocks and captured pieces; the turn; a notated move history; a status footer; quest cards with progress | `src/view/` |
 | A settings surface: a corner selector for which configuration is being edited, sections for Board, Pieces, Rules, Quests and Clocks built from declared fields, create/rename/duplicate/delete, and a code editor for rule and quest source | `src/view/settings_dialog.py`, `src/view/code_editor.py`, `src/model/game/field.py` |
 | Configuration copy, rename and delete, all of which refuse the default configuration | `src/model/game/configuration.py` |
 | Fifteen Czech aliases, each the same object as its canonical English class | throughout; `PRD.md` section 5 lists them |
-| An installable package with a `python -m chesswithquests` entry point | `pyproject.toml`, `src/chesswithquests/` |
+| A `python -m chesswithquests` entry point, and a package list naming both configurations and all twelve of their subpackages. **No test performs a real `pip install` into a clean environment**; `tests/test_packaging.py` resolves `games_root()`, resolves and refuses a configuration name, and runs the entry point's `--check` path and its window construction | `pyproject.toml`, `src/chesswithquests/` |
 
 ## What is partial
 
@@ -40,10 +41,12 @@ Every item below is exercised by a test in `tests/`.
   and the fullmove number. PGN movetext is destination squares rather than SAN,
   and its header falls back to placeholder strings. The stenographic writer emits
   coordinate pairs with no compression. No configuration ships a per-format
-  writer, and `src/games/checkers/` ships no writer at all.
-- **`pyproject.toml` does not ship `src/games/checkers`.** The package list names
-  `games.chess` and its subpackages and omits the second configuration, so a clean
-  install finds chess and not draughts.
+  writer, and `src/games/checkers/` declares `exporters=[]` — no writer at all.
+- **`src/games/checkers` is not WCDF English draughts.** The king flies where the
+  rulebook steps one square, the fifty-move rule defaults to 100 plies where the
+  rulebook says 80, there is no threefold repetition, and insufficient material
+  draws two-king-against-one. Each departure is recorded in
+  `notes/object_model.md` §21.
 - **`src/controller/controller.py` is not renamed** to `game_manager_controller.py` to
   match the diagram's `GameManagerController`.
 

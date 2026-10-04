@@ -93,7 +93,8 @@ games/                the shipped configurations, one directory each
     rules/                one file per rule
     clocks/               Fischer
     export/               algebraic coordinate conversion
-    quests/               composed in games/chess/__init__.py, not one file per quest
+    quests/               a package that declares no quest files; `build_quests()` is
+                          in games/chess/__init__.py
   checkers/             the second configuration
     board.py, moves.py, pieces/, rules/, clocks/, export/, quests/
 chesswithquests/      the entry point, `python -m chesswithquests`
@@ -101,9 +102,14 @@ logs/                 game logs, configurable, git-ignored
 tests/  notes/  theme/  .github/
 ```
 
-`model/` keeps the parent classes — `Piece`, `Rule`, `Quest`, `Board`, `Clock` —
-and the machinery every configuration shares: the move, the validator, the game
-manager, the timer, the logger, the player, the user and the notation base.
+`model/` keeps the parent classes — `Piece`, `Rule`, `Quest`, `Board` — and the
+machinery every configuration shares: the move, the validator, the game manager,
+the timer, the logger, the player, the user and the notation base. **There is no
+`Clock` class.** `notes/object_model.md` §13 registers one as the intention and
+§20 records that it is unbuilt; both shipped clocks derive from nothing, and
+`model/game/clock_fields.py` describes a clock by asking what it holds. Any
+sentence in this file or `PRD.md` that lists `Clock` among the parent classes is
+naming something that does not exist.
 
 **Everything in a configuration directory is a Python file.** It could not all be
 data: rules and quests carry logic, so one language avoids a format split and
@@ -116,11 +122,14 @@ runs one board. `model/game/configuration.py` loads a loaded directory as a
 package rooted at itself, so a copy composes its own board, pieces, rules, clocks
 and quests rather than the original's.
 
-**One declared deviation from "one file per entry".** `games/chess/quests/` and
-`games/checkers/quests/` declare no quest files; both compose their quests in the
-configuration's `__init__.py`, because a configuration ships a handful of quests
-rather than the whole library. The twenty quest classes live in
-`model/game/quests.py`, which a configuration instantiates.
+**One declared deviation from "one file per entry": quests.** `PRD.md` §6 promises
+`quests/  one file per quest: logic and parameters`. Neither configuration keeps
+quest files there. `games/chess/quests/__init__.py` is a single docstring line and
+nothing else, and `games/chess/__init__.py` declares `build_quests()`. `games/checkers/quests/__init__.py`
+declares its own `build_quests()`. The twenty quest classes live in
+`model/game/quests.py`, which a configuration instantiates, because a
+configuration ships a handful of quests rather than the whole library. This is
+recorded as a deviation in `notes/object_model.md` §22 and annotated in `PRD.md` §6.
 
 ---
 
@@ -157,13 +166,20 @@ table at the head of this file, in that issue's `Placement` section.
 
 ## 4. Current state
 
-`pytest` is green and every test in it is behavioural. `black --check` clean.
-`properdocs build --strict` clean, zero warnings.
+`pytest` is green. `black --check` clean. `properdocs build --strict` clean,
+zero warnings.
 
 **This section quotes no test count.** The stack is several pull requests deep and
 grows as it merges, so a number written here is wrong the day after it is written.
 Run `pytest -q` for the current count, and treat §4.3's dead-code sweep the same
 way.
+
+**One test is a metadata assertion and is named as one.**
+`tests/test_docs_and_docstrings.py::test_generated_docs_directory_is_not_tracked`
+shells out to `git check-ignore` and asserts that a path is ignored. That is a
+property of `.gitignore`, not of the product, and by `PRD.md` §3.2's own
+definition it would still pass with the product deleted. §5 records it as the one
+survivor; §8 item 1 says the same.
 
 What exists is a playable chess product and a working draughts engine beside it.
 The whole view layer, the game-loop wiring, both configurations and the rule and
@@ -178,8 +194,15 @@ each of them.
 | **FEN writes four placeholder fields.** Castling rights, the en passant square, the halfmove clock and the fullmove number are written as `- - 0 1` whatever the game state | `model/misc/export_writers.py:178` |
 | **PGN movetext is not SAN.** `to_pgn` writes each move's destination square, and the header falls back to `'[Event "Casual Game"]\n[Result "*"]'` when no `MetadataWriter` is passed | `model/misc/export_writers.py:180-206` |
 | **Stenographic is a coordinate pair, not a stenographic record.** `to_stenographic` joins start and end squares per move, with no compression | `model/misc/export_writers.py:121` |
-| **`pyproject.toml` does not ship `games/checkers`.** The package list names `games.chess` and its subpackages and omits `games.checkers` entirely, so an install finds chess and not the second configuration | `pyproject.toml:40` |
 | **`ChessNotationWriter` is still an engine class.** `notes/object_model.md` section 7 places per-format writers in the configuration that uses them | `games/chess/__init__.py:build_exporters` isolates the import as a single line, so the move is one edit rather than a search |
+| **`ChessNotationWriter.export` is unexercised.** No test constructs the class and calls `export`; the suite calls `to_fen`, `to_pgn` and `to_stenographic` directly, and `tests/test_manager_exporters.py` uses its own stub writer and asserts the manager never names `ChessNotationWriter`. The format switch at `model/misc/export_writers.py:209` therefore has no test at all | `tests/test_notation_and_writers.py`, `tests/test_manager_exporters.py` |
+| **`games/checkers` is not WCDF English draughts.** The king flies, fifty-move defaults to 100 plies where WCDF says 80, there is no threefold repetition, and insufficient material draws two-king-against-one. `PRD.md` FR-54 asks for the rulebook's game. Recorded in `notes/object_model.md` §21 | `games/checkers/__init__.py`, `games/checkers/pieces/king.py`, `games/checkers/rules/draws.py` |
+
+`pyproject.toml` **does** ship both configurations. Commit `319ed0d` added
+`games.checkers` and its six subpackages to the explicit package list, so a clean
+install finds chess *and* draughts. The false claim that it omitted
+`games.checkers` stood in three places in this file — this table, §6's PR 6 state
+line and §8's item 24a — and once in `README.md`. All four now say the opposite.
 
 `model/game/configuration.py` also carries `copy_configuration`,
 `rename_configuration` and `delete_configuration`, which refuse the default
@@ -191,52 +214,96 @@ widget calls them.
 `model/game/manager.py` drives one game from `new_game()` to a `Result`. It takes
 its board, pieces, rules, quests, clocks and export writers from the
 `Configuration` it is given and names none of them: there is no `chess` in it and
-no `checkers` in it. `start_turn`, `make_move`, `get_valid_moves`, `cancel_move`,
-`charge_turn`, `credit_increment`, `status`, `get_result`, `transcript` and
-`save_log` are all reachable from a played game, and `view/player_game_view.py`
-calls them. The six subsystems this file once described as orphaned are
+no `checkers` in it. The six subsystems this file once described as orphaned are
 constructed and driven: `UserManager` and `QuestManager` at `manager.py:84,89`,
 `WindowController` by `view/app.py:42`, and `Configuration.exporters` supplies
 the writers. `link_default_users` at `manager.py:113` registers a user per side
 and links it to the player it controls, which is what makes a player a person
 rather than a colour.
 
+**Which layer calls which manager member, because it is not the view.**
+`view/player_game_view.py` calls four manager methods — `get_state`
+(`player_game_view.py:148,163,220,313`), `finish_game` (`:164`), `new_game`
+(`:204`) and `charge_turn` (`:314`) — and reads the attributes `board`,
+`active_player`, `players`, `result`, `game_logger`, `quest_manager` and
+`move_validator`. It calls **none** of `start_turn`, `make_move`,
+`get_valid_moves`, `cancel_move`, `credit_increment`, `status`, `get_result`,
+`transcript` or `save_log`; an earlier revision of this file said it called ten of
+them, which was wrong.
+
+`make_move` is called from `controller/controller.py:83`, which asks
+`move_validator.find_move` for the move the rules offered rather than rebuilding
+one from two squares (`controller.py:70`). `start_turn` and `cancel_move` have no
+caller anywhere in the source or the suite at all — §4.3 lists them, and
+`controller.py:96` clears the controller's own selection instead. `get_result`,
+`status`, `transcript` and `save_log` are reached from inside `manager.py` and
+from tests.
+
 ### 4.3 Dead code
 
 The inventory this section used to carry is mostly resolved. Verified gone:
 `Timer.countdown`, `Player.get_color`, `Player.get_user`,
-`Player.get_elo_rating`, `UserManager.find_user`, `GameManager.possible_moves`,
-`Quest.complete`, `Board.setup_default_board`, and the names `Tower`, `Horse` and
-`Controller`. The board's starting position moved out of the engine entirely:
-`games/chess/board.py` and `games/checkers/board.py` declare it.
+`Player.get_elo_rating`, `UserManager.find_user`, `Quest.complete`,
+`Board.setup_default_board`, and the names `Tower`, `Horse` and `Controller`. The
+board's starting position moved out of the engine entirely: `games/chess/board.py`
+and `games/checkers/board.py` declare it.
+
+**`GameManager.possible_moves` is not gone and must not be treated as dead.**
+It is a class-body alias for `get_valid_moves` at `model/game/manager.py:190`, and
+`tests/test_game_manager.py:16` calls it. An earlier revision of this file listed
+it under "verified gone", which was false. The decision is to **keep the alias and
+correct the record**, because deleting it means editing a test to remove a passing
+assertion — and the alias costs one line and breaks no caller — while correcting
+the record costs the reader nothing at all. It is kept out of the unreferenced
+table below for the same reason: it *is* referenced, by
+`tests/test_game_manager.py:16`. §8 item 32 and planned PR 20 carry the re-check;
+this paragraph is the decision, so that re-check does not have to invent one.
 
 Several members this section once called dead are alive and must not be touched:
 `Board.dimensions` (`board.py:103,111`), `Board.captured_white`
-(`board.py:57,176`, read by `move.py:165,210`), `Move.promotion_piece`
+(`board.py:57,176`, read by `move.py:165,220`), `Move.promotion_piece`
 (`move.py:93,185`), `ExportWriter.field`, `GameManager.players` and
-`WindowController.title`, `width` and `height`. `Move.captured_piece` is no longer
-declared on `Move`; `HopMove` carries it, together with `captured_pieces`, and the
-quests read it.
+`WindowController.title`, `width` and `height`.
 
-What is unreferenced, by a textual sweep of all 222 public callables and methods
-under `model/`, `controller/`, `view/`, `games/` and `chesswithquests/` against
-the source and the suite. The sweep counts name occurrences, so it is a screen and
-not a verdict — a name shared with a member elsewhere counts as referenced.
-**This is a snapshot of one commit; re-run it rather than trusting it.**
+**`Move.captured_piece` is declared, documented and used.** It is a constructor
+parameter and instance attribute of `Move` (`model/game/move.py:67` and `:47`),
+written by `apply_to_board` at `:174` and read by `Board` bookkeeping, the quests
+and the draughts perft walk. An earlier revision of this file said it was "no
+longer declared on `Move`" and that only `HopMove` carried it. `HopMove` does
+carry `captured_pieces` for a chain; it does not replace `Move.captured_piece`.
+See §4.7 for what `Move` actually carries.
+
+**How the sweep is run, so the number is reproducible.** It parses every
+`.py` file under `model/`, `controller/`, `view/`, `games/` and
+`chesswithquests/` with `ast`, collects every module-level `def`/`class` and
+every method whose name does not begin with `_`, and then counts how often each
+name occurs in the source and in `tests/`. At this commit that is **470 public
+definitions (86 classes, 316 methods, 68 functions) carrying 306 distinct public
+names, in 86 files**. A name shared with a member elsewhere counts as referenced,
+so the result is a screen and not a verdict. **Re-run it rather than trusting
+this paragraph** — an earlier revision of this file claimed "222 public
+callables and methods", which no reading of the tree reproduces.
+
+What is unreferenced by that sweep:
 
 | Unreferenced | Note |
 |---|---|
-| `GameManager.start_turn` | the loop's turn entry point; the view opens a turn through `get_valid_moves` instead |
-| `GameManager.cancel_move` | no caller; a UI affordance with no caller yet |
+| `GameManager.start_turn` | the loop's turn entry point; nothing calls it, source or suite |
+| `GameManager.cancel_move` | no caller; `controller/controller.py:96` clears the controller's own selection instead |
 | `GameLogger.file_path` | a getter with no reader |
 | `MoveValidator.set_board` | a setter the validator is constructed with instead |
-| `Field.field_values` (`model/game/field.py`) | no reader |
-| `ResultEvent.moves_by` (`model/game/events.py`) | no reader |
+| `field_values` (`model/game/field.py:105`) | a module-level function, not a `Field` member; no reader |
+| `ResultEvent.moves_by` (`model/game/events.py:158`) | no reader |
 | `QuestManager.register_quest` | no reader; the manager is populated at construction |
-| `PlayerGameView.start_auto_refresh` | no reader; the clock ticks are driven explicitly |
-| `longest_chain` (`games/checkers/rules/chains.py`) | no reader |
-| `FiftyMoveRule.reset_count` (`games/checkers/rules/draws.py`) | no reader |
-| `_SourceLoader.create_module` (`model/game/source_validation.py`) | **not dead**: the import machinery calls it. Do not remove, and exclude it when re-running the sweep |
+| `longest_chain` (`games/checkers/rules/chains.py:176`) | no reader |
+| `FiftyMoveRule.reset_count` (`games/checkers/rules/draws.py:75`) | no reader |
+| `_SourceLoader.create_module` (`model/game/source_validation.py:79`) | **not dead**: the import machinery calls it. Do not remove, and exclude it when re-running the sweep |
+
+**`PlayerGameView.start_auto_refresh` is referenced** — `view/app.py:62` calls it
+so the clocks advance on real time. An earlier revision of this file listed it as
+unreferenced on the reasoning that "the clock ticks are driven explicitly", which
+is false: `player_game_view.py:314`'s explicit `charge_turn` is a second caller,
+not the only one.
 
 **PR 20 re-checks this list and removes only what is still unreferenced.** A
 member written in anticipation of a consumer that has now arrived must not be
@@ -252,33 +319,36 @@ docstring, and `properdocs build --strict` completes with zero warnings.
 
 ### 4.5 Delivery state of the twenty-one planned pull requests
 
-Nine of the twenty-one are delivered in the main stack, three are delivered on
-branches outside it, and the rest are partial or not started. **"Delivered" means
-the acceptance criteria are met, not that a branch was opened.**
+**Thirteen** of the twenty-one are delivered in the main stack, **two** are
+delivered on branches outside it, **four** are partial and **two** are not
+started. **"Delivered" means the acceptance criteria are met, not that a branch
+was opened.** An earlier revision of this section opened with "nine delivered in
+the main stack, three outside", which its own table below contradicted; the table
+said thirteen, two, three and three.
 
 | Planned PR | Content | State | Where |
 |---|---|---|---|
 | 1 | PRD + SCRATCHPAD | **delivered** | main stack |
 | 2 | Flatten `src/` to root, generated docs pipeline | **delivered** | main stack |
-| 3 | Delete metadata-only tests, close docstring gaps, drop unused aliases | **delivered** | main stack |
-| 4 | CI: native self-contained workflows, remove DarkFactory | **delivered, outside the main stack** | `feature/native-ci-workflows` |
-| 5 | Governance rules: `AGENTS.md` 1, 2, 4, 7, 9, 10, 11, 12 | **delivered, outside the main stack** | `feature/governance-rules`, on top of PR 4 |
-| 6 | Packaging, entry point, git-ignored log directory | **delivered** | main stack |
-| 7 | README honesty | **not started in the main stack**; `feature/readme-honesty` holds a rewrite that predates the view layer, `games/` and the packaging, so every claim in it is now false. It must be superseded, not merged — see §4.6 | `feature/readme-honesty` |
+| 3 | Delete metadata-only tests, close docstring gaps, drop unused aliases | **delivered** — 51 collected tests removed, not 62; §5 | main stack |
+| 4 | CI: native self-contained workflows, remove DarkFactory | **delivered, outside the main stack** — on a branch 24 commits behind the tip | `feature/native-ci-workflows` |
+| 5 | Governance rules: `AGENTS.md` 1, 2, 4, 7, 9, 10, 11, 12, **13** | **delivered, outside the main stack** — on top of PR 4 | `feature/governance-rules` |
+| 6 | Packaging, entry point, git-ignored log directory | **delivered** — including both configurations in the package list (§4.1) | main stack |
+| 7 | README honesty | **delivered** in the main stack by commit `77d978c`. The stale branch rewrite is superseded and is not to be merged | main stack |
 | 8 | Board generalisation | **delivered** | main stack |
 | 9 | `Quest` parent with built-in subclasses | **delivered** — twenty classes, split twelve `after_move` and eight `at_game_end` | main stack |
 | 10 | `Rule` parent, five hooks, configuration loading | **delivered** | main stack |
-| 11 | Orthodox chess rules, removal of type coupling | **delivered** — thirteen `Rule` subclasses, and no `getType()`/`hasattr` coupling anywhere under `model/`, `controller/` or `view/` | main stack |
-| 12 | Multi-hop moves | **delivered, as a different design from the one planned** — `Move` is unchanged and `games/checkers/moves.py` declares `HopMove(Move)`, which carries the hops. See §4.7 | main stack |
+| 11 | Orthodox chess rules, removal of type coupling | **partial** — thirteen `Rule` subclasses ship, and the *hard-coded* type coupling is gone. Eleven `getType()` call sites remain in `games/chess/rules/` across five files, and the engine still holds three in `model/game/`, plus five `hasattr` probes in `model/game/clock_fields.py`. See §7 PR 11 | main stack |
+| 12 | Multi-hop moves | **delivered, as a different design from the one planned** — `Move` grew no hop sequence; `games/checkers/moves.py` declares `HopMove(Move)`, which carries the hops. See §4.7 | main stack |
 | 13 | Migrate chess into `games/chess/` | **delivered** | main stack |
 | 14 | Wire the orphan subsystems | **delivered** | main stack |
 | 15 | View layer with the game-start modal | **delivered** — `BoardView`, `PlayerGameView`, `PlayerView`, `QuestCard`, `QuestList`, `StartModal` | main stack |
 | 16 | Settings surface | **delivered** — the five sections, the corner configuration selector with create/rename/delete/duplicate, and a code editor that validates before the code joins a configuration | main stack |
-| 17 | `games/checkers/` | **partial** — the board, two piece kinds, eight rules, the clock and four quests, held to the published perft counts. Absent: its two exporters, *letter* and the metadata header | main stack |
+| 17 | `games/checkers/` | **partial** — the board, two piece kinds, eight rules, the clock and four quests, held to the published perft counts. `build_configuration()` declares `exporters=[]`, so it ships **zero** exporters, not two missing ones. The game it plays is flying-kings, not WCDF English draughts; `notes/object_model.md` §21 | main stack |
 | 18 | Export generalised | **not started** — the `ExportWriter` base and `formats()` exist, but the format switch does, and there is no per-format subclass in `games/<variant>/export/` | — |
 | 19 | Export formats: PGN, FEN, field-field-extra, stenographic | **not started** | — |
 | 20 | Czech aliases and remaining dead code | **partial** — all fifteen aliases ship, `Knight` is canonical, `Tower`, `Horse` and `Controller` are gone. Absent: the `controller/controller.py` → `game_manager_controller.py` rename, and the dead-code re-check | main stack |
-| 21 | Behavioural test coverage | **partial** — no surviving test asserts on repository metadata, and §4.3's list is unreferenced rather than untriaged | main stack |
+| 21 | Behavioural test coverage | **partial** — one surviving test is a metadata assertion (`test_generated_docs_directory_is_not_tracked`), §4.3's list is unreferenced rather than untriaged, and §8 items 2, 6, 8 and 12 are not fully asserted | main stack |
 
 ### 4.6 The stack has grown past twenty-one
 
@@ -292,56 +362,109 @@ the main stack after the plan was written, and each is a real pull request:
 | The knight rename | `Horse` → `Knight`, with `Kun` as the alias and `games/chess/pieces/knight.py` as the file | main stack |
 | The checkers configuration | `games/checkers/` as its own directory | main stack |
 
-**`feature/readme-honesty` and `feature/native-ci-workflows` are not on the main
-stack**, and neither is `feature/governance-rules`, which is built on
-`feature/native-ci-workflows`. Planned PR 4 and PR 5 therefore exist only there.
-Any statement in this file about PR 4, PR 5 or PR 7 describes work a reader of the
-main stack cannot see.
+**`feature/native-ci-workflows` is not on the main stack**, and neither is
+`feature/governance-rules`, which is built on it. Planned PR 4 and PR 5 therefore
+exist only there, and any statement in this file about PR 4 or PR 5 describes work
+a reader of the main stack cannot see. Both branches forked from `f4e1487` and are
+22 to 25 commits behind this stack, so neither can be merged without a rebase —
+`feature/native-ci-workflows` still carries a `src/` tree.
+
+**`feature/readme-honesty` is superseded and is not to be merged.** Planned PR 7
+was delivered in the main stack by commit `77d978c`; that rewrite states what the
+product does today, and the branch forked from `f4e1487`, twenty-two commits
+before this stack, predates the view layer, `games/`, the packaging and the
+settings surface. Every capability claim in it is false. An earlier revision of
+this file said PR 7 was "not started" and that the branch "must be superseded, not
+merged" as outstanding work; the supersession has happened.
 
 **The plan issues' labels lag their contents.** #127 (PR 1) and #129 are labelled
 `In Progress`; #126 (PR 4) and #124 (PR 5) carry no status label at all, though
-both are delivered; #131 covers PRs 2, 3, 6 and 7, of which only 7 is outstanding.
-Move them to `Done` when the pull requests merge.
+both are delivered on branches; #131 covers PRs 2, 3, 6 and 7, **all four of which
+are delivered**. Move them to `Done` when the pull requests merge.
 
 ### 4.7 Multi-hop moves were not built as planned
 
-Planned PR 12 and `notes/object_model.md` section 11 both say `Move` grows a
-sequence of hops alongside `start_pos` and `end_pos`. **It does not.** `Move`
-carries a start, an end, a piece, a move type and an optional promotion piece,
-and nothing else. `games/checkers/moves.py` declares `HopMove(Move)`, which adds
-`hops`, `captures`, `captured_pieces` and `route`, and overrides
-`apply_to_board`; the engine's `unapply_from_board` is reused verbatim, because
-`HopMove` returns the engine's own `Applied` record.
+Planned PR 12 says `Move` grows a sequence of hops alongside `start_pos` and
+`end_pos`. **It does not.** What `Move` actually carries is declared in
+`model/game/move.py:35-72` and is nine constructor parameters: `start_pos`,
+`end_pos`, `piece`, `move_type`, `captured_piece`, `promotion_piece`,
+`capture_from`, `companion_start` and `companion_end`.
+
+- **`captured_piece`** — the piece this move took, recorded while the board still
+  held it (`move.py:47,67`, written at `:174`). It is what a single capture
+  carries; `HopMove` adds `captured_pieces` for a chain.
+- **`capture_from`** — the square a taken piece stands on when it is not the
+  destination, which is what makes a distant capture's victim recoverable
+  (`move.py:55,69`).
+- **`companion_start` / `companion_end`** — the second square pair, for a move that
+  carries a piece along: a castling rook (`move.py:57,59,70,72`, applied at `:190`).
+
+An earlier revision of this section said `Move` carries "a start, an end, a piece,
+a move type and an optional promotion piece, **and nothing else**", which omitted
+four members that are declared, documented and used, and said of
+`Move.captured_piece` that it was "no longer declared on `Move`". Both were false;
+§4.3 records the second correction and this paragraph the first.
+
+`Applied` is **not** a member of `Move` — it is a module-level `NamedTuple` at
+`model/game/move.py:21`, imported by `HopMove` and by
+`model/misc/export_writers.py`. `HopMove` adds `hops`, `captures`,
+`captured_pieces` and `route`, and overrides `apply_to_board`; the engine's
+`unapply_from_board` is reused verbatim, because `HopMove` returns the engine's own
+`Applied` record.
 
 This is the better outcome — nothing under `model/`, `controller/` or `view/`
-grows a draughts-shaped member, and `notes/object_model.md` section 11 now records
-it — and the plan is what is wrong.
+grows a draughts-shaped member, and `notes/object_model.md` section 11 records
+it — and the plan is what is wrong. **§11 was amended on 2026-10-02 and does say a
+`Move` subclass carries the hops.** `games/checkers/moves.py`'s module docstring
+still says section 11 "should be amended… it is not", which was true when it was
+written and is now stale; the correction lives in the code, not in this file.
 
 ---
 
 ## 5. Test strategy
 
-Current: every test in the suite is behavioural. Target: behaviour-only, and that
-is where the suite is.
+Current: every test in the suite is behavioural **except one**, named below.
+Target: behaviour-only, and the suite is one test short of it.
 
-**The metadata assertions are gone.** Planned PR 3 deleted the sixty-two tests
-that asserted on repository metadata rather than on the product — import smoke
-tests, workflow YAML, `AGENTS.md` text, the `CLAUDE.md` symlink, `README.md`
-URLs, and the notes files. Two consequences for anyone reading this section:
+**The metadata assertions are gone, and PR 3 removed fifty-one of them.** At
+commit `4e7f270` collection went from **137 to 86**, so 51 collected tests were
+removed. Eight files were **deleted outright** — `tests/test_workflow_rules.py`
+(15 `def test_`), `test_auto_format_workflow.py` (2), `test_claude_symlink.py` (3),
+`test_chess_rules_notes.py` (1), `test_object_model_notes.py` (1),
+`test_readme.py` (1), `test_reference_diagram_notes.py` (1) and `test_structure.py`
+(1) — which is **25 `def test_` definitions**; the 51 figure is larger because six
+of them were parametrised. One further file, `tests/test_user_manager.py`, had a
+single assertion rewritten from `manager.find_user(42)` to `manager.get_user(42)`
+because PR 3 removed `find_user`. An earlier revision of this file said "the
+sixty-two tests", which no measurement reproduces.
+
+Two consequences for anyone reading this section:
 
 - **The tests that police the rulebook are deleted, not rewritten.** Nothing in
   the suite now keeps `AGENTS.md`, `README.md` or a workflow honest. That is the
   decision `PRD.md` section 3.2 records, and it means the documents in this
   repository are maintained by reading them, not by running a test.
-- **The one test that asserted on notes content has been rewritten, not
-  deleted.** `tests/test_docs_and_docstrings.py` held a test that read the real
-  `notes/*.md` files from disk and asserted the generated pages equalled them
-  byte for byte, plus substring assertions on the notes' text. That is a
-  metadata assertion wearing a behavioural hat: it would pass with the product
-  deleted. It is now driven from `tmp_path`, so it asserts what
-  `.github/scripts/docs_hooks.py` *does* — that every Markdown file in a notes
-  directory is published verbatim and linked from a hub page — against a fixture
-  it owns, and it reads nothing from the repository.
+- **The notes-asserting tests were deleted, not rewritten.** Three of the eight
+  deleted files asserted on `notes/*.md` content —
+  `test_object_model_notes.py`, `test_chess_rules_notes.py` and
+  `test_reference_diagram_notes.py`. A fourth test, in
+  `tests/test_docs_and_docstrings.py`, read the real `notes/*.md` from disk and
+  asserted the generated pages equalled them byte for byte; **that one** was
+  rewritten rather than deleted. It is now driven from `tmp_path`, so it asserts
+  what `.github/scripts/docs_hooks.py` *does* — that every Markdown file in a
+  notes directory is published verbatim and linked from a hub page — against a
+  fixture it owns, and it reads nothing from the repository. An earlier revision
+  of this file said the notes test "has been rewritten, not deleted" as though it
+  were the only one; three others went with the files.
+
+**The one survivor.** `tests/test_docs_and_docstrings.py::test_generated_docs_directory_is_not_tracked`
+runs `git check-ignore --quiet .docs/index.md` and asserts the exit code is zero.
+It asserts that `.gitignore` ignores the generated docs directory — a property of
+the repository, not of the product — so by `PRD.md` §3.2's own definition it
+belongs with the fifty-one. It is left in place because the generated directory's
+being ignored is what stops the docs build polluting `git status`, and that is a
+real risk worth a gate; §8 item 1 and §4 record the exception rather than pretend
+it is not there.
 
 **What the suite covers that it did not.** The perft gate for chess and draughts,
 the engine-holds-no-chess invariant, the rules of draughts position by position,
@@ -350,12 +473,17 @@ the manager reading its writers and quests, and the configuration directory
 operations.
 
 **What PR 21 still owes.** §4.3 lists what is unreferenced; unreferenced is not
-the same as uncovered, and PR 21 is the pass that distinguishes them. Two
-coverage gaps this file recorded earlier are closed — a `Board` of non-8×8
-dimensions is built and played on in `tests/test_board_generalisation.py`, and
-`ChessNotationWriter.export` is exercised by `tests/test_manager_exporters.py` —
-and the export writers' *outputs* remain largely unverified because the outputs
-are largely wrong (§4.1).
+the same as uncovered, and PR 21 is the pass that distinguishes them. One coverage
+gap this file recorded earlier is closed — a `Board` of non-8×8 dimensions is
+built and played on in `tests/test_board_generalisation.py`, at 8×8, 10×10 and 5×7.
+The other is **not**: `ChessNotationWriter.export` is exercised by no test at all.
+`tests/test_manager_exporters.py` uses its own `OnlyOneNotation` stub and never
+constructs the class — it asserts the manager module's source does not contain the
+name — while `tests/test_notation_and_writers.py` constructs `ChessNotationWriter`
+but calls `to_fen`, `to_pgn` and `to_stenographic` directly. The format switch
+at `model/misc/export_writers.py:209` therefore has no test, and the export
+writers' *outputs* remain largely unverified because the outputs are largely wrong
+(§4.1).
 
 ---
 
@@ -370,9 +498,9 @@ begins. **The maintainer merges; do not merge.**
 | 2 | Flatten `src/` to root, and reconfigure the docs pipeline with it | 1 | delivered |
 | 3 | Delete metadata-only tests, close docstring gaps, drop the unused aliases | 2 | delivered |
 | 4 | CI: native self-contained workflows, then remove the DarkFactory dependency | 3 | delivered on `feature/native-ci-workflows` |
-| 5 | Governance rules: `AGENTS.md` 1, 2, 4, 7, 9, 10, 11, 12 | 4 | delivered on `feature/governance-rules` |
+| 5 | Governance rules: `AGENTS.md` 1, 2, 4, 7, 9, 10, 11, 12, 13 | 4 | delivered on `feature/governance-rules` |
 | 6 | Packaging, entry point, and the git-ignored log directory | 2 | delivered |
-| 7 | README: stop claiming what the product does not yet do | 1 | not started; see §4.5 |
+| 7 | README: stop claiming what the product does not yet do | 1 | delivered in the main stack by `77d978c` |
 
 **The order is load-bearing.** PR 4 deletes `.github/darkfactory.json` and the
 workflows that `tests/test_workflow_rules.py` and
@@ -484,9 +612,19 @@ tests are being removed anyway:
 - `notes/chess_rules.md` names the jumping piece `Knight`.
 
 **Acceptance criteria**: `pytest` green at the reduced count; no test opens
-`AGENTS.md`, a workflow, `notes/` or `README.md`; both `Returns:` gaps closed; the
-only remaining `pass` is `ExportWriter.export`'s abstract raise; and no note file
-describes a class or member the diagram does not draw.
+`AGENTS.md`, a workflow, `notes/` or `README.md`; both `Returns:` gaps closed; no
+note file describes a class or member the diagram does not draw.
+
+**One acceptance criterion was wrong and is withdrawn.** It read "the only
+remaining `pass` is `ExportWriter.export`'s abstract raise". That is wrong twice
+over: `ExportWriter.export` (`model/misc/export_writers.py:75`) **raises**
+`NotImplementedError` and contains no `pass` at all, and three real `pass`
+statements remain, all of them the same deliberate shape — a tkinter `TclError`
+swallowed when a grab or an `after` job has already gone:
+`view/player_game_view.py:332`, `view/start_modal.py:123` and
+`view/settings_dialog.py:714`. Each is marked `# pragma: no cover`. There is one
+other `raise NotImplementedError`, at `model/game/quests.py:693`, where the
+private `_AtGameEndQuest._judge` is the hook every subclass must override.
 
 **Risk**: deleting tests could mask regressions. Every deletion is import-only or
 metadata-only, and PR 21 adds behavioural coverage to offset.
@@ -502,19 +640,33 @@ stack.
 
 **Goal**: the repository's CI depends on no external repository's workflow.
 
-11 of 12 workflows are thin delegates to `marius-patrik/DarkFactory` at the
-pinned ref `7ecba16` in `.github/darkfactory.json`.
+**There are 13 workflows on the main stack, and 11 of them are thin delegates**
+to `marius-patrik/DarkFactory` at the pinned ref in `.github/darkfactory.json`:
+`agent.yml`, `auto-format.yml`, `ci.yml`, `deploy-docs.yml`, `open-pr.yml`,
+`pr-approval-automerge.yml`, `preview-docs.yml`, `project-automation.yml`,
+`release.yml`, `report-failure.yml` and `verify-pr-issue.yml`. Only
+`verify-docs.yml` and `verify-view.yml` are already self-contained. An earlier
+revision of this section said "11 of 12", which counted neither of those two.
 
 **Delete**: `.github/darkfactory.json`, `agent.yml`, `open-pr.yml`,
 `pr-approval-automerge.yml`, `project-automation.yml`, `report-failure.yml`, the
-`pipeline` git remote, the empty gitignored `.pipeline/`, and `AGENTS.md` Rule
-13.
+`pipeline` git remote, and the empty gitignored `.pipeline/`.
 
 **Reimplement natively and self-contained**: `ci.yml` (matrix `3.10`–`3.13`,
 pytest plus black), `auto-format.yml`, `deploy-docs.yml`, `preview-docs.yml`,
 `release.yml`, `verify-pr-issue.yml`.
 
-**Unchanged**: `verify-docs.yml` is already self-contained.
+**Unchanged**: `verify-docs.yml` and `verify-view.yml` are already
+self-contained. `verify-view.yml` exists only on the main stack and is why §8
+item 33 is false there — it is the one workflow that runs the tkinter tests, and
+the pinned pipeline does not install a windowing toolkit.
+
+**`AGENTS.md` Rule 13 is deleted by PR 5, not by PR 4.** `feature/native-ci-workflows`
+carries only the six commits that remove the delegates and the pin, and Rule 13 is
+still present in its `AGENTS.md`. The deletion is on `feature/governance-rules`,
+whose entire diff against `feature/native-ci-workflows` is one file,
+`AGENTS.md`. An earlier revision of this section listed Rule 13 under PR 4's
+deletions; the attribution was wrong.
 
 **Order inside the PR — non-negotiable**: land the replacement `ci.yml` and
 `auto-format.yml` first and get them green, *then* remove the delegates. The
@@ -548,10 +700,16 @@ the main stack.
   the pre-merge review. PR 4 deletes the workflow that enforced them, so after
   this PR nothing does and the rule must not claim it.
 - **Rule 11** — delete entirely; it exists only to drive auto-merge.
+- **Rule 13** — delete entirely; it exists only to describe the shared DarkFactory
+  pipeline that PR 4 removes.
 - **Rule 12** — it requires a `Request` issue per prompt with a linked `Plan`
   child and an `approve` comment, enforced by that same deleted workflow. Keep the
   discipline, drop the claim of automated enforcement, and note that this track's
   Request and Plan issues are #123 to #130.
+
+On `feature/governance-rules` the rules that survive run 1 through 10, 12 and 14:
+eleven and thirteen are gone. The branch's whole diff against
+`feature/native-ci-workflows` is `AGENTS.md`.
 
 **Acceptance criteria**: no rule references `.github/darkfactory.json`,
 `open-pr.yml`, or a bot author; no rule claims automated enforcement by a workflow
@@ -564,8 +722,9 @@ corresponding issue.
 
 ### PR 6 — Packaging, entry point, and the log directory
 
-**State**: delivered, with one gap — `pyproject.toml` ships `games.chess` and
-omits `games.checkers` (§4.1).
+**State**: delivered, with no open gap. `pyproject.toml` ships `games.chess` **and**
+`games.checkers` with all six of its subpackages — commit `319ed0d` closed the gap
+an earlier revision of this section recorded (§4.1).
 
 Add a `[project]` table and a build backend. **`packages` must be set
 explicitly** — a flat layout plus setuptools auto-discovery trips over `tests/`
@@ -573,19 +732,21 @@ sitting at the root.
 
 **Three things the product needs that have no other home:**
 
-1. **An entry point.** `python -m <entrypoint>` must start a window (FR-58).
+1. **An entry point.** `python -m <entrypoint>` must start a window (FR-59).
 2. **`games/` must ship with the package.** It sits outside `model/`,
    `controller/` and `view/`, so an install shipping only packages would not find
    its own default configuration and every later phase would look broken. Either
    declare the configurations as package data or have the loader locate them
    relative to the installed distribution.
-3. **`logs/` must be git-ignored.** FR-55 requires it; `.gitignore` has no such
-   entry today.
+3. **`logs/` must be git-ignored.** FR-56 requires it, and `.gitignore` now has
+   the entry. An earlier revision of this section cited FR-55 here, which is the
+   checkers-requires-no-engine-change requirement and has nothing to do with logs.
 
 **Acceptance criteria**: the package builds and installs; `pip install .` in a
-clean venv imports `model`, `controller` and `view` **and finds `games/chess/`**;
-the entry point starts the application; `git check-ignore logs/` succeeds; no
-runtime dependency is declared beyond the standard library.
+clean venv imports `model`, `controller` and `view` **and finds both
+`games/chess/` and `games/checkers/`**; the entry point starts the application;
+`git check-ignore logs/` succeeds; no runtime dependency is declared beyond the
+standard library.
 
 **Verification**: `pytest -q`, `black --check .`, and
 `python -m properdocs build --strict`, plus the specific commands in the
@@ -593,16 +754,27 @@ corresponding issue.
 
 ### PR 7 — README honesty
 
-**State**: not started on the main stack. `feature/readme-honesty` holds a
-rewrite that predates the view layer, `games/` and the packaging, so every
-capability claim in it is now false; supersede it rather than merge it (§4.5).
+**State**: delivered in the main stack by commit `77d978c`.
 
-**Goal**: `README.md` stops claiming what the product does not yet do. It
-currently advertises "custom board configurations", which is false until PR 8.
-State what is true, and add the documentation and diagram links it already has.
+**Goal**: `README.md` stops claiming what the product does not yet do. It used to
+advertise "custom board configurations", which was false until PR 8. State what is
+true, and add the documentation and diagram links it already has.
 
-**Acceptance criteria**: every capability claimed in `README.md` is covered by a passing
-test.
+**Acceptance criteria**: every capability claimed in `README.md` is covered by a
+passing test.
+
+**What delivery looks like.** `README.md` now carries a *What works today* table
+whose last column names the module each claim lives in, a *What is partial* list
+naming the four concrete export defects, and a *Not built yet* list. Every row of
+the first table names a module a test exercises. The one claim that is not a
+product capability — "an installable package" — rests on
+`tests/test_packaging.py`, which resolves `games_root()`, resolves and refuses a
+configuration path, and runs the entry point's `--check` path and its window
+construction; it does not perform a real `pip install` into a clean environment.
+
+`feature/readme-honesty` is superseded and **is not to be merged**. It forked from
+`f4e1487`, twenty-two commits before this stack, so it predates the view layer,
+`games/`, the packaging and the settings surface.
 
 ---
 
@@ -653,10 +825,12 @@ alongside that chain rather than extending it, so wall-clock time is set by the
 chain and not by the total.
 
 **The graph above is the plan as drawn; §4.5 is where each node actually stands.**
-Three edges have been satisfied out of order and the plan does not say so: PR 12
+Five edges have been satisfied out of order and the plan does not say so: PR 12
 needed only PR 10 and landed with the checkers configuration, PR 17 landed
-without PR 18 and is therefore partial, and PR 20's alias half landed without
-PR 15 or the `controller.py` rename. Nothing else in the graph moved.
+without PR 18 and is therefore partial, PR 11 landed without removing every
+`getType()` and `hasattr` site and is therefore partial, PR 20's alias half landed
+without PR 15 or the `controller.py` rename, and PR 7 landed in the main stack
+while its branch sat unmerged. Nothing else in the graph moved.
 
 ### Wave A — PRs 8 and 9 are independent of each other; PR 10 needs PR 8
 
@@ -778,10 +952,13 @@ as a sequence on `Move` (§4.7).
 
 **Goal**: a capture chain is one move the player makes, not several.
 
-`Move` is left alone and a `Move` subclass carries the hops. `HopMove(Move)` adds
-`hops`, `captures`, `captured_pieces` and `route`, overrides `apply_to_board`,
-and reuses the engine's `Applied` record so the engine's `unapply_from_board`
-undoes a chain with no second mechanism.
+A `Move` subclass carries the hops and `Move` gains nothing draughts-shaped.
+`HopMove(Move)` adds `hops`, `captures`, `captured_pieces` and `route`, overrides
+`apply_to_board`, and reuses the engine's `Applied` record so the engine's
+`unapply_from_board` undoes a chain with no second mechanism. **`Move` is not
+byte-for-byte untouched** — it carries `captured_piece`, `capture_from`,
+`companion_start` and `companion_end`, four members that are castling and
+single-capture members rather than hop members, and all four are listed in §4.7.
 
 **Acceptance criteria**: a three-hop chain built from a constructed board is
 offered as a single move, executes atomically, and rolls back completely if any
@@ -796,31 +973,38 @@ perft counts.
 corresponding issue.
 #### PR 11 — Orthodox chess rules, and removal of type coupling
 
-**State**: delivered — thirteen rules, and no coupling left in the engine.
+**State**: **partial** — thirteen rules ship and the hard-coded type coupling is
+gone; the *declared-kind* coupling PR 11 set out to remove is not.
 
 **Needs**: 10. **Blocks**: 13, 14, 18.
 
 **Goal**: every rule in `notes/chess_rules.md` implemented, and the engine stops
 knowing what a king is.
 
-**Thirteen chess rules** as `Rule` subclasses in `games/chess/rules/`, one per
-file:
+**Thirteen chess rules** as `Rule` subclasses in `games/chess/rules/`. **They are
+not one per file**: the thirteen live in eight files — `castling.py`,
+`en_passant.py`, `promotion.py`, `royal.py` and `bishop_colour.py` hold one each,
+`check.py` holds three (`CheckRule`, `CheckmateRule`, `StalemateRule`) and
+`draws.py` holds four (`InsufficientMaterialRule`, `FiftyMoveRule`,
+`ThreefoldRepetitionRule`, `MutualAgreementRule`). A ninth file, `attacks.py`,
+holds shared helpers rather than a rule. The one-file-per-rule shape was planned
+and is not what shipped.
 
-| Class | Rule |
-|---|---|
-| `CastlingRule` | castling |
-| `EnPassantRule` | en passant |
-| `PromotionRule` | promotion |
-| `CheckRule` | check |
-| `CheckmateRule` | checkmate |
-| `StalemateRule` | stalemate |
-| `InsufficientMaterialRule` | insufficient material |
-| `FiftyMoveRule` | the fifty-move rule |
-| `ThreefoldRepetitionRule` | threefold repetition |
-| `MutualAgreementRule` | mutual-agreement draw |
-| `FlagFallRule` | loss on time, and only where the opponent retains mating material |
-| `BishopColourRule` | each bishop confined to the shade of square it started on |
-| `RoyalPieceKind` | which piece kind may be put in check |
+| Class | File | Rule |
+|---|---|---|
+| `RoyalPieceKind` | `royal.py` | which piece kind may be put in check |
+| `CastlingRule` | `castling.py` | castling |
+| `EnPassantRule` | `en_passant.py` | en passant |
+| `PromotionRule` | `promotion.py` | promotion |
+| `BishopColourRule` | `bishop_colour.py` | each bishop confined to the shade of square it started on |
+| `CheckRule` | `check.py` | check |
+| `CheckmateRule` | `check.py` | checkmate |
+| `StalemateRule` | `check.py` | stalemate |
+| `InsufficientMaterialRule` | `draws.py` | insufficient material |
+| `FiftyMoveRule` | `draws.py` | the fifty-move rule |
+| `ThreefoldRepetitionRule` | `draws.py` | threefold repetition |
+| `MutualAgreementRule` | `draws.py` | mutual-agreement draw |
+| `FlagFallRule` | `flag.py` | loss on time, and only where the opponent retains mating material |
 
 **The count this file used to give was eleven, and two rules were outside it.**
 `BishopColourRule` was never named anywhere in this file, though
@@ -830,21 +1014,59 @@ is a `Rule` subclass like the other twelve, which is why the count was eleven
 where the directory holds thirteen. It declares a kind rather than judging a
 position, and FR-14 is what it exists for.
 
-**Also removes**, from the validator: `find_king`, `is_check`, `is_checkmate`,
-and every `getType() == "king"` / `== "pawn"` comparison and every `hasattr`
-probe. Those become behaviour of the chess configuration. The three remaining
-`getType()` comparisons are in `games/chess/rules/` — `attacks.py`, `castling.py`
-and `draws.py` — which is where they belong.
+**What the engine no longer holds.** The hard-coded special cases are gone:
+`MoveValidator.find_king` is replaced by `find_royal` (`validator.py:181`), which
+asks the active rule set which kind is royal rather than comparing a string; and
+the `PIECE_CHARS` table with its `"p"` fallback is gone from the FEN writer, which
+now asks the piece (`ChessNotationWriter._fen_letter`,
+`export_writers.py:96`).
+
+**What PR 11 said it also removes, and did not.** The claim was that `find_king`,
+`is_check`, `is_checkmate`, every `getType() == "king"` / `== "pawn"` comparison
+and every `hasattr` probe are gone. `find_king` is gone. **`is_check`
+(`validator.py:244`) and `is_checkmate` are both still there**, and they are
+called from `manager.py:205,209,347,348`. Neither is *hard-coded* coupling —
+neither names a piece type — but neither was removed either.
+
+**Where `getType()` actually still is.** Eighteen call sites across eight files:
+
+| Location | Sites |
+|---|---|
+| `games/chess/rules/` | **11 across 5 files** — `attacks.py:62,98`, `castling.py:84,145,191,215`, `draws.py:128,318,375`, `bishop_colour.py:90`, `promotion.py:102` |
+| `games/checkers/rules/` | 4 across 3 files — `draws.py:100`, `limited_kings.py:68`, `geometric.py:89,131` |
+| `model/game/` | **3 across 2 files** — `validator.py:199`, `manager.py:345,346` |
+
+An earlier revision of this section said "the three remaining `getType()`
+comparisons are in `games/chess/rules/` — `attacks.py`, `castling.py` and
+`draws.py`". There are **eleven** in that directory, across **five** files:
+`bishop_colour.py` and `promotion.py` were not named.
+
+**Where `hasattr` actually is.** Five probes, all in one file:
+`model/game/clock_fields.py:53,64,94,101`. They ask what a clock object holds,
+which is how the Clocks section describes a clock that derives from nothing — see
+`notes/object_model.md` §20. The claim that `hasattr` coupling is left "anywhere
+under `model/`" is therefore false.
 
 Rank-relative rules generalise: the home rank, the knight-forward file and the
 castling rook files are derived from the configured board rather than assumed to
-be 1, 8 and `a`–`h`.
+be 1, 8 and `a`–`h`. `CastlingRule.home_row` (`castling.py:44`) and
+`CastlingRule.start_file` (`:56`) read the board, and the castle loop bounds
+`rook_file` and `king_dest` against `position.cols`. **No test exercises castling
+or en passant on a non-8×8 board** — §8 item 12.
 
 **Acceptance criteria**: each rule passes a game with it enabled and a game with it disabled,
 and the difference is the setting rather than a code path; no `getType()` or
 `hasattr` coupling is left anywhere under `model/`, `controller/` or `view/`; a
 custom piece whose kind is not `"king"` neither crashes nor silently disables
 check.
+
+**Which of those hold.** The first holds for twelve of the thirteen:
+`BishopColourRule` is named only as a string in the rule-order list at
+`tests/test_chess_rules.py:62` and no test drives it on or off through a game. The
+second does **not** hold — see the two tables above. The third holds:
+`test_validator.py:20-26` shows a validator with no rules in force has no royal
+piece and `test_chess_rules.py:276-281` shows a non-`king` kind disables check
+without crashing.
 
 **Needs**: 10. **Blocks**: 13, 14, 18.
 
@@ -879,7 +1101,7 @@ is green with no `properdocs.yml` edit.
 
 **Needs**: 11. **Blocks**: 17.
 
-### Wave C — three PRs
+### Wave C — two PRs (14 and 18)
 
 **Verification**: `pytest -q`, `black --check .`, and
 `python -m properdocs build --strict`, plus the specific commands in the
@@ -894,7 +1116,8 @@ corresponding issue.
 `WindowController` are instantiated and driven by the game loop.
 `GameManager.players` is linked to users. `Timer.add_time` actually applies
 increment. The `hasattr(user, "add_quest")` probe becomes a real call:
-`manager.py:375` calls `user.add_quest(quest)`.
+**`manager.py:384`** calls `user.add_quest(quest)`. (An earlier revision of this
+file cited `manager.py:375`, which is `self.quest_manager.observe_result(event)`.)
 
 **Acceptance criteria**: a complete game runs end to end headless, from `new_game` through a
 finished result, with quests firing, clocks ticking, the transcript recording
@@ -977,10 +1200,14 @@ configuration; and `view/code_editor.py` edits rule and quest source, checked by
 **Needs**: 15. **Blocks**: nothing further; 17 and 19 run in parallel.
 
 One spec-driven form renderer: every configurable type declares its fields, and
-one renderer turns that declaration into widgets. Sections for Board, Pieces,
-Rules, Quests, Clocks. A corner selector meaning *which configuration is being
-edited* — settings only. An "edit logic" code editor for rules and quests,
-writing into the configuration directory and validating before the code may join.
+one renderer turns that declaration into widgets. `Board.value_fields()`,
+`Piece.value_fields()`, `Rule.value_fields()`, `Quest.parameters()` and
+`model/game/clock_fields.py:clock_fields` are the declarations; `Field` is the
+declaration type. **There is no `Configurable` class and no `spec()`** — see
+`notes/object_model.md` §9. Sections for Board, Pieces, Rules, Quests, Clocks. A
+corner selector meaning *which configuration is being edited* — settings only. An
+"edit logic" code editor for rules and quests, writing into the configuration
+directory and validating before the code may join.
 
 **Acceptance criteria**: a form is assembled for each section without hand-built widgets; a
 new field kind is one widget and every section inherits it; the editor refuses
@@ -994,10 +1221,11 @@ renamed, duplicated, edited, deleted and copied as a folder.
 corresponding issue.
 #### PR 17 — `games/checkers/`
 
-**State**: partial — the game is delivered and held to the published perft
-counts. Its two exporters are not.
+**State**: partial — the game is delivered, held to the published perft counts,
+and it declares **zero** exporters.
 
-**Needs**: 12, 13, 18 — it ships *letter* and metadata exports, and PR 18 is what makes those possible. **Blocks**: 21.
+**Needs**: 12, 13, 18 — it is meant to ship *letter* and metadata exports, and PR
+18 is what makes those possible. **Blocks**: 21.
 
 Full English draughts: twelve pieces a side, men moving one square forward
 diagonally, kings sliding any distance diagonally, **mandatory capture including
@@ -1006,14 +1234,53 @@ or by losing all pieces. Exports: *letter* and the metadata header. **No FEN** �
 a draughts position has none, and the structure says so rather than a runtime
 check.
 
+**What was built against that paragraph.** The board is 8×8 with twelve pieces a
+side, men step one square forward diagonally, crowning keeps the man in play, and
+`CaptureRule` / `LandingRule` / `CrowningRule` / `ImmobilisationRule` are in
+force. **Five points of the paragraph are not what ships**, and none of them was
+recorded before this correction; `notes/object_model.md` §21 now records each:
+
+- **The king flies.** `games/checkers/pieces/king.py` slides any distance. WCDF
+  English draughts steps one square; flying kings are international, Brazilian,
+  Czech and Dutch. The configuration's own module docstring says so.
+- **Fifty-move defaults to 100 plies**, which is fifty moves by each side. WCDF
+  says forty moves by each side, eighty plies. The field is configurable, so a
+  club can set it, but the shipped default is not the rulebook's.
+- **There is no threefold repetition.** The eight rules in
+  `games/checkers/rules/__init__.py` do not include one.
+- **Insufficient material draws two-king-against-one.** The rule ends any position
+  in which neither side still holds a man. Its own docstring calls this "not an
+  English draughts rule and not quite true".
+- **`LimitedKingsRule` and `CaptureRule` are non-English variants.**
+  `LimitedKingsRule` caps how many kings a side may hold, which no rulebook does.
+  `CaptureRule`'s maximum-capture restriction ships switched **off**, which *is*
+  the rulebook's game — that one is configured correctly.
+
+**`build_configuration()` declares `exporters=[]`** (`games/checkers/__init__.py`).
+An earlier revision of this section said the configuration's "two exporters" were
+absent; it declares none at all, so the gap is two writers to write, not two that
+exist and are wrong. Issue #158 records it as "declares two exporters", which is
+also wrong.
+
 **This PR is the executable proof of the abstraction.** If it needs an engine
 change that chess did not, the seam is in the wrong place — treat that as a
-failure of the abstraction, not of the PR.
+failure of the abstraction, not of the PR. **No engine file changed to add
+`games/checkers/`**, so this half of the acceptance criteria holds.
 
 **Acceptance criteria**: **zero engine changes**; mandatory capture is one `permits_move`
 rule; a three-capture chain is offered as one move; a man reaching the far rank
 is crowned; a player with no legal move loses; nothing in the engine mentions a
-king, a pawn, a check or a mate.
+king, a pawn, a check or a mate. The last holds for piece *types* — no engine
+module names one, and `tests/test_engine_holds_no_chess.py` proves it. It does not
+hold for the words: `MoveValidator.is_check` and `is_checkmate` are engine methods
+(§8 item 14).
+
+**How far the perft gate actually reaches.** `ENGINE_DEPTHS` in
+`tests/test_draughts_perft.py` is `(1, 2, 3, 4, 5, 6, 7)` — **the engine is walked
+to depth 7**. The independent reference counter in the same file is asserted
+against `PUBLISHED` to depth 8. The maximum-capture variant is walked to depth 6.
+Chess's own gate, `tests/test_perft.py`, walks to depth 4. **No test anywhere
+walks a perft to depth 9.**
 
 
 **Verification**: `pytest -q`, `black --check .`, and
@@ -1104,33 +1371,72 @@ colliding rules resolve by precedence, and a rule's `state` never reaches disk.
 
 The project is finished when all of these hold.
 
+**Read the annotations.** Several of these items were written as if a gate
+existed. Where nothing asserts them, the annotation says so and names what *is*
+asserted. An unannotated item here is a target, not a verified state.
+
 **Quality gates**
 
 1. `pytest` green, and no surviving test asserts only on repository metadata.
-2. Every public method is reachable from at least one test.
-3. `black --check .` clean at line length 100.
-4. `properdocs build --strict` clean, zero warnings.
-5. No third-party runtime import anywhere under the project source.
-6. No board dimension is hard-coded outside `Board.DEFAULT_DIMENSIONS` and a configuration's own `DIMENSIONS`. The invariant is asserted against the board API, not by grepping every `8` in the tree — docstrings legitimately say "8-direction" and file paths contain `utf-8`.
+   **Partly true.** `pytest` is green. One test asserts only on repository
+   metadata:
+   `tests/test_docs_and_docstrings.py::test_generated_docs_directory_is_not_tracked`
+   runs `git check-ignore --quiet .docs/index.md`. §5 explains why it is left in
+   place. Everything `PRD.md` §3.2 names — `AGENTS.md`, workflow YAML, `notes/`,
+   `README.md`, the `CLAUDE.md` symlink, import smoke — is gone.
+2. Every public method is reachable from at least one test. **Not asserted, and
+   not true on a name screen.** No test enforces this, and the sweep in §4.3
+   finds 67 of 384 public methods and functions whose name never appears in
+   `tests/` — among them `GameManager.start_turn` and `cancel_move`,
+   `GameLogger.file_path`, `MoveValidator.set_board`, `ResultEvent.moves_by`,
+   `QuestManager.register_quest`, `longest_chain`, `FiftyMoveRule.reset_count`,
+   `BoardView.set_selection` and `set_in_check`, and every
+   `games/checkers/rules/geometric.py` helper. Some of those are reached
+   internally; that is precisely the distinction PR 21 has to make and has not.
+3. `black --check .` clean at line length 100. **True** — 127 files unchanged.
+4. `properdocs build --strict` clean, zero warnings. **True**, and
+   `tests/test_docs_and_docstrings.py::test_docs_config_and_strict_build` runs the
+   build.
+5. No third-party runtime import anywhere under the project source. **True** —
+   `tests/test_packaging.py::test_no_third_party_runtime_import_under_the_project_source`.
+6. No board dimension is hard-coded outside `Board.DEFAULT_DIMENSIONS` and a configuration's own `DIMENSIONS`. **True in the tree, not asserted as an absence.** The only dimension literal under `model/`, `controller/` or `view/` is `Board.DEFAULT_DIMENSIONS = (8, 8)` at `model/game/board.py:30`; every other `8` in those trees is tkinter padding or prose. But no test asserts the absence. What is asserted is the *consequence*, by exercising the board API at 8×8, 10×10 and 5×7 (`tests/test_board_generalisation.py`): construction, placement, bounds-checked validation, sliding, capture, an engine promotion on the far rank of whatever size the board is, and a FEN record whose rank count matches `rows`. That covers the paths those tests touch and not every path in the tree. An earlier revision of this item said the invariant "is asserted against the board API", which overstated it.
 
 **Rules and configurations**
 
 7. `Rule` has the five hooks, each defaulting permissively, and `Result` carries
    a kind, a precedence and an optional winner.
 8. Every rule in `notes/chess_rules.md` implemented, each driven on and off
-   through one game.
+   through one game. **Implemented: yes, thirteen of thirteen. Driven on and off:
+   twelve of thirteen.** `BishopColourRule` is the exception. It appears in
+   `tests/test_chess_rules.py:62` only as a string in the rule-order assertion,
+   and no test constructs it, so the rule `notes/chess_rules.md` §2 mandates has
+   no behavioural test at all.
 9. Logic beyond any shipped set is expressible without touching the engine.
 10. Two colliding rules resolve by precedence, tested with rules written to
     collide.
 11. A rule's configured `value` persists; its runtime `state` resets each game
     and never reaches disk.
 12. Those rules hold on non-8×8 boards, rank-relative rules generalised.
+    **Half asserted.** `tests/test_board_generalisation.py` builds 8×8, 10×10 and
+    5×7 boards and exercises move validation, sliding, capture, an engine-level
+    promotion and FEN serialisation on each. `CastlingRule` and `EnPassantRule`
+    derive their files from the board in code (`castling.py:44,56`, and the
+    `position.cols` bounds at `:105`), but **no test plays either on a board that
+    is not 8×8**. "Generalised" is a statement about the code here, not a
+    verified behaviour.
 13. A move may consist of several hops.
 14. Nothing in the engine mentions a king, a pawn, a check or a mate.
+    **True for piece *types*, false for the words.** `MoveValidator.is_check` and
+    `is_checkmate` are engine methods (`validator.py:244` and the `is_checkmate`
+    call at `manager.py:205`), and `is_check` is an `MoveEvent` field. Neither
+    names a piece type, which is what the requirement is for — §7 PR 11 spells out
+    which half holds.
 
 **Quests**
 
-15. `Quest.validate()` takes no arguments and matches the diagram.
+15. `Quest.validate()` takes no arguments and matches the diagram. **True, and
+    asserted** — `tests/test_quest.py:58` inspects `Quest.validate`'s signature
+    and every built-in subclass's.
 16. Every built-in quest completes on its intended event and not before.
 17. Quests in play and quests completed are held separately; XP is derived.
 
@@ -1140,7 +1446,15 @@ The project is finished when all of these hold.
     deleted.
 19. A configuration is a directory that can be copied to create a variant.
 20. `checkers` is full English draughts and requires **no engine change**, and it
-    offers the two formats that mean something for it.
+    offers the two formats that mean something for it. **The engine-change half
+    holds; the rest does not.** No engine file changed to add `games/checkers/`.
+    But `PRD.md` FR-54 asks for the rulebook's English draughts and this
+    configuration plays a different game: the king flies where WCDF English steps
+    one square, fifty-move defaults to 100 plies where WCDF says 80, there is no
+    threefold repetition, insufficient material draws two-king-against-one, and
+    `LimitedKingsRule` and `CaptureRule` are non-English variants. It offers
+    **zero** formats, not two. `notes/object_model.md` §21 records each departure;
+    planned PR 17 owns closing them.
 
 **Interface**
 
@@ -1150,8 +1464,11 @@ The project is finished when all of these hold.
 23. The editor refuses invalid code before it joins a configuration.
 24. A game is played end to end from the entry point to a result.
 24a. `games/` ships with the installed package, so a clean install finds its own
-    default configuration **and the second one** — `pyproject.toml` lists
-    `games.chess` and omits `games.checkers` today (§4.1).
+    default configuration **and the second one**. **This now holds.**
+    `pyproject.toml` names `games`, `games.chess` with its six subpackages, and
+    `games.checkers` with its six — commit `319ed0d`. `tests/test_packaging.py`
+    resolves `games_root()` and asserts the shipped configurations are there; no
+    test performs a real `pip install` into a clean environment.
 
 **Export**
 
@@ -1164,13 +1481,29 @@ The project is finished when all of these hold.
 **Object model and hygiene**
 
 29. All fifteen Czech aliases importable and identical to their canonical
-    objects; `Tower`, `Horse` and `Controller` gone.
+    objects; `Tower`, `Horse` and `Controller` gone. **True, and asserted** by
+    `tests/test_aliases.py`, which reads the fifteen-row table from
+    `notes/object_model.md` and checks every row against the source.
 30. Every deviation recorded in `notes/object_model.md` with approval context.
+    **Now true.** The audit behind this correction found eleven unrecorded
+    departures; §21, §22, §23 and §24 of that file record them, and §3, §7, §9,
+    §11, §13 and §15 have been corrected against the code.
 31. `notes/chess_rules.md` amended where board generalisation departs from it.
 32. Nothing in §4.3's unreferenced list survives the PR 20 re-check; the §4.4
-    docstring gaps are closed.
+    docstring gaps are closed. **The docstring half holds; the other half has not
+    run.** §4.4's two gaps are closed and `tests/test_docs_and_docstrings.py`
+    holds the invariant. But §4.3's unreferenced table has **ten rows — nine
+    genuinely unreferenced, plus `_SourceLoader.create_module`, which is excluded
+    because the import machinery calls it** — and PR 20's re-check has not
+    happened, so this item is outstanding by definition.
 33. CI green across `3.10`, `3.11`, `3.12`, `3.13`, depending on no external
-    repository's workflow.
+    repository's workflow. **False on the main stack.** There are 13 workflows
+    there and **11 call the pinned DarkFactory pipeline** — including `ci.yml`
+    itself. Native CI lives only on `feature/native-ci-workflows`, a branch 24
+    commits behind the tip that cannot be merged without a rebase (§6 PR 4). The
+    matrix is 3.10–3.13, and the `3.10`–`3.13` claim about *this* repository's
+    own `ci.yml` is untested while it delegates. `verify-view.yml` is the one
+    workflow on the main stack that runs the tkinter tests at all.
 
 ---
 
@@ -1179,13 +1512,13 @@ The project is finished when all of these hold.
 | Risk | Severity | Mitigation |
 |---|---|---|
 | Real PGN requires SAN disambiguation, which is easy to get subtly wrong — `Nbd7` versus `N1d7` versus `Nd7` | High | Each case gets its own test: two knights, three queens, two rooks on one rank, a pinned piece that can still legally reach the square, promotion capture. A round-trip against known-good PGN is the backstop |
-| `getType()` and `hasattr` coupling fails **silently** on rename or on a custom piece | High | PR 11 removes it. PR 20 ships tests that fail when a probe breaks, not only when a name changes |
+| `getType()` and `hasattr` coupling fails **silently** on rename or on a custom piece | High | PR 11 removes it. PR 20 ships tests that fail when a probe breaks, not only when a name changes. **Partly discharged already**: the *hard-coded* kind comparisons are gone and `tests/test_engine_holds_no_chess.py` reads the chess catalogue from the configuration so the gate cannot drift. What remains is 18 `getType()` sites and five `hasattr` probes, listed in §7 PR 11 |
+| Deleting 51 collected tests masks a regression | Medium | Every deletion is import-only or metadata-only, and one `docs_hooks.py` test was rewritten to read a `tmp_path` fixture instead of real `notes/`. PR 21 adds behavioural coverage. §5 gives the exact count |
 | The flatten makes the whole repo the docs tree, and `exclude_docs` has to do work `docs_dir: src` did by construction | High | PR 2. Fallback is a dedicated docs directory rather than widening the tree |
 | A flat layout breaks setuptools auto-discovery over `tests/` | Medium | PR 6 sets `packages` explicitly |
 | Removing DarkFactory leaves the repository without working required checks | High | PR 4 lands the replacement and gets it green before removing anything |
 | `checkers` needs an engine change that chess did not | High | That is the point of shipping it. Treat it as a failure of the abstraction and fix the abstraction, not the game |
 | A multi-hop move model change destabilises ordinary single-hop moves | Medium | PR 12 tests a one-hop move through the same path as a three-hop chain |
-| Deleting 62 tests masks a regression | Medium | Every deletion is import-only, metadata-only, or a `docs_hooks.py` test rewritten to avoid asserting on `notes/` content. PR 21 adds behavioural coverage |
 | `tkinter` is absent from some Linux distributions | Medium | PR 15 installs `python3-tk` in CI and keeps tests within `Tcl()` and `ttk.Style()` |
 | Customisable pieces, board geometry and rules all rest on one declaration mechanism | Medium | Every form is generated from it, so a defect shows up uniformly and is fixed once |
 | The stack is deep; a late rework invalidates the bottom | Medium | Phase 1 absorbs the mechanical work, and the wide waves at the front mean the risky chain starts while the stack is short |

@@ -56,17 +56,42 @@ user request adds it.
 - **Context**: the diagram defines no settings layer. `GUI_mockup.svg` requires a
   SETTINGS tab and states *"No SettingsView or SettingsController"* and *"No
   Settings model/controller/view exists yet."*
-- **Deviation**: `SettingsView`, `SettingsController` and a settings model are
-  added to the view and controller layers. They have no counterpart in any
-  diagram box.
+- **Deviation**: a settings surface is added to the view layer. **The classes are
+  named below, and they are not the two names the mockup uses.**
+- **What was actually built, corrected 2026-10-04.** An earlier version of this
+  section named `SettingsView`, `SettingsController` and a settings model.
+  **Neither `SettingsView` nor `SettingsController` exists, and there is no
+  settings model class.** `rg 'class ' view/` returns exactly eight classes:
+
+  | Class | File | What it is |
+  |---|---|---|
+  | `SettingsDialog` | `view/settings_dialog.py` | the settings form: `SECTIONS`, the corner selector, the five sections, one renderer |
+  | `CodeEditor` | `view/code_editor.py` | the editor for rule and quest source |
+  | `StartModal` | `view/start_modal.py` | the modal that offers a configuration, Settings and Start |
+  | `QuestCard` | `view/quest_view.py` | one quest's progress and reward |
+  | `QuestList` | `view/quest_view.py` | the quest panel |
+  | `BoardView` | `view/game_view.py` | the drawn board |
+  | `PlayerGameView` | `view/player_game_view.py` | the window a game is played in |
+  | `PlayerView` | `view/player_view.py` | one player's panel |
+
+  The mockup's two names were its own placeholders — it says they do not exist —
+  and they are not reproduced. The surface is a **dialog**, not a view and a
+  controller: it holds no game state and calls nothing on the controller except
+  through the manager it is handed. What plays the part of the "settings model"
+  is the declaration side of `notes/object_model.md` §9 — `Field`, plus
+  `Board.value_fields()`, `Piece.value_fields()`, `Rule.value_fields()`,
+  `Quest.parameters()` and `model/game/clock_fields.py` — which is data the
+  renderer consumes, not a class.
 - **Rationale**: the board, pieces, rules, quests and clocks must be
   configurable, and rule logic must be authored. Without a settings layer none
   of that is reachable, and the mockup's configuration surface — the product's
   primary purpose — cannot be delivered.
-- **Mitigation**: the settings classes are thin adapters over the model. They
-  hold no game state and add no rules, so the deviation is additive and does not
+- **Mitigation**: the settings surface is a thin adapter over the model. It
+  holds no game state and adds no rules, so the deviation is additive and does not
   alter the object model the diagram defines.
-- **Approval**: recorded with explicit user approval, 2026-10-02.
+- **Approval**: recorded with explicit user approval, 2026-10-02. The correction
+  to the class names above is a documentation correction, 2026-10-04; it changes
+  no code and needs no new approval.
 
 ### 4. Rule, Quest, and the Configuration Concept
 
@@ -109,7 +134,13 @@ user request adds it.
   default configuration the game behaves as the drawn model describes.
   Its drawn operations map onto the new mechanism as follows: `simulate_Move()`
   is satisfied by `Rule.available_moves`, `check_Šach()` and `check_Mat` and
-  `check_Pat` are outcomes proposed through `Rule.outcome`. See FR-60.
+  `check_Pat` are outcomes proposed through `Rule.outcome`. **See FR-61**, which
+  is the requirement that preserves the validator's four drawn operations.
+  *Corrected 2026-10-04: this sentence cited FR-60, which is the requirement for
+  `Uzivatel` and `User Manager` and has nothing to do with the validator. It is
+  the same off-by-one class of error that `PRD.md` §7.10 had and that was corrected
+  there on the same pass; every other FR reference in this file has been checked
+  against `PRD.md` §7 and §7.11 and resolves correctly.*
 - **Correction to an earlier claim in this file**: a previous version asserted
   that the four drawn operations were retained *unchanged*, and that one class per
   export format extends a base in the manner of the diagram's `Extends` relation.
@@ -211,6 +242,18 @@ Recorded because the question is fair and the answer is not obvious.
   chess formats and live in `games/chess/export/`. A game with no FEN
   representation has no FEN exporter, because the structure says so rather than
   a runtime capability check deciding.
+- **`SurviveWithoutCapture` asks for quiet moves, not for moves that cost you nothing.**
+  Its description read "Play the required number of moves without losing a piece",
+  while `observe_move` counts a move only when `not event.is_capture` — that is, when the
+  player captured nothing. The two readings are different games: a player cannot lose a
+  piece on their own move, so the description's reading makes this quest a copy of
+  `SurvivePlies`, which already exists. The class name, the `Untouchable` display name and
+  the long-standing test all say quiet moves, so the description was the record that was
+  wrong, and it was corrected on 2026-10-04. **The behaviour was not changed**: choosing
+  between the two readings is a product decision, and if the intent really is "survive
+  untouched" then `SurvivePlies` should be dropped instead. Recorded here rather than
+  settled in code, and open for the maintainer to rule on.
+
 - **Experience is derived, not stored.** The mockup shows quests carrying an XP
   reward, but `reward_points` appears on neither the diagram's `Quest` nor
   `Uzivatel`. `Uzivatel.splnene_kwesty: List(Kwest)` already holds the completed
@@ -239,10 +282,19 @@ Recorded because the question is fair and the answer is not obvious.
   `Rule` and `Quest`. Applying one test consistently means applying it here too.
   The difference is that section 4 rests on a generalization edge the diagram
   genuinely draws (`Kůň → Figurka`), while this one does not.
-- **Mitigation**: the diagram's three named members all survive as classes —
-  `export writers` becomes the `ExportWriter` base with its `field`, and
-  `MetadataWriter` keeps its name and its `method(type): type`. Nothing is
-  renamed away.
+- **Mitigation**: the diagram's three named members do **not** all survive.
+  Corrected 2026-10-04; the earlier text claimed all three did, and two of the
+  three do not exist in any form:
+
+  | Drawn member | In the code |
+  |---|---|
+  | `export writers` · `field: type` | **present** — `ExportWriter.field` (`model/misc/export_writers.py:46`) |
+  | `MetadataWriter` · `method(type): type` | **absent** — `MetadataWriter` has `set_header`, `get_header`, `format_pgn_headers` and `export`, and no `method` |
+  | `ChessNotationWriter` · `item: attribute` | **absent** — `ChessNotationWriter` has `formats`, `_fen_letter`, `to_fen`, `to_pgn`, `to_stenographic` and `export`, and no `item` |
+
+  `MetadataWriter` keeps its **name**, and no writer is renamed away. The two
+  absent members are registered in §23. `QuestManager`'s drawn `field` and
+  `method(type): type` are absent as well; `QuestManager` itself survives.
 - **Approval**: directed by the user on 2026-10-02 — *"maybe have export
   generalized same way"*.
 
@@ -265,9 +317,31 @@ Recorded because the question is fair and the answer is not obvious.
 - **Date**: 2026-10-02
 - **Context**: the diagram has no declaration or rendering layer. The mockup
   requires every configurable surface to be editable.
-- **Deviation**: a `Field` declaration type and a `Configurable` protocol with
+- **Deviation**: a `Field` declaration type, a `value_fields()` declaration hook
+  that `Board`, `Piece` and `Rule` each declare, `Quest.parameters()` for a quest,
+  a `clock_fields()` function for a clock, and one form renderer that turns a
+  declaration into widgets.
+- **Correction, 2026-10-04: there is no `Configurable` class and no `spec()`.**
+  This section previously registered "a `Configurable` protocol with
   `spec() -> list[Field]`, conformed to by `Board`, `Piece`, `Clock`, `Rule` and
-  `Quest`, plus one form renderer that turns a declaration into widgets.
+  `Quest`". Neither exists. `rg 'def spec|class Configurable'` over the tree
+  returns nothing. What exists is four separate declarations and one renderer:
+
+  | Type | Declaration | Where |
+  |---|---|---|
+  | `Board` | `value_fields()` | `model/game/board.py:68` |
+  | `Piece` | `value_fields()` and `apply_values()` | `model/pieces/piece.py:123,160` |
+  | `Rule` subclass | `value_fields()` | `model/game/rule.py:191` |
+  | `Quest` subclass | `parameters()` | `model/game/quest.py` |
+  | a clock | `clock_fields(clock)` | `model/game/clock_fields.py:28` |
+  | the renderer | `SECTIONS`, `_WIDGETS`, the section builders | `view/settings_dialog.py:37` |
+
+  **`Clock` is not among them because there is no `Clock` class** — §13 registered
+  one as the intention and §20 records that it is unbuilt. That is why a clock is
+  declared by a function rather than by a method: there is no parent for the hook
+  to hang off. A clock that *does* declare its own `value_fields()` is asked first
+  (`clock_fields.py:43`), so a configuration with a richer clock gets a richer form
+  for free.
 - **Rationale**: it is what lets one settings screen serve every surface, so a new
   field is one widget rather than one bespoke form. Without it the settings
   surface duplicates itself five times.
@@ -298,8 +372,20 @@ Recorded because the question is fair and the answer is not obvious.
   `typ tahu` — one start, one end, one piece. There is no structure for a move
   that visits several squares.
 - **Deviation**: a move that visits several squares is a subclass of the drawn
-  move. `Move` is unchanged; `HopMove(Move)` in `games/checkers/moves.py` carries
-  the hop sequence, and it is declared by the configuration whose game needs it.
+  move. `HopMove(Move)` in `games/checkers/moves.py` carries the hop sequence, and
+  it is declared by the configuration whose game needs it.
+- **Correction, 2026-10-04: `Move` is not untouched.** This section said "`Move` is
+  unchanged", and so did `SCRATCHPAD.md` §4.7 and its planned-PR-12 section before
+  this pass. `Move`
+  gained four members after this section was written, none of them draughts-shaped
+  and all of them needed by chess: `captured_piece`, `capture_from`,
+  `companion_start` and `companion_end` (`model/game/move.py:67-72`). The first
+  records a taken piece while the board still holds it, the second the square a
+  distant capture's victim stood on, and the last two the second square pair a
+  castling rook needs. **What is true is the narrower claim this section makes in
+  its own Mitigation: no *hop-sequence* member was added to `Tah`, and nothing
+  under `model/`, `controller/` or `view/` grew a draughts-shaped member.** The
+  claim is about the hop sequence, not about the class.
 - **What the subclass carries**: `hops`, the landing square of each jump in
   order, of which the last is the move's `end_pos`; `captures`, the square each
   taken piece stood on, one per hop, which cannot be derived because a king's
@@ -319,11 +405,17 @@ Recorded because the question is fair and the answer is not obvious.
   the deviation: nothing under `model/`, `controller/` or `view/` grows a
   draughts-shaped member, which is the same requirement FR-55 states and the same
   one the checkers configuration exists to test.
-- **Mitigation**: `Tah`'s members are untouched; a subclass is added. One caller
-  does not survive: a caller that rebuilds the board from a snapshot rather than
-  undoing, because `Move` records the mover and `HopMove` checks it by identity.
-  `tests/test_draughts_perft.py` walks by undoing for that reason.
+- **Mitigation**: `Tah`'s hop-related members are untouched; a subclass is added.
+  One caller does not survive: a caller that rebuilds the board from a snapshot
+  rather than undoing, because `Move` records the mover and `HopMove` checks it by
+  identity. `tests/test_draughts_perft.py` walks by undoing for that reason.
 - **Approval**: directed by the user on 2026-10-02, via the checkers requirement.
+- **Stale code docstring, recorded 2026-10-04.** `games/checkers/moves.py`'s
+  module docstring says this section "should be amended to say a `Move` subclass
+  carries the hops; it is not, and this docstring is the honest record until it
+  is". **This section was amended on 2026-10-02 and does say exactly that.** The
+  docstring is the stale half, not this section. Correcting it is a code change and
+  is owed; it was not made in the documentation pass that amended this file.
 
 ### 12. FEN Import
 
@@ -339,9 +431,17 @@ Recorded because the question is fair and the answer is not obvious.
 - **Date**: 2026-10-02
 - **Context**: the diagram's class is `Timer`, with `cas_hrac: List(int)`,
   `nuluj_cas()` and `pocitej_cas(hrac)`. **No increment is drawn anywhere.**
-- **Deviation**: the runtime countdown keeps the drawn name `Timer`; a
-  configurable parent `Clock` carries the settings a configuration declares — an
-  initial time and an increment — and a `Timer` is constructed from it.
+- **Deviation, as registered**: the runtime countdown keeps the drawn name
+  `Timer`; a configurable parent `Clock` is to carry the settings a configuration
+  declares — an initial time and an increment — and a `Timer` is constructed from
+  it.
+- **Status: registered, not built.** There is **no `Clock` class** in this
+  repository. Both shipped clocks — `games/chess/clocks/fischer.py` and
+  `games/checkers/clocks/fischer.py` — derive from nothing. What exists instead is
+  `model/game/clock_fields.py`, a function that declares a clock's fields by asking
+  what the clock object holds; see §20 for why it is a function and not a method.
+  `PRD.md` §4 and §6 have been corrected not to name `Clock` as a parent class
+  that exists. **A real `Clock` parent remains unbuilt and is recommended.**
 - **Rationale**: the increment is required by the configuration surface and has
   no drawn home. Splitting the drawn countdown from the configurable settings
   leaves the drawn class intact rather than renaming it away.
@@ -387,10 +487,17 @@ Recorded because the question is fair and the answer is not obvious.
     quest cards.
 - **How the drawn operations are served**: `GameView.aktualizuj_plochu()` —
   refresh the board when the controller reports a change — is
-  `PlayerGameView.refresh`, which calls `board_view.refresh` and
-  `board_view.set_selection`. `PlayerGameView.reload` and `on_new_game` call the
-  same pair. `GameManagerController.game_view: GameView` is satisfied by the
-  `PlayerGameView` that holds the board view.
+  `PlayerGameView.refresh`, which calls `board_view.refresh` and then
+  `board_view.set_in_check`. `PlayerGameView.reload` (`player_game_view.py:186-187`)
+  and `on_new_game` (`:207-208`) call `board_view.refresh` and
+  `board_view.set_selection` instead. `GameManagerController.game_view: GameView`
+  is satisfied by the `PlayerGameView` that holds the board view.
+  *Corrected 2026-10-04: this section said `refresh` calls `board_view.refresh`
+  and `board_view.set_selection`, and that `reload` and `on_new_game` "call the
+  same pair". Neither half was right. `refresh` calls `set_in_check`
+  (`player_game_view.py:223`); `set_selection` is called from
+  `on_square_clicked` (`:157,159`), `reload` (`:187`) and `on_new_game` (`:207`),
+  never from `refresh`.*
 - **Why composition rather than a third class**: the diagram's own
   generalisation idiom settles what the parent is. `BoardView` is the piece the
   diagram has no box for, `PlayerGameView` is the `HracGameView` it does, and a
@@ -610,6 +717,154 @@ Recorded because the question is fair and the answer is not obvious.
   so a symbol changed in the form changes the probe and not the class the configuration
   composes. Making a piece's identity configurable therefore needs the configuration to hold
   piece instances or declared overrides, which is not built.
+
+---
+
+### 21. `games/checkers` Is Not WCDF English Draughts
+
+- **Date**: 2026-10-04
+- **Context**: `PRD.md` FR-54 requires "a complete, correct **English draughts**
+  configuration", naming twelve pieces a side, one-square men, kings sliding any
+  distance diagonally, mandatory capture including chains, promotion on reaching
+  the far rank, and a win by immobilisation or by losing all pieces. FR-55 requires
+  it to need no engine change.
+- **The engine half holds.** No file under `model/`, `controller/` or `view/`
+  changed to add `games/checkers/`. That is the requirement FR-55 states and it is
+  satisfied.
+- **The "English draughts" half does not, in five places.** None of these was
+  recorded anywhere before this section. Each is a departure from what the diagram
+  and the product requirements describe, so `AGENTS.md` Rule 3 requires it here:
+
+  | # | FR-54 asks for | `games/checkers` ships | Evidence |
+  |---|---|---|---|
+  | 1 | a king **steps** one square | the king **slides** any distance — flying kings, which is international, Brazilian, Czech and Dutch draughts, not WCDF English | `games/checkers/pieces/king.py`; the configuration's own module docstring in `games/checkers/__init__.py` says so |
+  | 2 | the WCDF fifty-move draw | `plies` defaults to **100** (fifty moves each side); WCDF says forty moves each side, **80** plies. The field is configurable, the default is not the rulebook's | `games/checkers/rules/draws.py` `FiftyMoveRule.value_fields` |
+  | 3 | threefold repetition is one of the rulebook's draws | **no repetition rule exists.** `RULES` holds eight classes and none of them counts positions | `games/checkers/rules/__init__.py` |
+  | 4 | insufficient material is not an English draughts rule at all | `InsufficientMaterialRule` **is** in force and draws any position in which neither side still holds a man — which is two-king-against-one. Its own docstring: "not an English draughts rule and not quite true" | `games/checkers/rules/draws.py` |
+  | 5 | two non-English variants are not in the rulebook's game | `LimitedKingsRule` caps how many kings a side may hold, which no rulebook does, and it is in force. `CaptureRule` also ships, but its **maximum-capture restriction is off by default**, which *is* the rulebook's game — so `CaptureRule` is configured correctly and `LimitedKingsRule` is not | `games/checkers/rules/__init__.py`, `limited_kings.py` |
+
+- **Also absent, and not a departure**: `games/checkers` declares **zero**
+  exporters. `build_configuration()` passes `exporters=[]`. FR-54 and planned PR
+  17 ask for *letter* and the metadata header; neither exists. This is a
+  requirement not yet met rather than a departure from the diagram, and it is
+  recorded here so it is not mistaken for a writer that exists and is wrong.
+- **Mitigation**: none of this touches the engine or the diagram's classes. Each
+  departure is a rule's configured value or an absent rule inside one
+  configuration directory, which is exactly where `SCRATCHPAD.md` §2 says the
+  variation between games lives. Closing them is a change to
+  `games/checkers/` and to nothing else — which is the strongest evidence yet that
+  the abstraction holds.
+- **Approval**: **not approved.** Recorded 2026-10-04 as a measured discrepancy
+  between `PRD.md` FR-54 and `games/checkers/`. The decision to close the gap or to
+  amend FR-54 is the maintainer's; planned PR 17 owns either.
+
+---
+
+### 22. A Configuration Composes Its Quests Instead of Declaring Quest Files
+
+- **Date**: 2026-10-04
+- **Context**: `PRD.md` §6 states, as a fact about the layout, that
+  `games/<config>/quests/` is "one file per quest: logic and parameters". Neither
+  shipped configuration keeps a quest file there. `games/chess/quests/__init__.py`
+  is one docstring line and nothing else; `build_quests()` is declared in
+  `games/chess/__init__.py`. `games/checkers/quests/__init__.py` declares its own
+  `build_quests()` and its directory holds no quest file either.
+- **Deviation**: the twenty quest classes live in `model/game/quests.py` as one
+  library, and a configuration's `quests/` package composes the handful it ships.
+- **Rationale**: a configuration ships a handful of quests — chess composes six,
+  checkers four — and the whole library is twenty classes that would otherwise be
+  duplicated or split across directories without being made more configurable. The
+  classes are the unit; a configuration names which of them it plays.
+- **Why it needs recording at all**: `SCRATCHPAD.md` §2 called this "one declared
+  deviation from 'one file per entry'" before any deviation was declared anywhere,
+  and `PRD.md` §6 stated the layout with no annotation. Both are corrected on the
+  same pass: §2 now points here and `PRD.md` §6 now annotates the line.
+- **Not a diagram deviation.** The diagram draws `Quest` and `Kwest` and nothing
+  about file layout, so this is a departure from `PRD.md` §6 rather than from the
+  assignment specification.
+- **Approval**: **not approved.** Recorded 2026-10-04 as the correction of a claim
+  that had no record behind it.
+
+---
+
+### 23. Members the Diagram Draws That the Code Does Not Have, and Members the Code Has That the Diagram Does Not Draw
+
+- **Date**: 2026-10-04
+- **Context**: `AGENTS.md` Rule 3 makes an unrecorded departure a defect in both
+  directions. §7's mitigation claimed the diagram's three named export members all
+  survive. They do not. Separately, a sweep of the tree against
+  `notes/reference_diagram.md`'s inventory found members the diagram does not draw
+  and no section registered.
+
+**Drawn, and absent from the code.** Three members, four declarations:
+
+| Drawn member | Class | Status |
+|---|---|---|
+| `method(type): type` | `MetadataWriter` | **no `method` member.** `MetadataWriter` has `set_header`, `get_header`, `format_pgn_headers`, `export` |
+| `item: attribute` | `ChessNotationWriter` | **no `item` member.** The class has `formats`, `_fen_letter`, `to_fen`, `to_pgn`, `to_stenographic`, `export` |
+| `field: type` | `QuestManager` | **no `field` member** |
+| `method(type): type` | `QuestManager` | **no `method` member** |
+
+  §7's Mitigation has been corrected to say so. All three classes survive by name;
+  what is absent is these four declarations. `ExportWriter.field` — the `export
+  writers` box's one member — **is** present at `model/misc/export_writers.py:46`,
+  so the box the diagram draws smallest is the one that survived whole.
+
+**Not drawn, and present in the code.** Thirteen additions. None is registered
+anywhere before this section. None alters the diagram's classes or their
+relationships; each is an extension of a mechanism an earlier section registered.
+
+| Addition | What it is | Registered by |
+|---|---|---|
+| `MoveValidator.find_move` | `validator.py:490`. The move the rules offered between two squares, with whatever a rule attached to it — a capture chain, a promotion piece, a companion rook. **Required by the engine**: `controller/controller.py:70` uses it, and rebuilding a `Move` from two squares silently drops everything a rule attached | none — new here |
+| `Move.capture_from` | `move.py:55`. The square a taken piece stands on when it is not the destination | none — new here |
+| `Move.companion_start` / `companion_end` | `move.py:57,59`. The second square pair, for a move that carries a piece along — a castling rook | none — new here |
+| `Board.set_dimensions` / `is_within_bounds` / `apply_placement` | `board.py:85,120,194`. Board-size generalisation (FR-1, FR-15): the board exposes its own bounds instead of every caller taking them from a literal | §5, §16 — the *capability* is registered; the three methods were not named |
+| `MoveEvent`, `ResultEvent` | `model/game/events.py`. The two event records quests are handed. §4 registers `Quest` with a `validate()` that takes no arguments; without an event there is nothing for `observe_move`/`observe_result` to receive | §4 by implication; the classes were not named |
+| `Quest.observe_move` / `observe_result` | `quests.py:88,672`. How the event reaches a quest, since `validate()` takes nothing | none — new here |
+| `UnsupportedExportFormat` | `manager.py:27`. Raised when no declared writer offers the notation asked for, so "this configuration does not write that" is not an empty string that reads like a game with nothing to say | §19 part 1 covers `ExportWriter.formats()`; the exception was not named |
+| `QuestManager.field` | **not present** — see the table above | — |
+| `model/game/games.py` | Where the shipped configurations are resolved, the default is named and an unknown name is refused. §5 puts configurations in `games/`; this is the module that finds them | §5 by implication |
+| `view/code_editor.py` | The editor itself. §10 registered the *execution* of authored code; §20 part 2 registered the check | §10, §20 — the module was not named in either |
+| `model/game/clock_fields.py` | A clock's declared fields. §9 now records why it is a function and not a method | §9, §20 part 1 — named in §20 only |
+| `model/game/source_validation.py` | The check that runs before code joins a configuration | §10, §20 part 2 — the module was not named in either |
+
+- **Approval**: **not approved.** Recorded 2026-10-04 by a sweep of the tree
+  against `notes/reference_diagram.md`. None of the thirteen changes a class the
+  diagram draws, and none of them is the diagram being wrong about something it
+  does draw; they are additions to it, which is what this section is for. The four
+  absent members are a different matter and need the maintainer's decision: either
+  the diagram member is implemented, or this section stands as the record that it
+  was consciously not.
+
+---
+
+### 24. Two Docstrings in `games/checkers` Misdescribe the Rulebook and These Notes
+
+- **Date**: 2026-10-04
+- **Context**: two statements inside `games/checkers/` are false against the code
+  beside them. They are recorded here because this pass may not edit code under
+  `games/`, and because `AGENTS.md` Rule 2 makes the source docstrings the
+  documentation.
+- **`games/checkers/rules/draws.py:17`** states "The rulebook draws by agreement,
+  by threefold repetition, and by the rule above, and nothing else." **No
+  repetition rule is configured in `games/checkers/`** — see §21 item 3 — and the
+  module itself declares three rules, one of which (`InsufficientMaterialRule`) the
+  same sentence says the rulebook does not have. The sentence describes the
+  rulebook rather than the module, in a module that is the rulebook's
+  implementation; as written it reads as a description of the shipped rules and is
+  not one. **Correction owed**: it should say the rulebook draws by agreement, by
+  threefold repetition and by the fifty-move rule; that this configuration
+  implements the last two and not the third; and that its third rule is not the
+  rulebook's.
+- **`games/checkers/moves.py`** module docstring states that
+  `notes/object_model.md` §11 "should be amended to say a `Move` subclass carries
+  the hops; it is not, and this docstring is the honest record until it is."
+  **§11 was amended on 2026-10-02 and does say exactly that.** The docstring is
+  self-referential and stale. **Correction owed**: it should point at §11 as the
+  record rather than describing §11 as unamended.
+- **Approval**: not applicable — both are corrections of fact, not decisions. They
+  are owed as code changes under planned PR 12 and PR 17 respectively.
 
 ---
 
