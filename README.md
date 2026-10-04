@@ -35,16 +35,22 @@ what the test actually reaches.
 
 ## What is partial
 
-  - **Export is one writer per format now, and what each one writes is still wrong.**
-    `ExportPGN`, `ExportFEN` and `ExportStenographic` live in `src/games/chess/export/`;
-    the engine keeps only the `ExportWriter` protocol. FEN writes `- - 0 1` for
-    castling rights, the en passant square, the halfmove clock and the fullmove
-    number. PGN movetext is destination squares rather than SAN. The stenographic
-    writer emits coordinate pairs with no compression. *Letter* and
-    *Field - Field - Extra* are not written at all, and `src/games/checkers/` still
-    declares `exporters=[]` — no writer of any kind.
+- **Export is the largest hole.** All five of the diagram's formats have one
+  writer class each — `ExportPGN`, `ExportAlgebraic`, `ExportMetadata`,
+  `ExportFEN` and `ExportStenographic`, in `src/games/chess/export/`, and the engine
+  keeps only the `ExportWriter` protocol — so what three of them write is still
+  wrong. FEN writes `- - 0 1` for castling rights, the en passant square, the
+  halfmove clock and the fullmove number. PGN movetext is destination squares
+  rather than SAN. The stenographic writer emits coordinate pairs with no
+  compression. The header is derived from the players and the outcome and carries
+  no placeholders. `src/games/checkers/` still declares `exporters=[]` — no writer of
+  any kind.
+- **`src/games/checkers` is not WCDF English draughts.** The king flies where the
+  rulebook steps one square, the fifty-move rule defaults to 100 plies where the
+  rulebook says 80, there is no threefold repetition, and insufficient material
+  draws two-king-against-one. Each departure is recorded in
+  `notes/object_model.md` §21.
 - **`src/games/checkers` plays WCDF English draughts**, having not done so until
-    2026-10-04. Four things were wrong — the king flew where rule 1.17 has it
     step, the forty-move count defaulted to 100 plies where 1.32.2 says 80, there
     two-kings-against-one while it was still winnable. One divergence is kept on
     purpose: 1.32.1 is a claim to a referee and the engine proposes the draw

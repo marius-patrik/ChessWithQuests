@@ -276,10 +276,15 @@ compartment of the **`ChessNotationWriter`** box enumerates the formats — *let
 compression) — plus **the game transcript**, described as a single parameter.
 
 **Implemented 2026-10-05**: one writer class per format, in
-`games/chess/export/` — `ExportPGN`, `ExportFEN`, `ExportStenographic`. The class
-named `ChessNotationWriter` is deleted; it stood for three notations at once, and
-no name could be honest about that. *letter* as a format of its own and
-*Field - Field - Extra* are still unwritten.
+`games/chess/export/` — `ExportPGN`, `ExportAlgebraic`, `ExportMetadata`,
+`ExportFEN`, `ExportStenographic`, declared in that order so PGN leads. The class
+named `ChessNotationWriter` is deleted; it stood for five notations at once, and
+no name could be honest about that. *letter* is declared `Algebraic`: the two are
+one format, and `games/chess/export/algebraic.py` already held the naming.
+*Field - Field - Extra* is declared as written, and is the header record —
+`PRD.md` FR-48's one sentence is the whole of its description in this file, and
+`games/chess/export/metadata.py`'s module docstring records the reading taken
+where the diagram's prose stops.
 
 **All of them are implemented.** Nothing in this section is optional.
 
@@ -293,11 +298,11 @@ deviation in its own right — see `notes/object_model.md` section 7.
 | ID | Requirement |
 |---|---|
 | FR-43 | Export is one class per format, extending a base exporter named `ExportWriter`, living in the configuration that uses it. There is no format switch and no format-name string anywhere in the engine. |
-| FR-44 | *Letter* — the move is rendered in algebraic notation with piece letters, capture markers, promotion and castling notation. |
+| FR-44 | *Letter* — the move is rendered in algebraic notation with piece letters, capture markers, promotion and castling notation. **Shipped 2026-10-05** as `ExportAlgebraic`, declared `Algebraic`. The record is what the notation is and not Standard Algebraic Notation: piece letters, `x` for a capture, `=P` for a promotion and `O-O`/`O-O-O` for castling, with no check or mate suffix and no disambiguation between two identical pieces, because both of those belong to FR-45 |
 | FR-45 | *PGN* — real PGN: a seven-tag roster **derived from the game** (event, site, date, round, both players, result), and movetext in Standard Algebraic Notation, including piece disambiguation, castling notation, promotion, and check and mate suffixes. |
 | FR-46 | *FEN* — all six fields are **computed from the game state**: placement, side to move, castling rights, en passant square, halfmove clock and fullmove number. No field is hard-coded. |
 | FR-47 | *FEN* round-trips: import a position, build it, export it, obtain the identical string. Asserted for the start position, a mid-game position carrying both castling rights, and one carrying an en passant square. |
-| FR-48 | *Field - Field - Extra* — the game transcript header, derived from real state. Player names come from the users playing, the result from the game, the date from the game. No placeholder strings. |
+| FR-48 | *Field - Field - Extra* — the game transcript header, derived from real state. Player names come from the users playing, the result from the game, the date from the game. No placeholder strings. **Shipped 2026-10-05** as `ExportMetadata` in `games/chess/export/metadata.py`, supplied to the manager through `Configuration.metadata`. A field the game has nothing to say for carries `?`, which is how the seven-tag roster itself says *not supplied*; `Result` carries `*` while the game is unfinished |
 | FR-49 | *Stenographic* — the transcript in stenographic form, with compression that is either a standard choice or a configured one, drawn from the standard library codecs only. |
 | FR-50 | *The game transcript* — every move is recorded and readable, independently of any export format. |
 | FR-51 | A format that belongs to one game ships with that game. FEN and PGN are chess formats and therefore live in `games/chess/export/`; a game with no FEN representation has no FEN exporter, because the structure says so rather than a capability check. |
@@ -347,7 +352,7 @@ this project adds beyond the diagram is registered in `notes/object_model.md`.
 | `Quest` · `nazev`, `popis`, `validate()` | FR-18, FR-20 |
 | `QuestManager` · `field`, `method(type): type` | FR-23. **`QuestManager` exists** (`model/misc/quest_manager.py`) but holds **neither** drawn member — see `notes/object_model.md` §23 |
 | `ChessNotationWriter` · format list, `item` | FR-43 to FR-52. **No class named `ChessNotationWriter` exists** — it is deleted as of 2026-10-05, and its formats are `ExportPGN`, `ExportFEN` and `ExportStenographic` in `games/chess/export/`. **`item: attribute` is drawn and no member named `item` exists** in any of them — see `notes/object_model.md` §23 |
-| `MetadataWriter` · `method(type): type` | FR-48. **Drawn, and no `method` member exists** in `MetadataWriter` (`model/misc/metadata.py`) — see `notes/object_model.md` §23 |
+| `MetadataWriter` · `method(type): type` | FR-48. **Drawn, and no `method` member exists** in the class drawn as `MetadataWriter`, which is `ExportMetadata` in `games/chess/export/metadata.py` — see `notes/object_model.md` §23 |
 | `export writers` · `field` | FR-43. **`ExportWriter.field` was declared at `model/misc/export_writers.py:46` and is deleted** as of 2026-10-05: it was written once in `__init__` and read nowhere in the repository. The box the diagram draws with one member now has none — see `notes/object_model.md` §7 and §23 |
 | `GameManagerController` · `vyber_pole()` | FR-65 |
 | `GameVeiw` · `controller`, `aktualizuj_plochu()` | FR-37, FR-66. The diagram spells the class `GameVeiw`; no `GameView` class exists — `notes/object_model.md` section 15 |

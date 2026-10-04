@@ -54,14 +54,28 @@ Its operation compartment is prose rather than named operations, and enumerates:
 "(Standard or custom compression)" — together with **the game transcript**,
 described as arriving "as a single parameter".
 
-**What the code has, as of 2026-10-05.** Three of those five formats are written, one per
-writer class in `games/chess/export/`: `ExportPGN`, `ExportFEN` and `ExportStenographic`.
-*Letter* is absent as a format of its own — `games/chess/export/algebraic.py` provides the
-naming it needs, and `AlgebraicNotation` hands it to the window — and *Field - Field -
-Extra* has no code at all. **No class named `ChessNotationWriter` exists**; the box is
-recorded here because this file is an inventory of the diagram, not of the code.
-`notes/object_model.md` section 7 registers the arrangement and section 23 the members the
-diagram draws and the code does not have.
+**What the code has, as of 2026-10-05.** All five of those formats are now written, one per
+writer class in `games/chess/export/`: `ExportPGN` (PGN), `ExportAlgebraic` (the algebraic
+record), `ExportMetadata` (*Field - Field - Extra*), `ExportFEN` and `ExportStenographic`.
+**No class named `ChessNotationWriter` exists**; the box is recorded here because this file is
+an inventory of the diagram, not of the code. `notes/object_model.md` section 7 registers the
+arrangement and section 23 the members the diagram draws and the code does not have.
+
+**The declared spelling of *letter* is `Algebraic`.** The two are one format and not two:
+*letter* is what chess calls the notation whose squares are named by a letter and a number,
+and `ExportAlgebraic` writes exactly that. `AlgebraicNotation` already carried the name, and
+`games/chess/export/algebraic.py` already was the module — declaring the format under the
+diagram's own word would have left the file, the class and the configuration's `notation` all
+saying one thing while the writer declared another.
+
+**The reading of *Field - Field - Extra*, 2026-10-05.** The box is prose, not a grammar, and
+the repository held no code for it. `PRD.md` FR-48 is the only sentence describing it — *the
+game transcript header, derived from real state* — and that sentence is what is implemented:
+a header is a row of named fields and their values, `ExportMetadata` writes them as PGN tag
+pairs, the two sides come from the players and everything else from what the game did.
+`games/chess/export/metadata.py`'s module docstring records the reading and why the delimiter
+was PGN's rather than an invented third one. This is a reading of prose, not a conformance
+claim, and it is registered as such in `notes/object_model.md` section 23.
 
 The **`export writers`** box does **not** contain this list. It holds one field.
 Both facts are load-bearing: see `notes/object_model.md` section 7.
@@ -180,6 +194,8 @@ listed here are already English in the diagram.
 | `RevizorTahu` | `MoveValidator` | |
 | `Uzivatel` | `User` | |
 | `User Manager` | `UserManager` | |
+| `ChessNotationWriter` | no class of that name | deleted 2026-10-05; the box's format list is now five writers in `games/chess/export/` |
+| `MetadataWriter` | `ExportMetadata` | the box's one drawn member (`method(type): type`) does not exist in it. The rename follows from the class becoming one writer among five — `games/chess/export/metadata.py`, declaring *Field - Field - Extra* |
 | `Quest` | `Quest` | already English |
 | `Kwest` | `Quest` | appears only inside `splnene_kwesty` |
 | `Timer` | `Timer` | the configurable parent `Clock` is registered but **not built** — `notes/object_model.md` §13 and §20 |
