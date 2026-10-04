@@ -730,49 +730,66 @@ Recorded because the question is fair and the answer is not obvious.
 
 ---
 
-### 21. `games/checkers` Is Not WCDF English Draughts
+### 21. `games/checkers` Was Not WCDF English Draughts, and Now Is
 
-- **Date**: 2026-10-04
-- **Context**: `PRD.md` FR-54 requires "a complete, correct **English draughts**
-  configuration", naming twelve pieces a side, one-square men, kings sliding any
-  distance diagonally, mandatory capture including chains, promotion on reaching
-  the far rank, and a win by immobilisation or by losing all pieces. FR-55 requires
-  it to need no engine change.
-- **The engine half holds.** No file under `model/`, `controller/` or `view/`
-  changed to add `games/checkers/`. That is the requirement FR-55 states and it is
-  satisfied.
-- **The "English draughts" half does not, in five places.** None of these was
-  recorded anywhere before this section. Each is a departure from what the diagram
-  and the product requirements describe, so `AGENTS.md` Rule 3 requires it here:
+  - **Date**: recorded 2026-10-04, closed 2026-10-04
+  - **Context**: `PRD.md` FR-54 requires "a complete, correct **English draughts**
+    configuration", naming twelve pieces a side, one-square men, kings moving one
+    square diagonally, mandatory capture including chains, promotion on reaching
+    the far rank, and a win by immobilisation or by losing all pieces. FR-55 requires
+    it to need no engine change.
+  - **The engine half held throughout.** No file under `model/`, `controller/` or
+    `view/` changed to add `games/checkers/`, and closing these five gaps changed
+    none of them either. That is the requirement FR-55 states and it is satisfied.
+  - **Five places where the configuration was not the rulebook's game.** None of
+    them was recorded anywhere before this section, and each was a departure from
+    what FR-54 describes, which `AGENTS.md` Rule 3 requires here:
 
-  | # | FR-54 asks for | `games/checkers` ships | Evidence |
-  |---|---|---|---|
-  | 1 | a king **steps** one square | the king **slides** any distance — flying kings, which is international, Brazilian, Czech and Dutch draughts, not WCDF English | `games/checkers/pieces/king.py`; the configuration's own module docstring in `games/checkers/__init__.py` says so |
-  | 2 | the WCDF fifty-move draw | `plies` defaults to **100** (fifty moves each side); WCDF says forty moves each side, **80** plies. The field is configurable, the default is not the rulebook's | `games/checkers/rules/draws.py` `FiftyMoveRule.value_fields` |
-  | 3 | threefold repetition is one of the rulebook's draws | **no repetition rule exists.** `RULES` holds eight classes and none of them counts positions | `games/checkers/rules/__init__.py` |
-  | 4 | insufficient material is not an English draughts rule at all | `InsufficientMaterialRule` **is** in force and draws any position in which neither side still holds a man — which is two-king-against-one. Its own docstring: "not an English draughts rule and not quite true" | `games/checkers/rules/draws.py` |
-  | 5 | two non-English variants are not in the rulebook's game | `LimitedKingsRule` caps how many kings a side may hold, which no rulebook does, and it is in force. `CaptureRule` also ships, but its **maximum-capture restriction is off by default**, which *is* the rulebook's game — so `CaptureRule` is configured correctly and `LimitedKingsRule` is not | `games/checkers/rules/__init__.py`, `limited_kings.py` |
+    | # | FR-54 asks for | What shipped | Now |
+    |---|---|---|---|
+    | 1 | a king **steps** one square | the king **slid** any distance — flying kings, which is international, Brazilian, Czech and Dutch draughts | `max_steps=1`. Rule 1.17: "from one square diagonally forward or backward, left or right to an immediately neighbouring vacant square"; rule 1.21 gives its capturing move as a man's in any direction |
+    | 2 | the WCDF forty-move draw | `plies` defaulted to **100** — fifty moves each side, the international figure | `plies` defaults to **80**, rule 1.32.2's "previous 40 moves" by each side |
+    | 3 | threefold repetition is one of the rulebook's draws | **no repetition rule existed** | `ThreefoldRepetitionRule`, rule 1.32.1 |
+    | 4 | insufficient material is not an English draughts rule | `InsufficientMaterialRule` was in force and drew any position where neither side held a man — which is two-kings-against-one, a game that is still winnable | **removed**. Article 1.32 lists three draws and this was not one of them |
+    | 5 | two non-English variants are not in force | `LimitedKingsRule` capped kings per side, which no rulebook does | unchanged in class, but its shipped value is a side's full complement, so it forbids nothing until somebody lowers it |
 
-- **Also absent, and not a departure**: `games/checkers` declares **zero**
-  exporters. `build_configuration()` passes `exporters=[]`. FR-54 and planned PR
-  17 ask for *letter* and the metadata header; neither exists. This is a
-  requirement not yet met rather than a departure from the diagram, and it is
-  recorded here so it is not mistaken for a writer that exists and is wrong.
-- **Mitigation**: none of this touches the engine or the diagram's classes. Each
-  departure is a rule's configured value or an absent rule inside one
-  configuration directory, which is exactly where `SCRATCHPAD.md` §2 says the
-  variation between games lives. Closing them is a change to
-  `games/checkers/` and to nothing else — which is the strongest evidence yet that
-  the abstraction holds.
-- **Approval**: recorded 2026-10-04 as a measured discrepancy between `PRD.md`
-    FR-54 and `games/checkers/`, closed the same day against FR-54 as written, and
-    **approved by the maintainer on 2026-10-04**. The ruling covered all five gaps, the
-    one divergence kept on purpose (1.32.1 proposed rather than claimed), and leaving
-    `LimitedKingsRule` and `CaptureRule` declared and inert.
+  - **One divergence from the rulebook remains, deliberately.** Rule 1.32.1 is a
+    *claim*: a player demonstrates to the referee that their next move would create
+    the position for the third time. The engine has no referee and no claim to make,
+    so `ThreefoldRepetitionRule` proposes the draw itself. The chess configuration's
+    own repetition rule diverges in the same way and for the same reason.
+  - **The perft gate could not see any of this, and says so.**
+    `tests/test_draughts_perft.py` measured a man needs more than eight plies to crown
+    from the starting position — its own two rows are in the way — so no king exists
+    anywhere in the tree it walks. A king that slides and a king that steps produce
+    identical counts at every depth it checks; both were measured at depth eight and
+    both gave 845931. The rulebook, not the numbers, is what decided the king's reach.
+    The gate's own docstring now records that blind spot, and `tests/test_checkers.py`
+    is what pins the king.
+  - **What closing this cost in counts**: two self-consistent baselines in
+    `tests/test_draughts_perft.py` — `CHAIN_PERFT` and `CROWNING_PERFT` — changed,
+    because they are the only figures in that file a crowned king can reach within four
+    plies. The independent counter and the engine moved to the same new figures
+    together, which is what holding a position where the two differ is for.
+  - **Also absent, and not a departure**: `games/checkers` declares **zero**
+    exporters. `build_configuration()` passes `exporters=[]`. FR-54 and planned PR
+    17 ask for *letter* and the metadata header; neither exists. This is a
+    requirement not yet met rather than a departure from the diagram, and it is
+    recorded here so it is not mistaken for a writer that exists and is wrong.
+  - **Mitigation**: none of this touches the engine or the diagram's classes. Each
+    departure was a rule's configured value, a piece's declared step length, or an
+    absent rule inside one configuration directory, which is exactly where
+    `SCRATCHPAD.md` §2 says the variation between games lives. Closing them was a
+    change to `games/checkers/` and nothing else — the strongest evidence yet that
+    the abstraction holds. A variant that wants the international king changes one
+    number, `max_steps`, in one piece.
+  - **Approval**: recorded 2026-10-04 as a measured discrepancy between `PRD.md`
+    FR-54 and `games/checkers/`, and closed the same day against FR-54 as written.
+    The maintainer has not approved the gap-closing itself; that is PR #161's to carry.
 
----
+  ---
 
-### 22. A Configuration Composes Its Quests Instead of Declaring Quest Files
+  ### 22. A Configuration Composes Its Quests Instead of Declaring Quest Files
 
 - **Date**: 2026-10-04
 - **Context**: `PRD.md` §6 states, as a fact about the layout, that
