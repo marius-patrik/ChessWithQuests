@@ -1,5 +1,6 @@
 from games.chess.board import build_board
 from games.chess.export.fen import ExportFEN
+from games.chess.export.pgn import ExportPGN
 import pytest
 from model.game.manager import UnsupportedExportFormat
 from model.misc.notation import pos_to_algebraic, algebraic_to_pos
@@ -70,6 +71,24 @@ def test_the_base_writer_declares_no_notation_and_refuses_to_write():
 
     with pytest.raises(NotImplementedError):
         writer.export("FEN")
+
+
+def test_the_transcript_writer_declares_one_notation_and_writes_it():
+    """The game reaches PGN through the notation the writer declares, in any spelling.
+
+    Returns:
+        None
+    """
+    writer = ExportPGN()
+    moves = [Move((1, 4), (3, 4)), Move((6, 4), (4, 4))]
+    metadata = MetadataWriter({"Event": "Friendly Match", "Result": "1-0"})
+
+    assert writer.formats() == ("PGN",)
+    assert "1. e4 e5 1-0" in writer.export("PGN", moves=moves, metadata=metadata)
+    assert "1. e4 e5 1-0" in writer.export("pgn", moves=moves, metadata=metadata)
+
+    with pytest.raises(UnsupportedExportFormat, match="PGN"):
+        writer.export("FEN", moves=moves)
 
 
 def test_chess_notation_writer_fen():
