@@ -320,30 +320,34 @@ def test_a_clock_asked_often_still_runs_at_the_speed_of_real_time():
     assert game.timer.get_time(1) == 600 - 3
 
 
-def test_the_window_asks_the_clock_so_it_runs_without_a_click():
+def test_the_window_asks_the_clock_so_it_runs_without_a_click(tk_root):
     """Nothing was asking, so a clock stood still while the window was open.
 
     The manager times a turn from a monotonic reading, but only when it is asked, and the only
-    thing that asked was a move.
+    thing that asked was a move. The window is built on the session's root rather than a private
+    `Tk()`: destroying the last root in a process tears down the Tcl interpreter, and a private
+    root is also the one thing that cannot be built where there is no display.
     """
     import time
 
-    import tkinter as tk
-
     from view.app import build_application
 
-    root = tk.Tk()
-    root.withdraw()
-    build_application(root, game="chess", show_modal=False)
-    root.update()
+    for child in tk_root.winfo_children():
+        child.destroy()
+    build_application(tk_root, game="chess", show_modal=False)
+    tk_root.update()
     try:
-        manager = root.game_view.manager
-        assert root.game_view._refresh_job_id is not None, "no redraw timer was armed"
+        manager = tk_root.game_view.manager
+        assert tk_root.game_view._refresh_job_id is not None, "no redraw timer was armed"
         before = manager.timer.get_time(1)
         deadline = time.time() + 2.2
         while time.time() < deadline:
-            root.update()
+            tk_root.update()
             time.sleep(0.01)
         assert manager.timer.get_time(1) < before, "the clock did not move without a click"
     finally:
-        root.destroy()
+        if tk_root.game_view._refresh_job_id is not None:
+            tk_root.after_cancel(tk_root.game_view._refresh_job_id)
+            tk_root.game_view._refresh_job_id = None
+        for child in tk_root.winfo_children():
+            child.destroy()
