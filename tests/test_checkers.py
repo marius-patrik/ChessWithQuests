@@ -317,44 +317,40 @@ def test_a_black_man_is_crowned_on_its_own_far_row():
 # --------------------------------------------------------------------------------------
 
 
-def test_a_king_slides_any_distance_along_every_diagonal():
-    """Eleven squares from the middle of the board, in four directions and every distance.
+def test_a_king_steps_one_square_along_every_diagonal():
+    """Four squares from the middle of the board — one in each direction, and no others.
+
+    Rule 1.17: an ordinary move of a king "is from one square diagonally forward or backward,
+    left or right to an immediately neighbouring vacant square". A king that slid would offer
+    eleven squares from here, the four nearest and seven further along the same diagonals.
 
     Returns:
         None
     """
-    assert legal_moves(board_with({22: "wk"}), WHITE) == [
-        "22-11",
-        "22-13",
-        "22-15",
-        "22-17",
-        "22-18",
-        "22-25",
-        "22-26",
-        "22-29",
-        "22-31",
-        "22-4",
-        "22-8",
-    ]
+    assert legal_moves(board_with({22: "wk"}), WHITE) == ["22-17", "22-18", "22-25", "22-26"]
 
 
-def test_a_king_jumps_any_distance_over_exactly_one_piece():
-    """The king on 1 walks over the black man on 6 and may land on any of five squares beyond.
+def test_a_king_jumps_one_square_over_exactly_one_piece():
+    """The king on 1 walks over the black man on 6 and lands on the one square beyond it.
 
-    It may not land on 6 itself, nor on the empty square 5 beside it on the other diagonal, and
-    the one square before the man it takes is not a landing either. A king that could only
-    jump the nearest square would offer one move here rather than five.
+    Rule 1.21 gives a king's capturing move as a man's "but may be in a forward or backward
+    direction": over the adjacent piece, onto the next square. A king that could jump from any
+    distance would offer five moves here, the four it cannot reach in English draughts
+    included.
 
     Returns:
         None
     """
-    assert legal_moves(board_with({1: "wk", 6: "bm", 20: "bk"}), WHITE) == [
-        "1-10",
-        "1-15",
-        "1-19",
-        "1-24",
-        "1-28",
-    ]
+    assert legal_moves(board_with({1: "wk", 6: "bm", 20: "bk"}), WHITE) == ["1-10"]
+
+
+def test_a_capture_forbids_the_king_its_own_quarter_square():
+    """Capturing is compulsory, so a king that may take does not also step.
+
+    Returns:
+        None
+    """
+    assert legal_moves(board_with({22: "wk", 26: "bm"}), WHITE) == ["22-31"]
 
 
 def test_a_king_stops_at_the_first_piece_on_its_diagonal_whether_or_not_it_may_take_it():
@@ -440,23 +436,22 @@ def test_a_chain_may_not_be_abandoned_part_way():
     """
     board = board_with({1: "wk", 6: "bm", 15: "bm"})
 
-    assert legal_moves(board, WHITE) == ["1-19", "1-24", "1-28"]
-    for name in ("1-19", "1-24", "1-28"):
-        assert the_move(board, WHITE, name).captured_count == 2
+    assert legal_moves(board, WHITE) == ["1-19"]
+    assert the_move(board, WHITE, "1-19").captured_count == 2
 
 
 def test_a_chain_which_cannot_be_continued_may_be_played_at_its_own_length():
     """The other half of the same rule, so that the fix cannot be "no chain is ever finished".
 
-    With only the man on 6 to take there is nothing to continue with, so 1-10 is the whole
-    move and it is legal.
+    With only the man on 6 to take there is nothing to continue with, so 1-10 is the whole move
+    and it is legal. A king that slid would also reach 15, 19, 24 and 28 from here.
 
     Returns:
         None
     """
     board = board_with({1: "wk", 6: "bm", 20: "bk"})
 
-    assert legal_moves(board, WHITE) == ["1-10", "1-15", "1-19", "1-24", "1-28"]
+    assert legal_moves(board, WHITE) == ["1-10"]
 
 
 def test_a_piece_may_not_take_the_same_victim_twice_in_one_chain():
@@ -794,26 +789,26 @@ def test_immobilisation_asks_the_rules_rather_than_reading_the_board_itself():
 # --------------------------------------------------------------------------------------
 
 
-def test_fifty_moves_of_king_shuffling_is_a_draw_because_a_king_makes_no_progress():
-    """A hundred plies in which only kings moved and nothing was taken.
+def test_forty_moves_of_king_shuffling_is_a_draw_because_a_king_makes_no_progress():
+    """Eighty plies in which only kings moved and nothing was taken.
 
-    Chess calls that fifty moves by each side and draws. English draughts draws for a different
-    reason and at a value nobody has agreed on: what matters is not fifty but *progress*, and
-    a king can only ever retrace ground it has already covered, so a hundred plies of it have
-    advanced nothing at all. A man that goes forward is progress even when it is crowned on
-    arrival, because it got there.
+    Chess calls fifty moves by each side fifty-move rule. English draughts draws at forty
+    moves each — rule 1.32.2 — and for a different reason: what matters is not the number but
+    *progress*, and a king can only ever retrace ground it has already covered, so eighty plies
+    of it have advanced nothing at all. A man that goes forward is progress even when it is
+    crowned on arrival, because it got there.
 
     Returns:
         None
     """
     board = board_with({22: "wk", 32: "bk"})
     fifty = rules_of(rules_with(), "Fifty-move rule")
-    quiet_king_move = the_move(board, WHITE, "22-13")
+    quiet_king_move = the_move(board, WHITE, "22-17")
 
-    for _ in range(100):
+    for _ in range(80):
         fifty.on_move_made(board, quiet_king_move)
 
-    assert fifty.state["plies"] == 100
+    assert fifty.state["plies"] == 80
     assert fifty.outcome(board).kind == KIND_DRAW
 
 
@@ -825,9 +820,9 @@ def test_the_draw_is_not_proposed_one_ply_early():
     """
     board = board_with({22: "wk", 32: "bk"})
     fifty = rules_of(rules_with(), "Fifty-move rule")
-    quiet_king_move = the_move(board, WHITE, "22-13")
+    quiet_king_move = the_move(board, WHITE, "22-17")
 
-    for _ in range(99):
+    for _ in range(79):
         fifty.on_move_made(board, quiet_king_move)
 
     assert fifty.outcome(board) is None
@@ -845,11 +840,11 @@ def test_moving_a_man_counts_as_progress_and_starts_the_count_again():
     """
     board = board_with({9: "wm", 22: "wk", 32: "bk"})
     fifty = rules_of(rules_with(), "Fifty-move rule")
-    quiet_king_move = the_move(board, WHITE, "22-13")
-    for _ in range(99):
+    quiet_king_move = the_move(board, WHITE, "22-17")
+    for _ in range(79):
         fifty.on_move_made(board, quiet_king_move)
 
-    assert fifty.state["plies"] == 99
+    assert fifty.state["plies"] == 79
     assert fifty.outcome(board) is None
 
     fifty.on_move_made(board, the_move(board, WHITE, "9-13"))
@@ -864,13 +859,17 @@ def test_taking_a_piece_starts_the_count_again():
     Returns:
         None
     """
-    board = board_with({22: "wk", 32: "bk", 17: "bm"})
     fifty = rules_of(rules_with(), "Fifty-move rule")
-    quiet_king_move = the_move(board, WHITE, "22-13")
-    for _ in range(99):
-        fifty.on_move_made(board, quiet_king_move)
 
-    fifty.on_move_made(board, the_move(board, WHITE, "22-13"))
+    # A quiet move and a capture cannot be offered in one position, because a capture is
+    # compulsory and forbids the quiet ones, so each is taken from a position that offers it.
+    quiet_board = board_with({22: "wk", 32: "bk"})
+    quiet_king_move = the_move(quiet_board, WHITE, "22-17")
+    for _ in range(79):
+        fifty.on_move_made(quiet_board, quiet_king_move)
+
+    capture_board = board_with({22: "wk", 32: "bk", 26: "bm"})
+    fifty.on_move_made(capture_board, the_move(capture_board, WHITE, "22-31"))
 
     assert fifty.state["plies"] == 0
 
@@ -884,7 +883,7 @@ def test_the_fifty_move_rule_can_be_set_to_whatever_a_club_plays():
     """
     board = board_with({22: "wk", 32: "bk"})
     fifty = rules_of(rules_with(plies=40), "Fifty-move rule")
-    quiet_king_move = the_move(board, WHITE, "22-13")
+    quiet_king_move = the_move(board, WHITE, "22-17")
 
     for _ in range(40):
         fifty.on_move_made(board, quiet_king_move)
@@ -930,36 +929,6 @@ def test_a_declined_draw_offer_leaves_no_draw_behind():
     assert agreement.outcome(board) is None
 
 
-def test_two_king_ends_are_called_insufficient_material():
-    """Neither side can crown anything, so neither side can gain a piece.
-
-    This is not an English draughts rule and it is not quite true — two kings really can be
-    beaten by one — and it is here because it was asked for. It is the first thing to switch
-    off if those endgames finish too early.
-
-    Returns:
-        None
-    """
-    from games.checkers.rules import build_rules
-
-    board = board_with({22: "wk", 11: "bk"})
-
-    assert rules_of(build_rules(), "Insufficient material").outcome(board).kind == KIND_DRAW
-
-
-def test_one_side_with_a_man_left_is_not_insufficient_material():
-    """A man can still be crowned, so the position can still change.
-
-    Returns:
-        None
-    """
-    from games.checkers.rules import build_rules
-
-    board = board_with({22: "wk", 11: "wm"})
-
-    assert rules_of(build_rules(), "Insufficient material").outcome(board) is None
-
-
 # --------------------------------------------------------------------------------------
 # What the game has no concept of.
 # --------------------------------------------------------------------------------------
@@ -986,13 +955,13 @@ def test_nothing_in_this_game_can_be_in_check():
 # --------------------------------------------------------------------------------------
 
 
-#: Resolved through `games_root()` rather than as a relative path from the working directory,
-#: because this module is read at import time: a bare `games/...` path made the whole file
-#: uncollectable from anywhere but the repository root.
-SHORT_KING = (
+#: The shipped king's file with its step length changed, so a copied configuration plays a
+#: different game from the original. The shipped king steps one square, which is WCDF English
+#: draughts; the copy below slides, which is the international king.
+FLYING_KING = (
     (pathlib.Path(games_root()) / "checkers" / "pieces" / "king.py")
     .read_text(encoding="utf-8")
-    .replace("max_steps=None", "max_steps=1")
+    .replace("max_steps=1", "max_steps=None")
 )
 
 
@@ -1000,10 +969,10 @@ SHORT_KING = (
 def copied_checkers(tmp_path):
     """Copy the shipped checkers configuration into a throwaway `games/` root.
 
-    The copy has its king rewritten to step one square at a time, which is the WCDF rulebook's
-    English draughts king and the opposite of the one that ships. If the copy's rules are its
-    own, the copy plays a different game from the original; if the copy reached back into
-    `games.checkers`, it would play the original and the edit would be invisible.
+    The copy has its king rewritten to slide any distance, which is the international king and
+    the opposite of the English one that ships. If the copy's rules are its own, the copy plays
+    a different game from the original; if the copy reached back into `games.checkers`, it
+    would play the original and the edit would be invisible.
 
     Args:
         tmp_path: Pytest's temporary directory.
@@ -1017,7 +986,7 @@ def copied_checkers(tmp_path):
         root / "house",
         ignore=shutil.ignore_patterns("__pycache__"),
     )
-    (root / "house" / "pieces" / "king.py").write_text(SHORT_KING, encoding="utf-8")
+    (root / "house" / "pieces" / "king.py").write_text(FLYING_KING, encoding="utf-8")
     return str(root)
 
 
@@ -1035,7 +1004,7 @@ def test_a_copied_checkers_configuration_loads_its_own_rules(copied_checkers):
 
 
 def test_a_copied_checkers_configuration_plays_its_own_rules_not_the_originals(copied_checkers):
-    """The behavioural proof: the copy's king steps, the original's slides.
+    """The behavioural proof: the copy's king slides, the original's steps.
 
     The chess configuration's rules tree still imports by absolute path and is shared with a
     copy, which `tests/test_configuration_copying.py` pins as a known gap. That is exactly
@@ -1048,8 +1017,8 @@ def test_a_copied_checkers_configuration_plays_its_own_rules_not_the_originals(c
     original = load_configuration("checkers")
     variant = load_configuration("house", root=copied_checkers)
 
-    assert len(legal_moves(_lone_king(original, 22), WHITE)) == 11
-    assert len(legal_moves(_lone_king(variant, 22), WHITE)) == 4
+    assert len(legal_moves(_lone_king(original, 22), WHITE)) == 4
+    assert len(legal_moves(_lone_king(variant, 22), WHITE)) == 11
 
 
 def test_the_shipped_checkers_configuration_loads_itself():
@@ -1105,3 +1074,90 @@ def _build(kind: str, colour: int) -> Any:
     from games.checkers.pieces.man import Man
 
     return Man(colour) if kind == "man" else King(colour)
+
+
+def test_a_kings_only_end_is_not_a_draw_because_no_rule_says_it_is():
+    """Two kings against one is winnable, so no rule may call it a draw.
+
+    WCDF article 1.32 lists three draws and this is not one of them. The configuration used to
+    carry a fourth rule — neither side has a man left — which ended exactly this endgame while
+    it was still playable. It has been removed, and this is what says so.
+
+    Returns:
+        None
+    """
+    from games.checkers.rules import build_rules
+
+    board = board_with({22: "wk", 11: "bk"})
+
+    labels = [rule.default_name for rule in build_rules()]
+    assert (
+        "Insufficient material" not in labels
+    ), "a rule the rulebook does not have is deciding a kings-only endgame"
+    assert rules_of(build_rules(), "Threefold repetition").outcome(board) is None
+    assert rules_of(build_rules(), "Fifty-move rule").outcome(board) is None
+
+
+def test_the_same_position_a_third_time_is_a_draw():
+    """Rulebook rule 1.32.1: the same position for the third time.
+
+    Returns:
+        None
+    """
+    from games.checkers.rules import build_rules
+
+    rule = rules_of(build_rules(), "Threefold repetition")
+    rule.attach()
+    board = board_with({22: "wk", 11: "bk"})
+    rule.active_color = 1
+
+    assert rule.record(board, 1) == 1
+    assert rule.record(board, 1) == 1, "asking must not create the repetition"
+    assert rule.outcome(board) is None
+
+    seen = rule.state["seen"]
+    key = next(iter(seen))
+    seen[key] = 2
+    assert rule.record(board, 1) == 2
+    assert rule.outcome(board) is None
+
+    seen[key] = 3
+    assert rule.outcome(board).kind == KIND_DRAW
+    assert rule.outcome(board).reason == "threefold repetition"
+
+
+def test_a_position_the_other_side_is_to_move_in_is_not_the_same_position():
+    """Whose turn it is is part of what makes a position a position.
+
+    Returns:
+        None
+    """
+    from games.checkers.rules import build_rules
+
+    rule = rules_of(build_rules(), "Threefold repetition")
+    rule.attach()
+    board = board_with({22: "wk", 11: "bk"})
+
+    assert rule.record(board, 1) == 1
+    assert rule.record(board, -1) == 1
+
+
+def test_the_forty_move_count_is_the_rulebooks_forty_moves_each():
+    """Rulebook rule 1.32.2 draws after forty moves by *each* side, which is eighty plies.
+
+    The count shipped as a hundred, which is fifty moves each — the international game's figure,
+    in a configuration that claims to be English.
+
+    Returns:
+        None
+    """
+    from games.checkers.rules import build_rules
+
+    rule = rules_of(build_rules(), "Fifty-move rule")
+    rule.attach()
+
+    assert rule.value["plies"] == 80
+    rule.state["plies"] = 79
+    assert rule.outcome(None) is None
+    rule.state["plies"] = 80
+    assert rule.outcome(None).kind == KIND_DRAW

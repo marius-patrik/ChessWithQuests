@@ -8,8 +8,8 @@ moment it is crowned, and a jump that is compulsory the instant one exists. A bu
 those makes the count wrong and nothing else in the suite would notice.
 
 **Where the expected numbers come from.** They are data, written into this file, and they are
-data from outside this repository. Two published series are used, because the one everybody
-quotes and the one this configuration plays by default stopped agreeing at depth six:
+data from outside this repository. Two published series are used, and they are the same game
+played two ways:
 
 - `PUBLISHED` — OEIS **A133046**, "starting from the standard 12 against 12 starting position
   in checkers, the number of distinct move sequences after n moves". Its references are Aart
@@ -23,6 +23,14 @@ quotes and the one this configuration plays by default stopped agreeing at depth
   player "may select any one that they wish, not necessarily that which gains the most pieces",
   so `PUBLISHED` is the series the configuration is gated against and `PUBLISHED_MAJORITY` is
   the one the `max_capture` switch is gated against.
+
+**What this gate cannot see.** It cannot tell the English king from the international one, and
+that is worth knowing before anyone trusts it with a rule. A man needs more than eight plies to
+crown from the starting position — its own two rows are in the way — so no king exists anywhere
+in the tree this file walks, and a king that slides and a king that steps produce identical
+counts at every depth here. Both were measured at depth eight and both gave 845931. The king's
+reach is therefore pinned by the rulebook and by `tests/test_checkers.py`, not by these
+numbers, and neither is the crowning row beyond it.
 - `PUBLISHED_DIVIDE` — Aart Bik's published `divide(6)` for the starting position, the seven
   figures his engine produces after each of the seven opening moves. This is the sharper of
   the two kinds of check, because a wrong count split across seven moves usually gives seven
@@ -226,18 +234,14 @@ def _jumps(position: Position, square: int, colour: int, kind: str) -> List[Tupl
             victim = position.get(over)
             if victim is not None and victim[0] != colour and land not in position:
                 options.append((land, over))
-        else:
-            for index, over in enumerate(line):
-                victim = position.get(over)
-                if victim is None:
-                    continue
-                if victim[0] == colour:
-                    break
-                for land in line[index + 1 :]:
-                    if land in position:
-                        break
-                    options.append((land, over))
-                break
+        elif len(line) >= 2:
+            # Rule 1.21: a king's capturing move is a man's, in any of the four
+            # directions — over the piece immediately beside it, onto the square
+            # immediately beyond. No walking over empties, no taking from further.
+            over, land = line[0], line[1]
+            victim = position.get(over)
+            if victim is not None and victim[0] != colour and land not in position:
+                options.append((land, over))
     return options
 
 
@@ -341,7 +345,10 @@ def reference_moves(position: Position, colour: int, max_capture: bool = False) 
                     continue
                 targets = ray[square][:1]
             else:
-                targets = ray[square]
+                # Rule 1.17: a king moves to an *immediately* neighbouring vacant square,
+                # one step along any diagonal. The whole ray would be the flying king
+                # of international draughts, which is a different game.
+                targets = ray[square][:1]
             for land in targets:
                 if land in position:
                     break
@@ -764,7 +771,7 @@ CROWNING: Position = {
 }
 
 #: The independent counter's counts for `CROWNING`, white to move.
-CROWNING_PERFT: Dict[int, int] = {1: 1, 2: 3, 3: 8, 4: 27}
+CROWNING_PERFT: Dict[int, int] = {1: 1, 2: 3, 3: 6, 4: 24}
 
 
 @pytest.mark.parametrize("depth,expected", sorted(CROWNING_PERFT.items()))
@@ -806,8 +813,11 @@ CHAIN: Position = {
     32: (BLACK, MAN),
 }
 
-#: The independent counter's counts for `CHAIN`, black to move.
-CHAIN_PERFT: Dict[int, int] = {1: 1, 2: 6, 3: 40, 4: 190}
+#: The counts for `CHAIN`, black to move. These two figures are the only numbers in this file
+#: that a crowned king can reach inside four plies, so they are the only ones that changed when
+#: the king's reach was corrected to the rulebook's one square — and both the reference counter
+#: and the engine moved together, which is the point of holding a position where they differ.
+CHAIN_PERFT: Dict[int, int] = {1: 1, 2: 6, 3: 42, 4: 263}
 
 
 @pytest.mark.parametrize("depth,expected", sorted(CHAIN_PERFT.items()))
