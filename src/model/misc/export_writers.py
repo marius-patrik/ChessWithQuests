@@ -59,6 +59,24 @@ class ExportWriter:
         """
         return ()
 
+    def _writes(self, format_type: str) -> bool:
+        """Report whether this writer writes the notation asked for.
+
+        The rule a writer obeys is that it writes the notations it declares and answers no
+        others, and it compares them the way the manager does: without regard to case, and on
+        the caller's own spelling. `GameManager.transcript` hands `export` whatever the caller
+        typed and looks the writer up case-insensitively first, so a writer that compared
+        exact strings would refuse a notation the manager had just agreed to write.
+
+        Args:
+            format_type: The notation asked for, in the caller's spelling.
+
+        Returns:
+            bool: True when the notation is one of this writer's declared names.
+        """
+        wanted = str(format_type).strip().lower()
+        return any(wanted == str(name).strip().lower() for name in self.formats())
+
     def export(self, *args: Any, **kwargs: Any) -> str:
         """Export game data into the target serialization format.
 

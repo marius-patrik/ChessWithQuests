@@ -1,5 +1,7 @@
 from games.chess.board import build_board
+from games.chess.export.fen import ExportFEN
 import pytest
+from model.game.manager import UnsupportedExportFormat
 from model.misc.notation import pos_to_algebraic, algebraic_to_pos
 from model.misc.export_writers import ChessNotationWriter, ExportWriter
 from model.misc.metadata import MetadataWriter
@@ -15,6 +17,59 @@ def test_algebraic_conversions():
     assert algebraic_to_pos("a1") == (0, 0)
     assert algebraic_to_pos("e4") == (3, 4)
     assert algebraic_to_pos("h8") == (7, 7)
+
+
+def test_the_position_record_writer_declares_one_notation_and_writes_it():
+    """A writer writes the notations it declares, and reaches them however they are spelled.
+
+    `GameManager.writer_for` matches a notation without regard to case and hands `export` the
+    caller's own spelling, so a writer that compared one exact string would refuse a notation
+    the manager had just agreed to write.
+
+    Returns:
+        None
+    """
+    writer = ExportFEN()
+
+    assert writer.formats() == ("FEN",)
+    assert writer.export("FEN", board=build_board(), active_color=1) == (
+        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1"
+    )
+    assert writer.export("fen", board=build_board(), active_color=1).startswith("rnbqkbnr/")
+    assert writer.export(" Fen ", board=build_board(), active_color=1).startswith("rnbqkbnr/")
+
+
+def test_a_notation_the_writer_does_not_write_is_refused_rather_than_answered_emptyly():
+    """An unknown notation is a question this writer cannot answer, and says so.
+
+    The empty string the format switch fell through to was indistinguishable from a board with
+    nothing on it, which is the ambiguity `formats()` was introduced to remove.
+
+    Returns:
+        None
+    """
+    writer = ExportFEN()
+
+    assert writer._writes("FEN") is True
+    assert writer._writes("Roll") is False
+
+    with pytest.raises(UnsupportedExportFormat, match="FEN"):
+        writer.export("Roll", board=build_board())
+
+
+def test_the_base_writer_declares_no_notation_and_refuses_to_write():
+    """The engine holds the protocol and nothing else, so the base answers nothing.
+
+    Returns:
+        None
+    """
+    writer = ExportWriter()
+
+    assert writer.formats() == ()
+    assert writer._writes("FEN") is False
+
+    with pytest.raises(NotImplementedError):
+        writer.export("FEN")
 
 
 def test_chess_notation_writer_fen():
