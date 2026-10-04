@@ -174,12 +174,15 @@ grows as it merges, so a number written here is wrong the day after it is writte
 Run `pytest -q` for the current count, and treat §4.3's dead-code sweep the same
 way.
 
-**One test is a metadata assertion and is named as one.**
-`tests/test_docs_and_docstrings.py::test_generated_docs_directory_is_not_tracked`
-shells out to `git check-ignore` and asserts that a path is ignored. That is a
+**No test is a metadata assertion.** The last one,
+`tests/test_docs_and_docstrings.py::test_generated_docs_directory_is_not_tracked`,
+shelled out to `git check-ignore` and asserted that a path is ignored. That is a
 property of `.gitignore`, not of the product, and by `PRD.md` §3.2's own
-definition it would still pass with the product deleted. §5 records it as the one
-survivor; §8 item 1 says the same.
+definition it would still pass with the product deleted. It is gone, and so is
+`test_docs_config_and_strict_build` beside it; §5 records both deletions and §8
+item 1 says the same. What they stood in for is a workflow rather than a test:
+`.github/workflows/verify-docs.yml:31` runs `properdocs build --strict`, and so
+does the `docs` job of the pinned pipeline `ci.yml` calls.
 
 What exists is a playable chess product and a working draughts engine beside it.
 The whole view layer, the game-loop wiring, both configurations and the rule and
@@ -348,7 +351,7 @@ said thirteen, two, three and three.
 | 18 | Export generalised | **not started** — the `ExportWriter` base and `formats()` exist, but the format switch does, and there is no per-format subclass in `games/<variant>/export/` | — |
 | 19 | Export formats: PGN, FEN, field-field-extra, stenographic | **not started** | — |
 | 20 | Czech aliases and remaining dead code | **partial** — all fifteen aliases ship, `Knight` is canonical, `Tower`, `Horse` and `Controller` are gone. Absent: the `controller/controller.py` → `game_manager_controller.py` rename, and the dead-code re-check | main stack |
-| 21 | Behavioural test coverage | **partial** — one surviving test is a metadata assertion (`test_generated_docs_directory_is_not_tracked`), §4.3's list is unreferenced rather than untriaged, and §8 items 2, 6, 8 and 12 are not fully asserted | main stack |
+| 21 | Behavioural test coverage | **partial** — no test asserts on repository metadata any more, §4.3's list is unreferenced rather than untriaged, and §8 items 2, 6, 8 and 12 are not fully asserted | main stack |
 
 ### 4.6 The stack has grown past twenty-one
 
@@ -457,14 +460,20 @@ Two consequences for anyone reading this section:
   of this file said the notes test "has been rewritten, not deleted" as though it
   were the only one; three others went with the files.
 
-**The one survivor.** `tests/test_docs_and_docstrings.py::test_generated_docs_directory_is_not_tracked`
-runs `git check-ignore --quiet .docs/index.md` and asserts the exit code is zero.
-It asserts that `.gitignore` ignores the generated docs directory — a property of
+**The survivor, now gone.** `tests/test_docs_and_docstrings.py::test_generated_docs_directory_is_not_tracked`
+ran `git check-ignore --quiet .docs/index.md` and asserted the exit code is zero.
+It asserted that `.gitignore` ignores the generated docs directory — a property of
 the repository, not of the product — so by `PRD.md` §3.2's own definition it
-belongs with the fifty-one. It is left in place because the generated directory's
-being ignored is what stops the docs build polluting `git status`, and that is a
-real risk worth a gate; §8 item 1 and §4 record the exception rather than pretend
-it is not there.
+belonged with the fifty-one. It was the last one standing. It is deleted, which
+takes metadata assertions to **zero**, together with
+`test_docs_config_and_strict_build` from the same file: that test asserted
+`properdocs.yml` exists at the repository root and then shelled out to run the
+build — the same build `.github/workflows/verify-docs.yml:31` runs, as the `docs`
+job of the pinned pipeline behind `ci.yml` also does. That is two more deletions
+on top of §5's fifty-one, so the tally of tests deleted for asserting on metadata
+rather than on the product is fifty-three; the fifty-one was measured at `4e7f270`
+and is not re-measured by this revision, and no current collection count is quoted
+here for the reason §4.3 gives.
 
 **What the suite covers that it did not.** The perft gate for chess and draughts,
 the engine-holds-no-chess invariant, the rules of draughts position by position,
@@ -1380,12 +1389,13 @@ asserted. An unannotated item here is a target, not a verified state.
 **Quality gates**
 
 1. `pytest` green, and no surviving test asserts only on repository metadata.
-   **Partly true.** `pytest` is green. One test asserts only on repository
-   metadata:
+   **True.** `pytest` is green and no test asserts only on repository metadata.
+   Everything `PRD.md` §3.2 names — `AGENTS.md`, workflow YAML, `notes/`,
+   `README.md`, the `CLAUDE.md` symlink, import smoke — is gone, and the last
+   survivor is gone too:
    `tests/test_docs_and_docstrings.py::test_generated_docs_directory_is_not_tracked`
-   runs `git check-ignore --quiet .docs/index.md`. §5 explains why it is left in
-   place. Everything `PRD.md` §3.2 names — `AGENTS.md`, workflow YAML, `notes/`,
-   `README.md`, the `CLAUDE.md` symlink, import smoke — is gone.
+   ran `git check-ignore --quiet .docs/index.md` and has been deleted, along with
+   `test_docs_config_and_strict_build` beside it. §5 records both deletions.
 2. Every public method is reachable from at least one test. **Not asserted, and
    not true on a name screen.** No test enforces this, and the sweep in §4.3
    finds 67 of 384 public methods and functions whose name never appears in
@@ -1396,9 +1406,14 @@ asserted. An unannotated item here is a target, not a verified state.
    `games/checkers/rules/geometric.py` helper. Some of those are reached
    internally; that is precisely the distinction PR 21 has to make and has not.
 3. `black --check .` clean at line length 100. **True** — 127 files unchanged.
-4. `properdocs build --strict` clean, zero warnings. **True**, and
-   `tests/test_docs_and_docstrings.py::test_docs_config_and_strict_build` runs the
-   build.
+4. `properdocs build --strict` clean, zero warnings. **True**, and the build is
+   gated by a workflow rather than by a test:
+   `.github/workflows/verify-docs.yml:31` runs `python -m properdocs build --strict`,
+   and the `docs` job of the pinned pipeline `ci.yml` calls runs the same command.
+   The test that used to shell out to it,
+   `tests/test_docs_and_docstrings.py::test_docs_config_and_strict_build`, is
+   deleted; `preview-docs.yml` triggers on every pull request with no base-branch
+   filter, so a stacked pull request is built `--strict` too.
 5. No third-party runtime import anywhere under the project source. **True** —
    `tests/test_packaging.py::test_no_third_party_runtime_import_under_the_project_source`.
 6. No board dimension is hard-coded outside `Board.DEFAULT_DIMENSIONS` and a configuration's own `DIMENSIONS`. **True in the tree, not asserted as an absence.** The only dimension literal under `model/`, `controller/` or `view/` is `Board.DEFAULT_DIMENSIONS = (8, 8)` at `model/game/board.py:30`; every other `8` in those trees is tkinter padding or prose. But no test asserts the absence. What is asserted is the *consequence*, by exercising the board API at 8×8, 10×10 and 5×7 (`tests/test_board_generalisation.py`): construction, placement, bounds-checked validation, sliding, capture, an engine promotion on the far rank of whatever size the board is, and a FEN record whose rank count matches `rows`. That covers the paths those tests touch and not every path in the tree. An earlier revision of this item said the invariant "is asserted against the board API", which overstated it.
