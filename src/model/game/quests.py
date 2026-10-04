@@ -1003,7 +1003,9 @@ class MaterialAhead(_AtGameEndQuest):
         """
         taken = event.captures_by(self.color)
         lost = event.captures_against(self.color)
-        self._advance(amount=abs(taken - lost), target=self.margin)
+        # Ahead, not merely unequal. `abs(taken - lost)` completed this quest for a player
+        # three pieces *down*, which is the opposite of what it asks for.
+        self._advance(amount=taken - lost, target=self.margin)
 
 
 class Pacifist(_AtGameEndQuest):

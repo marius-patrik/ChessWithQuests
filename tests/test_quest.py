@@ -496,3 +496,39 @@ def test_a_disabled_quest_contributes_no_experience():
     manager.observe_move(move_event(captured="pawn"))
 
     assert manager.total_reward() == 0
+
+
+def test_material_ahead_is_not_satisfied_by_being_behind():
+    """The quest says "ahead". `abs(taken - lost)` also answered yes to three pieces down."""
+    from model.game.events import ResultEvent
+    from model.game.quests import MaterialAhead
+
+    def result_with(white_took, black_took):
+        """Build a finished game in which each side took the given number of pieces."""
+        history = [
+            MoveEvent(
+                move=object(),
+                position=None,
+                color=1,
+                captured_piece_type="pawn",
+            )
+            for _ in range(white_took)
+        ]
+        history += [
+            MoveEvent(
+                move=object(),
+                position=None,
+                color=-1,
+                captured_piece_type="pawn",
+            )
+            for _ in range(black_took)
+        ]
+        return ResultEvent(outcome="win", winner=1, history=history)
+
+    behind = MaterialAhead(color=1, margin=3)
+    behind.observe_result(result_with(white_took=0, black_took=3))
+    assert behind.validate() is False, "three pieces down completed a quest asking to be ahead"
+
+    ahead = MaterialAhead(color=1, margin=3)
+    ahead.observe_result(result_with(white_took=3, black_took=0))
+    assert ahead.validate() is True
