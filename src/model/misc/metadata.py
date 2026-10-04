@@ -14,7 +14,11 @@ class MetadataWriter:
             headers: Optional dictionary of metadata headers to override defaults.
         """
         self.headers: Dict[str, str] = {
-            "Event": "Chess Match",
+            # "Game", because this file is the engine's and the engine does not know what
+            # game is being played. The default it used to carry named chess, so a draughts
+            # game reaching this writer would have announced itself as a game of chess. A
+            # configuration that wants its own name in the header passes one in.
+            "Event": "Game",
             "Site": "ChessWithQuests",
             "Date": datetime.now().strftime("%Y.%m.%d"),
             "Round": "1",
