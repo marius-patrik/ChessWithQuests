@@ -389,3 +389,46 @@ def test_flag_fall_stays_silent_when_there_is_no_clock_to_fall():
     rule.attach()
     rule.active_color = 1
     assert rule.outcome(board) is None
+
+
+def test_castling_moves_the_king_two_files_and_the_rook_three():
+    """The two destinations come from the royal piece's own start file, not a constant.
+
+    Castling is offered from the middle of the back rank and lands the king two files towards
+    one rook and the rook one file inside that. Getting the two swapped put the king on the
+    rook's square, so this asserts both ends of both pieces.
+    """
+    board = castling_ready_board()
+    rule = CastlingRule()
+
+    kingside = rule.available_moves(board, board.get_piece_at((0, 4)))[0]
+
+    assert (kingside.start_pos, kingside.end_pos) == ((0, 4), (0, 6))
+    assert (kingside.companion_start, kingside.companion_end) == ((0, 7), (0, 5))
+
+
+def test_a_castle_actually_puts_both_pieces_on_their_squares():
+    """Offered is not played: the board must end with a king on g1 and a rook on f1."""
+    board = castling_ready_board()
+    board.set_piece_at((0, 1), None)
+    board.set_piece_at((0, 6), None)
+    rule = CastlingRule()
+    rule.attach()
+
+    castle = rule.available_moves(board, board.get_piece_at((0, 4)))[0]
+    assert castle.apply_to_board(board) is not None
+
+    assert board.get_piece_at((0, 6)).getType() == "king"
+    assert board.get_piece_at((0, 5)).getType() == "rook"
+    assert board.get_piece_at((0, 4)) is None
+    assert board.get_piece_at((0, 7)) is None
+
+
+def test_a_royal_piece_that_has_left_its_start_file_is_not_offered_a_castle():
+    """The castle is a move to two squares, and only from the one it started on."""
+    board = castling_ready_board()
+    king = board.get_piece_at((0, 4))
+    board.move_piece((0, 4), (0, 3))  # the king steps to d1
+    rule = CastlingRule()
+
+    assert rule.available_moves(board, king) == []
