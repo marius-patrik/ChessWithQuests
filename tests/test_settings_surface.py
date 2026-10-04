@@ -1595,3 +1595,35 @@ def _button_labels(widget):
         if child.winfo_class() in ("TButton", "Button"):
             yield child.cget("text")
         yield from _button_labels(child)
+
+
+def test_rebuilding_the_form_does_not_leave_the_old_pages_behind(tk_root, games_dir):
+    """Choosing another configuration rebuilds the form, and `forget` is not enough.
+
+    `notebook.forget` takes a page out of the notebook and leaves the widget alive as a child
+    of it, with every entry, label and editor still bound. Switching configuration five times
+    left thirty children on the notebook and twenty-five of them unreachable; a hundred-odd
+    live widgets after a dozen switches, each holding a StringVar and an editor pointing at a
+    file that may since have been renamed.
+
+    Args:
+        tk_root: The session's Tk root.
+        games_dir: A throwaway `games/` root holding the default configuration.
+
+    Returns:
+        None
+    """
+    dialog = SettingsDialog(
+        tk_root, load_configuration(DEFAULT_GAME, root=games_dir), root=games_dir
+    )
+    tk_root.update()
+    sections = len(dialog.notebook.tabs())
+
+    for _ in range(25):
+        dialog._rebuild()
+        tk_root.update()
+
+    assert len(dialog.notebook.tabs()) == sections, "the form lost or gained a section"
+    assert (
+        len(dialog.notebook.winfo_children()) == sections
+    ), f"{len(dialog.notebook.winfo_children())} pages are alive where {sections} should be"

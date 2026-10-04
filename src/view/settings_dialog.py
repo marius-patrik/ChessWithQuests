@@ -263,7 +263,13 @@ class SettingsDialog:
         self.sections = []
         self.entries_by_section = {name: [] for name in SECTIONS}
         for tab in self.notebook.tabs():
+            # `forget` only takes the page out of the notebook; the widget, its entries and its
+            # editors stay alive as children of it. Five rebuilds left thirty children behind,
+            # and a player switching configuration a dozen times was holding a hundred live
+            # widgets, each with a StringVar and an editor bound to a file that may since have
+            # been renamed. A forgotten page has to be destroyed, not just unshown.
             self.notebook.forget(tab)
+            self.notebook.nametowidget(tab).destroy()
         self._build_sections()
 
     def _tab(self, name: str) -> ttk.Frame:
