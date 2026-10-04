@@ -5,7 +5,7 @@ deterministic, and every one of them is switchable, because "at what value" is
 configuration and "whether at all" is the player's.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from model.game.field import Field
 from model.game.move import Move
@@ -296,16 +296,31 @@ class MutualAgreementRule(Rule):
         return Result(KIND_DRAW, precedence=AGREEMENT_PRECEDENCE, reason="agreement")
 
 
+#: The piece kinds whose moved flag changes what they may do. A castle is the only move in
+#: chess that a piece loses by having moved, and it takes a king and a rook, so these are the
+#: only two kinds whose flag is part of a position's identity.
+RIGHTS_BEARING_KINDS: Tuple[str, ...] = ("king", "rook")
+
+
 def position_key(position: Any, active_color: int) -> str:
     """Build the identity of a position for repetition purposes.
+
+    The rulebook's test is "the same player to move, the same pieces on the same squares, and
+    the same moves available to every piece". This covers the first two and, for castling, the
+    third. It does not cover a capture in passing: this configuration keeps no en passant target
+    on the board for a key to read, so a position reached by a pawn's two-square advance keys
+    the same as the same placement reached any other way. Reaching the same placement twice with
+    a live offer on the second occasion takes a pawn arriving on that square twice by different
+    routes, which no line of play produces, so the omission is recorded in
+    `notes/object_model.md` rather than worked around.
 
     Args:
         position: The board as it stands.
         active_color: Whose turn it is.
 
     Returns:
-        str: A key covering the placement, whose turn it is, and each piece's moved flag,
-        which is what carries castling rights.
+        str: A key covering the placement, whose turn it is, and the moved flag of the pieces
+        whose movement that flag governs.
     """
     parts = [str(active_color)]
     for r in range(position.rows):
@@ -314,10 +329,15 @@ def position_key(position: Any, active_color: int) -> str:
             if piece is None:
                 parts.append(".")
                 continue
-            parts.append(
-                f"{piece.getType()}{'w' if piece.getColor() == 1 else 'b'}"
-                f"{'m' if piece.hasMoved() else 'n'}"
-            )
+            moved = ""
+            if piece.getType() in RIGHTS_BEARING_KINDS:
+                # Only these two kinds have legal moves that depend on whether they have moved:
+                # a king or a rook that has moved cannot castle. A knight that has been to f3
+                # and back is on the same square in the same way as one that has not, so keying
+                # on its flag made `1.Nf3 Nf6 2.Ng1 Ng8 3.Nf3 Nf6 4.Ng1 Ng8` look like a game
+                # where no position ever repeated, and the draw was never offered.
+                moved = "m" if piece.hasMoved() else "n"
+            parts.append(f"{piece.getType()}{'w' if piece.getColor() == 1 else 'b'}{moved}")
     return "|".join(parts)
 
 

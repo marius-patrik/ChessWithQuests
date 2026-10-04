@@ -423,13 +423,19 @@ def test_a_repetition_is_counted_under_the_player_who_is_to_move_next():
     The rule recorded every position under `active_color`, which named the player who had
     just moved when a move was announced and the player who was to move next when the position
     was judged. No position could therefore be seen twice, and the rule could never fire.
+
+    The draw is offered after the ninth ply, not the tenth. The position at the start of the
+    game is the first occurrence, the shuffle's fourth ply is the second and its eighth is the
+    third — and while the key carried every piece's moved flag, the knight that had been out
+    and back was not the knight that had not moved, so each return looked new and the count
+    needed one more cycle than the rulebook does.
     """
     game = GameManager()
     rule = _rule_of(game, "ThreefoldRepetitionRule")
     reasons = [_play(game, uci) for uci in ["g1 f3", "g8 f6", "f3 g1", "f6 g8"] * 3]
 
-    assert reasons[:9] == [None] * 9
-    assert reasons[9:] == ["threefold repetition"] * 3
+    assert reasons[:8] == [None] * 8
+    assert reasons[8:] == ["threefold repetition"] * 4
     assert max(rule.state["seen"].values()) == 3
 
 

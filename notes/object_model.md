@@ -242,6 +242,16 @@ Recorded because the question is fair and the answer is not obvious.
   chess formats and live in `games/chess/export/`. A game with no FEN
   representation has no FEN exporter, because the structure says so rather than
   a runtime capability check deciding.
+- **A repetition key cannot see a capture in passing.** The rulebook counts two positions as
+  the same only when the same moves are available to every piece, and a pawn that has just
+  advanced two squares hands the opponent a capture that the same placement without it does
+  not. This configuration keeps no en passant target on the board for `position_key` to read —
+  the offer lives in `EnPassantRule`'s state — so the key covers the placement, the side to
+  move and the castling rights, and not the offer. Reaching the same placement a second time
+  *with* a live offer needs a pawn to arrive on that square twice by two different routes,
+  which no line of play produces, so nothing measurable is lost. Recorded 2026-10-04; the
+  honest fix is for the en passant offer to live on the board, which is a change to that rule
+  and not a key.
 - **`SurviveWithoutCapture` asks for quiet moves, not for moves that cost you nothing.**
   Its description read "Play the required number of moves without losing a piece",
   while `observe_move` counts a move only when `not event.is_capture` — that is, when the
