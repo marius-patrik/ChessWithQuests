@@ -1,6 +1,7 @@
 from games.chess.board import build_board
 from games.chess.export.fen import ExportFEN
 from games.chess.export.pgn import ExportPGN
+from games.chess.export.stenographic import ExportStenographic
 import pytest
 from model.game.manager import UnsupportedExportFormat
 from model.misc.notation import pos_to_algebraic, algebraic_to_pos
@@ -89,6 +90,36 @@ def test_the_transcript_writer_declares_one_notation_and_writes_it():
 
     with pytest.raises(UnsupportedExportFormat, match="PGN"):
         writer.export("FEN", moves=moves)
+
+
+def test_the_coordinate_record_writer_declares_one_spelling_and_answers_any():
+    """The public name is `Stenographic`, and every spelling of it reaches the same writer.
+
+    The format used to be declared `"Stenographic"` and dispatched as `"STENOGRAPHIC"`, so the
+    engine held a second, private spelling of a name callers could already see.
+
+    Returns:
+        None
+    """
+    writer = ExportStenographic()
+    moves = [Move((1, 4), (3, 4)), Move((6, 4), (4, 4))]
+
+    assert writer.formats() == ("Stenographic",)
+    assert writer.export("Stenographic", moves=moves) == "e2e4 e7e5"
+    assert writer.export("stenographic", moves=moves) == "e2e4 e7e5"
+    assert writer.export("STENOGRAPHIC", moves=moves) == "e2e4 e7e5"
+
+    with pytest.raises(UnsupportedExportFormat, match="Stenographic"):
+        writer.export("PGN", moves=moves)
+
+
+def test_a_game_with_no_moves_still_writes_an_empty_coordinate_record():
+    """A record of no moves is genuinely empty, which is not the same as refusing.
+
+    Returns:
+        None
+    """
+    assert ExportStenographic().export("Stenographic", moves=[]) == ""
 
 
 def test_chess_notation_writer_fen():
