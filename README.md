@@ -25,7 +25,7 @@ what the test actually reaches.
 | A configuration loaded from a directory as a package in its own right, so a copy composes its own board, pieces, rules, clocks and quests | `src/model/game/configuration.py` |
 | A full game loop from `new_game()` to a result, driving the quest manager, the user manager, the clocks, the transcript and the logger | `src/model/game/manager.py` |
 | Twenty built-in quest classes, twelve judged a move at a time and eight judging the finished game | `src/model/game/quests.py` |
-| English draughts: twelve pieces a side, flying kings, mandatory capture including chains, crowning without removal, a win by immobilisation or by losing every piece — the engine's move generator is held to the published perft counts to depth 7, and an independent counter written from the rules corroborates those figures to depth 8 | `src/games/checkers/` |
+| English draughts: twelve pieces a side, a king that steps one square (WCDF 1.17 and 1.21), mandatory capture including chains, crowning without removal, a win by immobilisation or by losing every piece, and the rulebook's three draws (1.32) — the engine's move generator is held to the published perft counts to depth 7 and an independent counter written from the rules agrees to depth 8; those counts cannot see the king's reach, because no man crowns inside the plies they walk | `src/games/checkers/` |
 | A capture chain as one move, carried by `HopMove(Move)` rather than by the engine's own `Move` | `src/games/checkers/moves.py` |
 | A tkinter window: a start modal with a configuration selector, Settings and Start; the board drawn from White's side with coordinates, symbols, selection and legal-move highlights; player panels with clocks and captured pieces; the turn; a notated move history; a status footer; quest cards with progress | `src/view/` |
 | A settings surface: a corner selector for which configuration is being edited, sections for Board, Pieces, Rules, Quests and Clocks built from declared fields, create/rename/duplicate/delete, and a code editor for rule and quest source | `src/view/settings_dialog.py`, `src/view/code_editor.py`, `src/model/game/field.py` |
@@ -42,11 +42,14 @@ what the test actually reaches.
   and its header falls back to placeholder strings. The stenographic writer emits
   coordinate pairs with no compression. No configuration ships a per-format
   writer, and `src/games/checkers/` declares `exporters=[]` — no writer at all.
-- **`src/games/checkers` is not WCDF English draughts.** The king flies where the
-  rulebook steps one square, the fifty-move rule defaults to 100 plies where the
-  rulebook says 80, there is no threefold repetition, and insufficient material
-  draws two-king-against-one. Each departure is recorded in
-  `notes/object_model.md` §21.
+- **`src/games/checkers` plays WCDF English draughts**, having not done so until
+    2026-10-04. Four things were wrong — the king flew where rule 1.17 has it
+    step, the forty-move count defaulted to 100 plies where 1.32.2 says 80, there
+    was no repetition rule for 1.32.1, and a sufficient-material draw ended
+    two-kings-against-one while it was still winnable. One divergence is kept on
+    purpose: 1.32.1 is a claim to a referee and the engine proposes the draw
+    itself. `notes/object_model.md` §21 records each, and what the perft gate
+    could not see.
 - **`src/controller/controller.py` is not renamed** to `game_manager_controller.py` to
   match the diagram's `GameManagerController`.
 

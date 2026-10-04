@@ -199,7 +199,7 @@ each of them.
 | **Stenographic is a coordinate pair, not a stenographic record.** `to_stenographic` joins start and end squares per move, with no compression | `model/misc/export_writers.py:121` |
 | **`ChessNotationWriter` is still an engine class.** `notes/object_model.md` section 7 places per-format writers in the configuration that uses them | `games/chess/__init__.py:build_exporters` isolates the import as a single line, so the move is one edit rather than a search |
 | **`ChessNotationWriter.export` is unexercised.** No test constructs the class and calls `export`; the suite calls `to_fen`, `to_pgn` and `to_stenographic` directly, and `tests/test_manager_exporters.py` uses its own stub writer and asserts the manager never names `ChessNotationWriter`. The format switch at `model/misc/export_writers.py:209` therefore has no test at all | `tests/test_notation_and_writers.py`, `tests/test_manager_exporters.py` |
-| **`games/checkers` is not WCDF English draughts.** The king flies, fifty-move defaults to 100 plies where WCDF says 80, there is no threefold repetition, and insufficient material draws two-king-against-one. `PRD.md` FR-54 asks for the rulebook's game. Recorded in `notes/object_model.md` §21 | `games/checkers/__init__.py`, `games/checkers/pieces/king.py`, `games/checkers/rules/draws.py` |
+| **`games/checkers` now plays WCDF English draughts**, having not done so until 2026-10-04: the king steps (1.17, 1.21), the forty-move count is 80 plies (1.32.2), a repetition rule exists (1.32.1), and the invented insufficient-material draw is gone. One divergence is deliberate — 1.32.1 is a claim to a referee and the engine proposes the draw itself. The perft gate cannot see the king's reach: no man crowns inside the eight plies it walks | `games/checkers/pieces/king.py`, `games/checkers/rules/draws.py`, `games/checkers/rules/__init__.py` |
 
 `pyproject.toml` **does** ship both configurations. Commit `319ed0d` added
 `games.checkers` and its six subpackages to the explicit package list, so a clean
@@ -347,7 +347,7 @@ said thirteen, two, three and three.
 | 14 | Wire the orphan subsystems | **delivered** | main stack |
 | 15 | View layer with the game-start modal | **delivered** — `BoardView`, `PlayerGameView`, `PlayerView`, `QuestCard`, `QuestList`, `StartModal` | main stack |
 | 16 | Settings surface | **delivered** — the five sections, the corner configuration selector with create/rename/delete/duplicate, and a code editor that validates before the code joins a configuration | main stack |
-| 17 | `games/checkers/` | **partial** — the board, two piece kinds, eight rules, the clock and four quests, held to the published perft counts. `build_configuration()` declares `exporters=[]`, so it ships **zero** exporters, not two missing ones. The game it plays is flying-kings, not WCDF English draughts; `notes/object_model.md` §21 | main stack |
+| 17 | `games/checkers/` | **partial** — the board, two piece kinds, eight rules, the clock and four quests, held to the published perft counts, and playing WCDF English draughts since 2026-10-04 (`notes/object_model.md` §21). `build_configuration()` declares `exporters=[]`, so it ships **zero** exporters, not two missing ones | main stack |
 | 18 | Export generalised | **not started** — the `ExportWriter` base and `formats()` exist, but the format switch does, and there is no per-format subclass in `games/<variant>/export/` | — |
 | 19 | Export formats: PGN, FEN, field-field-extra, stenographic | **not started** | — |
 | 20 | Czech aliases and remaining dead code | **partial** — all fifteen aliases ship, `Knight` is canonical, `Tower`, `Horse` and `Controller` are gone. Absent: the `controller/controller.py` → `game_manager_controller.py` rename, and the dead-code re-check | main stack |
@@ -1246,26 +1246,31 @@ a draughts position has none, and the structure says so rather than a runtime
 check.
 
 **What was built against that paragraph.** The board is 8×8 with twelve pieces a
-side, men step one square forward diagonally, crowning keeps the man in play, and
-`CaptureRule` / `LandingRule` / `CrowningRule` / `ImmobilisationRule` are in
-force. **Five points of the paragraph are not what ships**, and none of them was
-recorded before this correction; `notes/object_model.md` §21 now records each:
+  side, men step one square forward diagonally, crowning keeps the man in play, and
+  `CaptureRule` / `LandingRule` / `CrowningRule` / `ImmobilisationRule` are in
+  force. **Five points of that paragraph did not ship** until 2026-10-04, and none
+  of them was recorded before this correction; `notes/object_model.md` §21 records
+  each and what closing them cost:
 
-- **The king flies.** `games/checkers/pieces/king.py` slides any distance. WCDF
-  English draughts steps one square; flying kings are international, Brazilian,
-  Czech and Dutch. The configuration's own module docstring says so.
-- **Fifty-move defaults to 100 plies**, which is fifty moves by each side. WCDF
-  says forty moves by each side, eighty plies. The field is configurable, so a
-  club can set it, but the shipped default is not the rulebook's.
-- **There is no threefold repetition.** The eight rules in
-  `games/checkers/rules/__init__.py` do not include one.
-- **Insufficient material draws two-king-against-one.** The rule ends any position
-  in which neither side still holds a man. Its own docstring calls this "not an
-  English draughts rule and not quite true".
-- **`LimitedKingsRule` and `CaptureRule` are non-English variants.**
-  `LimitedKingsRule` caps how many kings a side may hold, which no rulebook does.
-  `CaptureRule`'s maximum-capture restriction ships switched **off**, which *is*
-  the rulebook's game — that one is configured correctly.
+  - **The king steps one square** (WCDF 1.17 and 1.21). It used to fly, which is
+    international, Brazilian, Czech and Dutch draughts. Both are one number,
+    `max_steps`, in `games/checkers/pieces/king.py`.
+  - **The forty-move count is 80 plies** (1.32.2), forty moves by each side. It
+    used to default to 100, which is fifty moves each.
+  - **There is a threefold repetition rule** (1.32.1). There was none.
+  - **The sufficient-material draw is gone.** It was in no rulebook, and it ended
+    two-kings-against-one while that game was still winnable.
+  - **`LimitedKingsRule` and `CaptureRule` remain declared and inert.**
+    `LimitedKingsRule` caps how many kings a side may hold — at its shipped value,
+    a side's full complement, so it forbids nothing until somebody lowers it.
+    `CaptureRule`'s maximum-capture restriction ships switched **off**, which is
+    what 1.20 requires: a player "may select any one that they wish, not
+    necessarily that which gains the most pieces".
+
+  **The perft gate could not have caught the king's reach**, and says so in its own
+  docstring: a man needs more than eight plies to crown from the starting
+  position, so no king exists in the tree the gate walks. A sliding and a stepping
+  king were both measured at depth eight and both gave 845931.
 
 **`build_configuration()` declares `exporters=[]`** (`games/checkers/__init__.py`).
 An earlier revision of this section said the configuration's "two exporters" were
@@ -1463,15 +1468,16 @@ asserted. An unannotated item here is a target, not a verified state.
     deleted.
 19. A configuration is a directory that can be copied to create a variant.
 20. `checkers` is full English draughts and requires **no engine change**, and it
-    offers the two formats that mean something for it. **The engine-change half
-    holds; the rest does not.** No engine file changed to add `games/checkers/`.
-    But `PRD.md` FR-54 asks for the rulebook's English draughts and this
-    configuration plays a different game: the king flies where WCDF English steps
-    one square, fifty-move defaults to 100 plies where WCDF says 80, there is no
-    threefold repetition, insufficient material draws two-king-against-one, and
-    `LimitedKingsRule` and `CaptureRule` are non-English variants. It offers
-    **zero** formats, not two. `notes/object_model.md` §21 records each departure;
-    planned PR 17 owns closing them.
+offers the two formats that mean something for it. **The engine-change half
+      holds; the half about the formats does not.** No engine file changed to add
+      `games/checkers/`, and none changed when the rulebook gaps were closed on
+      2026-10-04 either. The configuration plays WCDF English draughts: the king
+      steps (1.17, 1.21), the forty-move count is eighty plies (1.32.2), a
+      repetition rule exists (1.32.1), and the sufficient-material draw that ended
+      two-kings-against-one is gone. Two variants remain declared and inert, and one
+      divergence is deliberate: 1.32.1 is a claim to a referee and the engine
+      proposes the draw itself. It still offers **zero** formats, not two.
+      `notes/object_model.md` §21 records each; planned PR 17 owns the exporters.
 
 **Interface**
 

@@ -18,10 +18,12 @@ Three things are worth stating here rather than leaving to be discovered:
 - **There is no royal piece.** A king in this game is a man that has been crowned, and it is
   taken like any other piece, so nothing declares a royal kind and the engine's check
   machinery correctly finds nothing to do.
-- **The king flies.** The WCDF rulebook's English draughts king steps one square; this one
-  slides any distance, which is international, Brazilian, Czech and Dutch draughts. The
-  difference is one line in `pieces/king.py` and is documented there. What is gated by the
-  published perft counts in `tests/test_draughts_perft.py` is the flying game.
+- **The king steps one square, as the rulebook says.** WCDF rule 1.17 gives a king's ordinary
+    move as one square diagonally in any of the four directions, and rule 1.21 gives its
+    capturing move as a man's in any direction. The flying king of international, Brazilian,
+    Czech and Dutch draughts is the same piece with one number changed — `max_steps=None`
+    instead of `max_steps=1` in `pieces/king.py` — and `tests/test_draughts_perft.py` records
+    why the published perft counts cannot tell the two apart.
 - **No man is removed.** A man that reaches the far row is crowned and keeps playing; the
   only ways out of the game are losing every piece, being unable to move, and the draws.
 """
