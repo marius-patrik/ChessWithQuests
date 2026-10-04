@@ -147,7 +147,8 @@ user request adds it.
   **Neither is true of the diagram.** `Extends` is a legend label on a
   free-standing line beside the piece row, not a relationship, and no edge in the
   file connects any writer to any other writer or to the `export writers` box.
-  `ChessNotationWriter` has zero edges. The base-class-plus-subclasses shape is a
+  The drawn `ChessNotationWriter` box has zero edges, and the class of that name
+  is now deleted in any case (section 7). The base-class-plus-subclasses shape is a
   legitimate inference from the diagram's generalisation idiom, but it is **not**
   something the diagram draws, so it is registered as section 7 rather than
   claimed as conformance.
@@ -215,7 +216,7 @@ user request adds it.
   and this section already claimed it removed the pawn fallback; it had not. The
   writer still carried `PIECE_CHARS = {"king": "k", ...}` and still wrote
   `PIECE_CHARS.get(ptype, "p")`, so the sentence above was true of the renderer
-  and false of the writer. `ChessNotationWriter` now asks the piece —
+  and false of the writer. The position-record writer now asks the piece —
   `piece.getFen()` — and raises `ValueError` when a piece declares no character.
   An undeclared piece has no place in a position record, and the record is no
   longer willing to call it a pawn. **No deviation**: this is this section's
@@ -294,19 +295,45 @@ Recorded because the question is fair and the answer is not obvious.
   genuinely draws (`Kůň → Figurka`), while this one does not.
 - **Mitigation**: the diagram's three named members do **not** all survive.
   Corrected 2026-10-04; the earlier text claimed all three did, and two of the
-  three do not exist in any form:
+  three do not exist in any form. Corrected again 2026-10-05: **none of the
+  three survives**, because `ExportWriter.field` — the box's only member, and
+  the one this file earlier recorded as the sole survivor — was dead state and
+  is deleted:
 
   | Drawn member | In the code |
   |---|---|
-  | `export writers` · `field: type` | **present** — `ExportWriter.field` (`model/misc/export_writers.py:46`) |
+  | `export writers` · `field: type` | **absent** — `ExportWriter` had `field`, written once in `__init__` and read nowhere in the repository; deleted 2026-10-05 with the writers that moved |
   | `MetadataWriter` · `method(type): type` | **absent** — `MetadataWriter` has `set_header`, `get_header`, `format_pgn_headers` and `export`, and no `method` |
-  | `ChessNotationWriter` · `item: attribute` | **absent** — `ChessNotationWriter` has `formats`, `_fen_letter`, `to_fen`, `to_pgn`, `to_stenographic` and `export`, and no `item` |
+  | `ChessNotationWriter` · `item: attribute` | **absent** — the class is deleted. Its three formats are now `ExportPGN`, `ExportFEN` and `ExportStenographic` in `games/chess/export/`, each with `formats`, `export` and its own writing method, and none has `item` |
 
-  `MetadataWriter` keeps its **name**, and no writer is renamed away. The two
+  `MetadataWriter` keeps its **name**, and no writer is renamed away. The three
   absent members are registered in §23. `QuestManager`'s drawn `field` and
   `method(type): type` are absent as well; `QuestManager` itself survives.
+- **Implemented 2026-10-05**, as this section decided. `games/chess/export/` holds one writer
+  per notation — `ExportPGN`, `ExportFEN`, `ExportStenographic` — and `model/misc/export_writers.py`
+  holds `ExportWriter` and nothing else. `ChessNotationWriter` is deleted rather than
+  deprecated, and so is `model/misc/notation.py`, the sixteen-line shim that re-exported two
+  chess names into the engine. `games/chess/__init__.py:build_exporters` declares the three,
+  PGN first, so `default_format()` and `save_log`'s extension are unchanged.
+  **Two formats the diagram names are still absent** — *letter* (algebraic movetext) as a
+  format of its own, and *Field - Field - Extra* — and `ExportMetadata` is still
+  `model/misc/metadata.py` rather than a writer beside them; those are PR 19 and the
+  `Configuration.metadata` seam PR 19 needs, and `SCRATCHPAD.md` §4.1 records both.
+  Two naming defects went with the split: the notation was declared `"Stenographic"` and
+  dispatched `"STENOGRAPHIC"`, and an unknown notation returned `""` rather than raising.
+- **The naming the window draws, 2026-10-05.** Deleting the shim forced a decision about
+  `view/player_game_view.py`, which labelled the move history through it. The view may not
+  import a configuration — a copy would then be drawn and annotated in the original's naming,
+  which is the failure `tests/test_configuration_copying.py` exists to catch — so the naming
+  is declared by the configuration and asked for: `Configuration.notation` holds whatever
+  answers `move_label(number, move)`, chess supplies `AlgebraicNotation`, and a configuration
+  that declares none is drawn in coordinate pairs. Column labels take the same shape one level
+  down: `Board.file_label` numbers a column and `games/chess/board.py`'s `ChessBoard`
+  overrides it with the algebraic letter. Both seams are additions the diagram does not draw,
+  and §23 registers them.
 - **Approval**: directed by the user on 2026-10-02 — *"maybe have export
-  generalized same way"*.
+  generalized same way"* — and on 2026-10-05 for the move itself and for the
+  two naming seams above.
 
 ### 8. Result — the Outcome Type
 
@@ -544,15 +571,17 @@ Recorded because the question is fair and the answer is not obvious.
 - **Deviation**: none beyond section 10, which already registers the loading
   mechanism and its bounding. This is that mechanism working for a copy rather
   than only for the shipped directory.
-- **Gap closed 2026-10-03.** The remaining gap recorded below is closed;
-  section 19 carries the change. Nothing in a copied configuration reaches back
-  into `games/chess` any more — with one exception outside the configuration:
-  `model/misc/export_writers.py` reaches `games.chess.export.algebraic` by
-  absolute path inside `_to_algebraic()`, so a copy that keeps using the shipped
-  writer still borrows the original's square naming. That is harmless for a
-  chess-derived copy and wrong for a copy whose squares are not chess's, and it
-  disappears when the writer itself moves to `games/chess/export/` as section 7
-  already decided.
+- **Gap closed 2026-10-03, and the exception with it on 2026-10-05.** The
+  remaining gap recorded below is closed; section 19 carries the change. Nothing
+  in a copied configuration reached back into `games/chess` any more — with one
+  exception outside the configuration: `model/misc/export_writers.py` reached
+  `games.chess.export.algebraic` by absolute path inside `_to_algebraic()`, so a
+  copy that kept using the shipped writer still borrowed the original's square
+  naming. That disappeared when the writers moved to `games/chess/export/` and
+  imported relatively, which section 7 had already decided. `view/player_game_view.py`
+  borrowed the same naming through the shim, and now asks the configuration for it
+  (`Configuration.notation`) instead. `tests/test_configuration_copying.py` holds a copy to
+  its own writers, its own board and its own naming of a move.
 
 ### 17. The Engine Quest Roster Names No Piece
 
@@ -585,14 +614,13 @@ Recorded because the question is fair and the answer is not obvious.
   `build_exporters()`. Section 4 registers a configuration as a bundle of *pieces*
   and per-configuration export writers, so removing either attribute would
   contradict a registered decision while filling them in carries it out.
-- **Consequence recorded, and closed on 2026-10-03.** `Configuration.exporters`
-  is now read: `model/game/manager.py` takes its writers from it instead of
-  constructing `ChessNotationWriter()` unconditionally, so the engine no longer
-  names a chess writer at all and the move section 7 describes is unblocked —
-  see section 19. `model/misc/notation.py` is still a re-export shim for the
-  moved algebraic conversion, but no longer for the manager's sake: its one
-  remaining consumer outside this repository's configuration layer is
-  `view/player_game_view.py`.
+- **Consequence recorded, and closed on 2026-10-03; carried out on 2026-10-05.**
+  `Configuration.exporters` is now read: `model/game/manager.py` takes its writers from it
+  instead of constructing a writer unconditionally, so the engine named no chess writer at all
+  and the move section 7 describes was unblocked — see section 19. That move is done: the
+  writers are `games/chess/export/`'s, and `model/misc/notation.py`, the last re-export shim
+  for the moved algebraic conversion, is deleted rather than left for the next caller.
+  `Configuration.notation` was added on the same day for the naming the window draws.
 
 ### 19. The Engine Names No Notation, and a Copy Keeps Its Own Rules
 
@@ -661,8 +689,10 @@ Recorded because the question is fair and the answer is not obvious.
      a stenographic record of a game with no moves really is empty. A writer declaring
      what it writes is therefore the base class's business, not a chess detail.
      `model/misc/export_writers.py` is an engine module this work was not given; the
-     addition is `ExportWriter.formats()` returning `()` and `ChessNotationWriter`
-     overriding it.
+     addition is `ExportWriter.formats()` returning `()`, overridden by each writer in
+     `games/chess/export/` since 2026-10-05. `ExportWriter._writes` arrived with them, and is
+     the same comparison `writer_for` makes: a writer answers the notations it declares and
+     refuses the rest with `UnsupportedExportFormat`.
   2. **`GameManager.transcript()` lost its default argument.** It was `fmt: str =
      "PGN"`, which was chess in a signature, and it now defaults to the first notation
      the configuration offers; `save_log()` names its default file from that notation
@@ -832,18 +862,22 @@ Recorded because the question is fair and the answer is not obvious.
 | Drawn member | Class | Status |
 |---|---|---|
 | `method(type): type` | `MetadataWriter` | **no `method` member.** `MetadataWriter` has `set_header`, `get_header`, `format_pgn_headers`, `export` |
-| `item: attribute` | `ChessNotationWriter` | **no `item` member.** The class has `formats`, `_fen_letter`, `to_fen`, `to_pgn`, `to_stenographic`, `export` |
+| `item: attribute` | `ChessNotationWriter` | **no `item` member, and no class either** — the class is deleted; its notations are `ExportPGN`, `ExportFEN` and `ExportStenographic`, none of which has `item` |
+| `field: type` | `export writers` | **no `field` member** — `ExportWriter.field` was written once and read nowhere, and is deleted with the 2026-10-05 move |
 | `field: type` | `QuestManager` | **no `field` member** |
 | `method(type): type` | `QuestManager` | **no `method` member** |
 
-  §7's Mitigation has been corrected to say so. All three classes survive by name;
-  what is absent is these four declarations. `ExportWriter.field` — the `export
-  writers` box's one member — **is** present at `model/misc/export_writers.py:46`,
-  so the box the diagram draws smallest is the one that survived whole.
+  §7's Mitigation has been corrected to say so, twice: the correction of 2026-10-04 said
+  two of the three members were absent, and 2026-10-05 made it three when `ExportWriter.field`
+  — the `export writers` box's one member, and the one this file had recorded as the sole
+  survivor — was deleted as dead state. `MetadataWriter` and `QuestManager` survive by name;
+  what is absent is these five declarations. The box the diagram draws smallest is now the
+  one that survived least.
 
-**Not drawn, and present in the code.** Thirteen additions. None is registered
-anywhere before this section. None alters the diagram's classes or their
-relationships; each is an extension of a mechanism an earlier section registered.
+**Not drawn, and present in the code.** Seventeen additions — thirteen recorded
+2026-10-04, four more on 2026-10-05. None is registered anywhere before this section. None
+alters the diagram's classes or their relationships; each is an extension of a mechanism an
+earlier section registered.
 
 | Addition | What it is | Registered by |
 |---|---|---|
@@ -859,14 +893,21 @@ relationships; each is an extension of a mechanism an earlier section registered
 | `view/code_editor.py` | The editor itself. §10 registered the *execution* of authored code; §20 part 2 registered the check | §10, §20 — the module was not named in either |
 | `model/game/clock_fields.py` | A clock's declared fields. §9 now records why it is a function and not a method | §9, §20 part 1 — named in §20 only |
 | `model/game/source_validation.py` | The check that runs before code joins a configuration | §10, §20 part 2 — the module was not named in either |
+| `Board.file_label` | `board.py:120`. What the board calls one of its columns, numbering them by default. **Required by the move**: `view/game_view.py` computed `chr(ord("a") + col)` itself, a second chess naming that no gate covered, and deleting `model/misc/notation.py` left the move history with no legal source for one | §5, §16 register the board's own extents; the naming was not registered |
+| `games/chess/board.py`'s `ChessBoard` | The chess override of that one method, with `file_letter` in `games/chess/export/algebraic.py` as its single source. What makes the *view* chess-free without the view knowing a game | §7 by implication — a configuration declares what it uses; the class was not named |
+| `Configuration.notation` | `configuration.py:57`. The naming a configuration gives a move, for the window to draw the history with. Optional: absent means coordinate pairs | §7 by implication — the configuration owns its own naming; the attribute was not named |
+| `AlgebraicNotation`, `view.move_label` | `games/chess/export/algebraic.py` and `view/player_game_view.py`. The chess answer to `move_label(number, move)`, and the view's fallback to coordinates. §7 registers where the naming lives; neither object was drawn | §7 by implication; the two were not named |
 
 - **Approval**: **not approved.** Recorded 2026-10-04 by a sweep of the tree
-  against `notes/reference_diagram.md`. None of the thirteen changes a class the
+  against `notes/reference_diagram.md`. None of the seventeen changes a class the
   diagram draws, and none of them is the diagram being wrong about something it
-  does draw; they are additions to it, which is what this section is for. The four
+  does draw; they are additions to it, which is what this section is for. The five
   absent members are a different matter and need the maintainer's decision: either
   the diagram member is implemented, or this section stands as the record that it
-  was consciously not.
+  was consciously not. `ExportWriter.field` joined that list on 2026-10-05: it was
+  written once and read nowhere, so the box the diagram draws smallest now keeps none of
+  its one member. The four naming additions of the same day were approved with §7, which is
+  where the decision they serve is recorded.
 
 ---
 
@@ -913,4 +954,4 @@ Recorded here because they are deviations from what the diagram draws and
 | `HracView` is created as `PlayerView` | See section 15. The class exists, and its `HracView` alias does too. | 2026-10-02 |
 | A piece's configured `piece_type` is not renamed with its class | `Knight` declares `piece_type="horse"`. `piece_type` is persisted configuration data, so renaming it would repoint every stored value. **New, 2026-10-03**; approval not yet on record. | Recorded 2026-10-03; **not approved** |
 | `KingOnlyGame` keeps its chess name | **Not renamed, and recommended for renaming.** The class judges a game in which only one kind of piece ever moved, which is not chess-specific, so `SingleKindGame` would be the honest name — but `royal_kind` is the constructor keyword configurations pass and `tests/test_quest.py` calls with it, and renaming either needs that test updated and every player-authored quest file to change with it. Renaming the class while keeping the keyword would leave the vocabulary in place anyway, so the name stays until the keyword can move with it. | Recorded 2026-10-03; **not approved** |
-| `ChessNotationWriter` keeps its name in the engine | **Not moved, and registered for moving.** Section 7 already places per-format writers in `games/chess/export/`, and section 7's approval covers it. The blocker was `model/game/manager.py`'s import by name, and that is gone as of 2026-10-03, so the move is now unblocked and unperformed. Moving it while leaving a shim behind would make the engine module import the configuration that imports the engine module, which fails on a cycle as soon as any variant configuration is loaded. | Recorded 2026-10-03; **not approved** |
+| `ChessNotationWriter` keeps its name in the engine | **Not moved, and deleted.** Section 7 already places per-format writers in `games/chess/export/`, and section 7's approval covers it. The blocker was `model/game/manager.py`'s import by name, and that was gone as of 2026-10-03. The class is deleted as of 2026-10-05 rather than renamed, because it was one class standing for three notations and no name could be honest about that: `games/chess/export/` holds `ExportPGN`, `ExportFEN` and `ExportStenographic`. No shim was left behind — a shim would have made the engine module import the configuration that imports the engine module, which fails on a cycle as soon as any variant configuration is loaded. The drawn box keeps its name in `notes/reference_diagram.md`, which is a record of the diagram and not of the code. | Recorded 2026-10-03; **moved and approved 2026-10-05** |

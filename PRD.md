@@ -275,6 +275,12 @@ compartment of the **`ChessNotationWriter`** box enumerates the formats — *let
 *PGN*, *FEN*, *Field - Field - Extra*, *Stenographic* (standard or custom
 compression) — plus **the game transcript**, described as a single parameter.
 
+**Implemented 2026-10-05**: one writer class per format, in
+`games/chess/export/` — `ExportPGN`, `ExportFEN`, `ExportStenographic`. The class
+named `ChessNotationWriter` is deleted; it stood for three notations at once, and
+no name could be honest about that. *letter* as a format of its own and
+*Field - Field - Extra* are still unwritten.
+
 **All of them are implemented.** Nothing in this section is optional.
 
 The diagram's `export writers` box is a separate, near-empty box holding one
@@ -340,9 +346,9 @@ this project adds beyond the diagram is registered in `notes/object_model.md`.
 | `User Manager` · `Id_uzivatele`, `log_uzivatelu`, `historie_uzivatele`, `proveď_tah()` | FR-60 |
 | `Quest` · `nazev`, `popis`, `validate()` | FR-18, FR-20 |
 | `QuestManager` · `field`, `method(type): type` | FR-23. **`QuestManager` exists** (`model/misc/quest_manager.py`) but holds **neither** drawn member — see `notes/object_model.md` §23 |
-| `ChessNotationWriter` · format list, `item` | FR-43 to FR-52. **`item: attribute` is drawn but no member named `item` exists** in `ChessNotationWriter` (`model/misc/export_writers.py`) — see `notes/object_model.md` §23 |
+| `ChessNotationWriter` · format list, `item` | FR-43 to FR-52. **No class named `ChessNotationWriter` exists** — it is deleted as of 2026-10-05, and its formats are `ExportPGN`, `ExportFEN` and `ExportStenographic` in `games/chess/export/`. **`item: attribute` is drawn and no member named `item` exists** in any of them — see `notes/object_model.md` §23 |
 | `MetadataWriter` · `method(type): type` | FR-48. **Drawn, and no `method` member exists** in `MetadataWriter` (`model/misc/metadata.py`) — see `notes/object_model.md` §23 |
-| `export writers` · `field` | FR-43 — `ExportWriter.field` is declared at `model/misc/export_writers.py:46` |
+| `export writers` · `field` | FR-43. **`ExportWriter.field` was declared at `model/misc/export_writers.py:46` and is deleted** as of 2026-10-05: it was written once in `__init__` and read nowhere in the repository. The box the diagram draws with one member now has none — see `notes/object_model.md` §7 and §23 |
 | `GameManagerController` · `vyber_pole()` | FR-65 |
 | `GameVeiw` · `controller`, `aktualizuj_plochu()` | FR-37, FR-66. The diagram spells the class `GameVeiw`; no `GameView` class exists — `notes/object_model.md` section 15 |
 | `HracGameView` · `controller`, `akutalizuj_hrace()` | FR-38, FR-67 |

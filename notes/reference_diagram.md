@@ -54,6 +54,15 @@ Its operation compartment is prose rather than named operations, and enumerates:
 "(Standard or custom compression)" — together with **the game transcript**,
 described as arriving "as a single parameter".
 
+**What the code has, as of 2026-10-05.** Three of those five formats are written, one per
+writer class in `games/chess/export/`: `ExportPGN`, `ExportFEN` and `ExportStenographic`.
+*Letter* is absent as a format of its own — `games/chess/export/algebraic.py` provides the
+naming it needs, and `AlgebraicNotation` hands it to the window — and *Field - Field -
+Extra* has no code at all. **No class named `ChessNotationWriter` exists**; the box is
+recorded here because this file is an inventory of the diagram, not of the code.
+`notes/object_model.md` section 7 registers the arrangement and section 23 the members the
+diagram draws and the code does not have.
+
 The **`export writers`** box does **not** contain this list. It holds one field.
 Both facts are load-bearing: see `notes/object_model.md` section 7.
 
