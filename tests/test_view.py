@@ -221,7 +221,7 @@ def test_the_board_is_drawn_from_whites_side(window):
     assert labels[:8] == ["8", "7", "6", "5", "4", "3", "2", "1"]
 
     # pos_to_algebraic calls row 0 rank 1, so the view must not contradict it.
-    from model.misc.notation import pos_to_algebraic
+    from games.chess.export.algebraic import pos_to_algebraic
 
     assert pos_to_algebraic((0, 4)) == "e1"
     assert board.get_piece_at((0, 4)).getType() == "king"
@@ -254,6 +254,70 @@ def test_the_move_history_is_notated(window):
         click(view, square)
 
     assert view.history.get(0) == "1. e2 – e4"
+
+
+def test_the_move_history_asks_the_configuration_how_it_names_a_move(window):
+    """The window draws the naming it is handed, whatever that naming is.
+
+    The view used to import a game's naming outright, so a copied configuration was drawn with
+    the original's letters and no test could see it: a variant that renamed its squares looked
+    edited and played the original.
+
+    Args:
+        window: A frame showing a real chess game.
+
+    Returns:
+        None
+    """
+
+    class HouseNaming:
+        """A variant's naming of a move, declared by the variant."""
+
+        def move_label(self, number, move):
+            """Return the variant's own label for a move.
+
+            Args:
+                number: The move's number.
+                move: The move to label.
+
+            Returns:
+                str: The label.
+            """
+            return f"{number}. house {move.end_pos[1]}"
+
+    view = window
+    for square in [(1, 4), (3, 4)]:
+        click(view, square)
+    assert view.history.get(0) == "1. e2 – e4"
+
+    view.manager.configuration.notation = HouseNaming()
+    view.history.delete(0, "end")
+    view.refresh()
+
+    assert view.history.get(0) == "1. house 4"
+
+
+def test_a_game_with_no_naming_of_its_own_is_drawn_in_coordinates():
+    """Falling back is saying nothing, which is the only naming the engine can offer.
+
+    Returns:
+        None
+    """
+    from model.game.move import Move
+    from view.player_game_view import move_label
+
+    assert move_label(None, 1, Move((1, 4), (3, 4))) == "1. (1, 4) – (3, 4)"
+
+
+def test_a_configuration_that_declares_no_naming_has_none():
+    """The attribute is optional, and absent means absent rather than invented.
+
+    Returns:
+        None
+    """
+    from model.game.configuration import Configuration
+
+    assert Configuration(name="probe", path="").notation is None
 
 
 def test_the_quest_cards_show_progress(window):

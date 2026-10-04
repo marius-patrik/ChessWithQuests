@@ -1,4 +1,5 @@
 from games.chess.board import build_board
+from games.chess.export.algebraic import AlgebraicNotation
 from games.chess.export.fen import ExportFEN
 from games.chess.export.pgn import ExportPGN
 from games.chess.export.stenographic import ExportStenographic
@@ -19,6 +20,31 @@ def test_algebraic_conversions():
     assert algebraic_to_pos("a1") == (0, 0)
     assert algebraic_to_pos("e4") == (3, 4)
     assert algebraic_to_pos("h8") == (7, 7)
+
+
+def test_the_chess_naming_of_a_move_is_the_algebraic_naming_of_both_its_squares():
+    """The move history and the transcript are one conversion, not two that agree today.
+
+    Returns:
+        None
+    """
+    notation = AlgebraicNotation()
+    move = Move((1, 4), (3, 4))
+
+    assert notation.move_label(1, move) == "1. e2 – e4"
+    assert notation.square_label(move.start_pos) == pos_to_algebraic(move.start_pos)
+    assert notation.square_label(move.end_pos) == pos_to_algebraic(move.end_pos)
+
+
+def test_the_chess_configuration_declares_its_naming():
+    """A configuration declares how it names a move, and chess declares the algebraic one.
+
+    Returns:
+        None
+    """
+    from games.chess import build_configuration
+
+    assert isinstance(build_configuration().notation, AlgebraicNotation)
 
 
 def test_the_position_record_writer_declares_one_notation_and_writes_it():

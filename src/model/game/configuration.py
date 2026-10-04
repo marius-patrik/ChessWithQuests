@@ -39,6 +39,11 @@ class Configuration:
         quests: The quests available.
         clocks: The clock configurations available.
         exporters: The export writers this configuration offers.
+        notation: How this configuration names its squares and its moves, for the window to
+            draw them with. It is whatever answers `move_label(number, move)`, and it is
+            optional: a configuration that names its squares in no notation gets its move
+            history as coordinate pairs. The engine holds no naming of its own, so there is
+            nothing here to be right or wrong about.
         package: The module name the configuration is registered under, so a module inside it
             can resolve its relative imports. Empty until the configuration is loaded from a
             directory, which is the only way a relative import can work at all.
@@ -54,6 +59,7 @@ class Configuration:
         quests: Optional[Iterable[Quest]] = None,
         clocks: Optional[Iterable[Any]] = None,
         exporters: Optional[Iterable[Any]] = None,
+        notation: Optional[Any] = None,
         board_factory: Optional[Callable[[], Board]] = None,
     ):
         """Assemble a configuration.
@@ -67,6 +73,9 @@ class Configuration:
             quests: The quests available.
             clocks: The clock configurations available.
             exporters: The export writers this configuration offers.
+            notation: How this configuration names a move, for the window to draw the move
+                history with. Anything answering `move_label(number, move)` will do; None
+                means the game is drawn with coordinates.
             board_factory: Builds a fresh board for this configuration. Holding one board
                 means one game; holding the way to build one means as many games as the
                 player has time for.
@@ -79,6 +88,7 @@ class Configuration:
         self.quests: List[Quest] = list(quests) if quests else []
         self.clocks: List[Any] = list(clocks) if clocks else []
         self.exporters: List[Any] = list(exporters) if exporters else []
+        self.notation: Optional[Any] = notation
         self.board_factory: Optional[Callable[[], Board]] = board_factory
         self.package: str = ""
 

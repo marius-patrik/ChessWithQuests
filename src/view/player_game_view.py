@@ -7,11 +7,11 @@ nothing else — every click goes to the controller and every redraw reads the m
 
 import tkinter as tk
 from tkinter import ttk
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 from controller.window_controller import WindowController
 from model.game.manager import GameManager
-from model.misc.notation import pos_to_algebraic
+from model.game.move import Move
 from view.game_view import BoardView
 from view.player_view import PlayerView
 from view.quest_view import QuestList
@@ -35,6 +35,29 @@ STATE_LABELS = {
     GameManager.STATE_CHECK: "Check.",
     GameManager.STATE_IN_PROGRESS: "",
 }
+
+
+def move_label(notation: Optional[Any], number: int, move: Move) -> str:
+    """Return the text the move history lists a move as.
+
+    The naming is the configuration's: `notation` is whatever `Configuration.notation` holds,
+    and a configuration that declares none gets a coordinate pair. The engine holds no naming
+    of its own, so falling back to coordinates is saying nothing at all — where the view used
+    to reach into a game for the naming, which drew every game, copies included, in that one
+    game's letters.
+
+    Args:
+        notation: The configuration's naming, or None when it declares none.
+        number: The move's number in the game, counted from one.
+        move: The `Move` to label.
+
+    Returns:
+        str: The label for the move list.
+    """
+    if notation is not None:
+        return notation.move_label(number, move)
+    start, end = move.start_pos, move.end_pos
+    return f"{number}. ({start[0]}, {start[1]}) – ({end[0]}, {end[1]})"
 
 
 class PlayerGameView(ttk.Frame):
@@ -265,12 +288,12 @@ class PlayerGameView(ttk.Frame):
         if self.history.size() == len(moves):
             return
         self.history.delete(0, "end")
+        notation = self.manager.configuration.notation if self.manager.configuration else None
         for number, move in enumerate(moves, start=1):
-            # Notated rather than printed as coordinates: the notation helper is what the
-            # transcript uses, so the list and the export cannot disagree.
-            start = pos_to_algebraic(move.start_pos)
-            end = pos_to_algebraic(move.end_pos)
-            self.history.insert("end", f"{number}. {start} – {end}")
+            # Notated rather than printed as coordinates, because the configuration's own
+            # naming is the same one its transcript is written with: the list and the export
+            # cannot disagree, and a variant that renames its squares renames both.
+            self.history.insert("end", move_label(notation, number, move))
 
     def _quit(self) -> None:
         """Close the window.

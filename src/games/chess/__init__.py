@@ -27,6 +27,7 @@ from model.misc.export_writers import ChessNotationWriter
 
 from .board import build_board
 from .clocks.fischer import Fischer
+from .export.algebraic import AlgebraicNotation
 from .pieces import build_pieces
 from .rules import build_rules
 
@@ -51,7 +52,8 @@ def build_configuration() -> Configuration:
 
     Returns:
         Configuration: The chess board, and the pieces, rules, quests, clocks and exporters
-        chess brings with it.
+        chess brings with it, together with the naming chess gives a move — which is what the
+        window draws the move history with, and what a copy of this directory brings with it.
     """
     return Configuration(
         name=DEFAULT_GAME,
@@ -62,6 +64,7 @@ def build_configuration() -> Configuration:
         quests=build_quests(),
         clocks=[Fischer()],
         exporters=build_exporters(),
+        notation=AlgebraicNotation(),
         board_factory=build_board,
     )
 
