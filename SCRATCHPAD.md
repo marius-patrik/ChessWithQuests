@@ -334,8 +334,8 @@ said thirteen, two, three and three.
 | 1 | PRD + SCRATCHPAD | **delivered** | main stack |
 | 2 | Flatten `src/` to root, generated docs pipeline | **delivered** | main stack |
 | 3 | Delete metadata-only tests, close docstring gaps, drop unused aliases | **delivered** — 51 collected tests removed, not 62; §5 | main stack |
-| 4 | CI: native self-contained workflows, remove DarkFactory | **delivered, outside the main stack** — on a branch 24 commits behind the tip | `feature/native-ci-workflows` |
-| 5 | Governance rules: `AGENTS.md` 1, 2, 4, 7, 9, 10, 11, 12, **13** | **delivered, outside the main stack** — on top of PR 4 | `feature/governance-rules` |
+| 4 | CI: native self-contained workflows, remove the agent workflows only | **delivered, outside the main stack** — on a branch 24 commits behind the tip; re-scoped on the main stack by #167 | `feature/native-ci-workflows` |
+| 5 | Governance rules: `AGENTS.md` 1, 2, 4, 7, 9, 10, 11, 12, **13** | **delivered, outside the main stack** — on top of PR 4. Rule 13 is withdrawn on the main stack instead, tombstoned, by #167 | `feature/governance-rules` |
 | 6 | Packaging, entry point, git-ignored log directory | **delivered** — including both configurations in the package list (§4.1) | main stack |
 | 7 | README honesty | **delivered** in the main stack by commit `77d978c`. The stale branch rewrite is superseded and is not to be merged | main stack |
 | 8 | Board generalisation | **delivered** | main stack |
@@ -506,16 +506,15 @@ begins. **The maintainer merges; do not merge.**
 | 1 | PRD + SCRATCHPAD | — | delivered |
 | 2 | Flatten `src/` to root, and reconfigure the docs pipeline with it | 1 | delivered |
 | 3 | Delete metadata-only tests, close docstring gaps, drop the unused aliases | 2 | delivered |
-| 4 | CI: native self-contained workflows, then remove the DarkFactory dependency | 3 | delivered on `feature/native-ci-workflows` |
+| 4 | CI: native self-contained workflows, then remove the agent workflows only | 3 | delivered on `feature/native-ci-workflows`; re-scoped here, §6 PR 4 |
 | 5 | Governance rules: `AGENTS.md` 1, 2, 4, 7, 9, 10, 11, 12, 13 | 4 | delivered on `feature/governance-rules` |
 | 6 | Packaging, entry point, and the git-ignored log directory | 2 | delivered |
 | 7 | README: stop claiming what the product does not yet do | 1 | delivered in the main stack by `77d978c` |
 
-**The order is load-bearing.** PR 4 deletes `.github/darkfactory.json` and the
-workflows that `tests/test_workflow_rules.py` and
-`tests/test_auto_format_workflow.py` assert on; PR 5 rewrites `AGENTS.md` Rules 7
-and 11, which those tests also assert on. Both would land red. PR 3 removes the
-tests, so it must precede them.
+**The order is load-bearing.** PR 3 deletes `tests/test_workflow_rules.py` and
+`tests/test_auto_format_workflow.py`, the only tests that asserted on
+`.github/workflows/*.yml` and on `AGENTS.md` Rules 7 and 11. PR 4 and PR 5 both
+change files those tests read, so both must land after it, not before.
 
 **Phase 1 is numbered 3 = cleanup, 4 = CI, 5 = governance everywhere in this
 file.** The summary table above, the issue list in the header, the dependency
@@ -642,12 +641,15 @@ metadata-only, and PR 21 adds behavioural coverage to offset.
 `python -m properdocs build --strict`, plus the specific commands in the
 corresponding issue.
 
-### PR 4 — CI: native workflows, then remove DarkFactory
+### PR 4 — CI: native workflows, then remove the agent workflows
 
 **State**: delivered on `feature/native-ci-workflows`, which is not on the main
-stack.
+stack. The scope below was **narrowed on the main stack** after the maintainer's
+order of 2026-10-02, "remove the agent scaffolding from the project", was narrowed
+again to the agent workflows and nothing else. Plan issue #167.
 
-**Goal**: the repository's CI depends on no external repository's workflow.
+**Goal**: the autonomous agent goes. The delegates that branch protection depends
+on stay, and so does the pin they resolve through.
 
 **There are 13 workflows on the main stack, and 11 of them are thin delegates**
 to `marius-patrik/DarkFactory` at the pinned ref in `.github/darkfactory.json`:
@@ -656,35 +658,66 @@ to `marius-patrik/DarkFactory` at the pinned ref in `.github/darkfactory.json`:
 `release.yml`, `report-failure.yml` and `verify-pr-issue.yml`. Only
 `verify-docs.yml` and `verify-view.yml` are already self-contained. An earlier
 revision of this section said "11 of 12", which counted neither of those two.
+**`agent.yml` is gone from the main stack now**, leaving twelve workflows and ten
+delegates.
 
-**Delete**: `.github/darkfactory.json`, `agent.yml`, `open-pr.yml`,
+**Delete**: `.github/workflows/agent.yml` and **nothing else in `.github/`**. An
+earlier revision of this section listed `.github/darkfactory.json`, `open-pr.yml`,
 `pr-approval-automerge.yml`, `project-automation.yml`, `report-failure.yml`, the
-`pipeline` git remote, and the empty gitignored `.pipeline/`.
+`pipeline` git remote and the empty gitignored `.pipeline/`. That list is
+withdrawn. `agent.yml` passed fourteen secrets, twelve of them provider
+credentials for seven coding-agent harnesses, and it was the only workflow that
+named any of the twelve; the two GitHub-side ones it also passed,
+`DARKFACTORY_APP_PRIVATE_KEY` and `GH_PROJECT_TOKEN`, are still named by
+`open-pr.yml`, `project-automation.yml` and `pr-approval-automerge.yml` and stay.
+`.github/ISSUE_TEMPLATE/request.yml:10` loses the sentence claiming requests are
+analysed automatically.
 
-**Reimplement natively and self-contained**: `ci.yml` (matrix `3.10`–`3.13`,
-pytest plus black), `auto-format.yml`, `deploy-docs.yml`, `preview-docs.yml`,
-`release.yml`, `verify-pr-issue.yml`.
+**Reimplement natively and self-contained**: nothing. `ci.yml`, `auto-format.yml`,
+`deploy-docs.yml`, `preview-docs.yml`, `release.yml` and `verify-pr-issue.yml`
+stay thin delegates, as do `open-pr.yml`, `pr-approval-automerge.yml`,
+`project-automation.yml` and `report-failure.yml`.
 
 **Unchanged**: `verify-docs.yml` and `verify-view.yml` are already
 self-contained. `verify-view.yml` exists only on the main stack and is why §8
 item 33 is false there — it is the one workflow that runs the tkinter tests, and
 the pinned pipeline does not install a windowing toolkit.
 
-**`AGENTS.md` Rule 13 is deleted by PR 5, not by PR 4.** `feature/native-ci-workflows`
-carries only the six commits that remove the delegates and the pin, and Rule 13 is
-still present in its `AGENTS.md`. The deletion is on `feature/governance-rules`,
-whose entire diff against `feature/native-ci-workflows` is one file,
-`AGENTS.md`. An earlier revision of this section listed Rule 13 under PR 4's
-deletions; the attribution was wrong.
+**What is kept in `.github/`, and why:**
+
+- **`.github/darkfactory.json`** — the ten surviving delegates read it wholesale,
+  and nothing in this repository can prove the pipeline tolerates a missing key.
+  Its `upstream.ref` is the pin every one of them resolves through.
+- **`open-pr.yml`** — `AGENTS.md` Rule 7 requires every pull request to be opened
+  in Draft by `github-actions[bot]` through it. Deleting it would leave Rule 7
+  unsatisfiable and every pull request in this stack, including the one removing
+  the agent, would need a personal access token instead.
+- **`identity.agent_slug`** (`darkfactory.json:8`) — the only agent-specific key
+  in the file, and **vestigial**: with `agent.yml` gone, nothing here reads it. It
+  **stays**, for the same reason as the file around it. Deleting one cosmetic
+  string is not worth risking `ci.yml` on every pull request to find out.
+- **`report-failure.yml:6`** — its trigger named `Autonomous Agent`, a workflow
+  that no longer exists, so the entry goes and the rest of the list stands.
+
+**`AGENTS.md` Rule 13 is withdrawn on the main stack, not by PR 5.**
+`feature/native-ci-workflows` carries only the six commits that remove the
+delegates and the pin, and the rule is still present in its `AGENTS.md`. It is
+withdrawn by the pull request bound to #167, which **tombstones** the number
+instead of renumbering it, because this file refers to it by number in several
+places. An earlier revision of this section attributed the deletion to PR 5, and
+listed Rule 13 under PR 4's deletions before that; both attributions were wrong.
 
 **Order inside the PR — non-negotiable**: land the replacement `ci.yml` and
 `auto-format.yml` first and get them green, *then* remove the delegates. The
-repository must never sit without working required checks.
+repository must never sit without working required checks. Under the narrowed
+scope there is nothing to land first, so the rule reduces to: **`agent.yml` goes
+in one commit, and no required check goes with it.**
 
-**Acceptance criteria**: `git remote -v` shows only `origin` and `upstream`; no workflow
-contains a `uses:` pointing at **another repository's workflow** — `actions/checkout`
-and `actions/setup-python` are expected and are not a DarkFactory dependency; CI green on all four Python
-versions.
+**Acceptance criteria**: `git remote -v` shows only `origin` and `upstream`; no
+workflow calls the autonomous agent, and no workflow names a workflow that does
+not exist; none of the twelve provider credentials is named anywhere in the
+repository; `AGENTS.md` Rule 13 is withdrawn in place, and Rules 7, 9, 10, 11, 12
+and 14 are byte-identical; CI green on all four Python versions.
 
 **Verification**: `pytest -q`, `black --check .`, and
 `python -m properdocs build --strict`, plus the specific commands in the
@@ -709,15 +742,19 @@ the main stack.
   the pre-merge review. PR 4 deletes the workflow that enforced them, so after
   this PR nothing does and the rule must not claim it.
 - **Rule 11** — delete entirely; it exists only to drive auto-merge.
-- **Rule 13** — delete entirely; it exists only to describe the shared DarkFactory
-  pipeline that PR 4 removes.
+- **Rule 13** — withdrawn on the **main stack** rather than here, by the pull
+  request bound to #167, because the agent workflow it describes is being removed
+  and its number is tombstoned rather than renumbered. `feature/governance-rules`
+  deletes it outright, which would close the gap the references here read across.
 - **Rule 12** — it requires a `Request` issue per prompt with a linked `Plan`
   child and an `approve` comment, enforced by that same deleted workflow. Keep the
   discipline, drop the claim of automated enforcement, and note that this track's
   Request and Plan issues are #123 to #130.
 
 On `feature/governance-rules` the rules that survive run 1 through 10, 12 and 14:
-eleven and thirteen are gone. The branch's whole diff against
+eleven is deleted and thirteen is deleted with it. **On the main stack thirteen is
+withdrawn in place instead**, as a tombstone, so the numbering above still means
+what it says, and fourteen keeps its number. The branch's whole diff against
 `feature/native-ci-workflows` is `AGENTS.md`.
 
 **Acceptance criteria**: no rule references `.github/darkfactory.json`,
