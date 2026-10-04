@@ -1,24 +1,22 @@
-"""King: any distance along a diagonal, forwards or backwards.
+"""King: one square diagonally, forwards or backwards.
 
 A king is a man that has been crowned, and everything that changes is declared here and
-nowhere else: it slides instead of stepping, and it jumps backwards as well as forwards.
-Both follow from the data rather than from a special case — no declared maximum step means
-the engine already slides it as far as the board allows, and all four diagonals are declared
-so a jump along any of them is available.
+nowhere else: it steps instead of sliding, and it jumps backwards as well as forwards. Both
+follow from the data rather than from a special case — `max_steps=1` is a one-square step,
+and all four diagonals are declared so a jump along any of them is available.
 
-**This is the flying king, and the WCDF rulebook for English draughts does not have one.** Its
-"ordinary move of a king" is "from one square diagonally forward or backward, left or right
-to an immediately neighbouring vacant square", and its "capturing move of a king" is that of a
-man with the direction widened — one square over one piece onto the square beyond. Flying
-kings are the rule in international, Brazilian, Czech and Dutch draughts and the short king is
-the rule in English, American, Italian and Turkish draughts, and the two disagree about which
-positions a king has a move in, so they are genuinely different games.
+This is the WCDF rulebook's king, and it is what ships. Rule 1.17: an ordinary move of a king
+"is from one square diagonally forward or backward, left or right to an immediately
+neighbouring vacant square", and rule 1.21 gives its capturing move as a man's "but may be in
+a forward or backward direction" — one square over one piece onto the square beyond.
 
-Flying is kept here because this configuration was specified with it, and because the two are
-one line of data: `max_steps=None` slides, `max_steps=1` steps. A variant that wants the
-rulebook's king declares `max_steps=1`, and every rule above reads that same number — a jump
-of one square or of any distance is `jump_reach`, which is this piece's declared step length.
-Nothing else in the configuration has to know which of the two games it is playing.
+The two kings are genuinely different games. The flying king of international, Brazilian,
+Czech and Dutch draughts slides and jumps any distance along a diagonal, and the two disagree
+about which positions a piece has a move in. Flying is one line of data here: `max_steps=None`
+slides and `max_steps=1` steps, so a variant that wants the international game changes this
+number and nothing else. Every rule above reads the same number — a jump of one square or of
+any distance is `jump_reach`, which is this piece's declared step length. Nothing else in the
+configuration has to know which of the two games it is playing.
 
 Whether a man may be crowned at all is a rule, and so is how many kings a side may hold. This
 piece does not decide either.
@@ -33,7 +31,7 @@ DIRECTIONS: List[Tuple[int, int]] = [(1, 1), (1, -1), (-1, 1), (-1, -1)]
 
 
 class King(Piece):
-    """Slides any distance along any diagonal, and jumps the same way."""
+    """Steps one square along any diagonal, and jumps the same way."""
 
     def __init__(self, color: Any, piece_type: str = "king"):
         """Initialize a King piece.
@@ -51,5 +49,5 @@ class King(Piece):
             attack_vectors=DIRECTIONS,
             can_jump=False,
             name="King",
-            max_steps=None,
+            max_steps=1,
         )

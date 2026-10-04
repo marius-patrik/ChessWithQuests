@@ -14,11 +14,18 @@ Three things are worth reading off the list rather than assuming:
   row is crowned and keeps playing, and the only ways out of the game are losing every piece,
   being unable to move, and the three draws.
 - **Two of the eight rules are not English draughts at all.** `LimitedKingsRule` caps how many
-  kings a side may hold, which no draughts rulebook does, and `CaptureRule` ships with its
-  maximum-capture restriction *switched off*, because the World Checkers Draughts Federation
-  rulebook says a player "may select any one that they wish, not necessarily that which gains
-  the most pieces". Both are here because they are variants somebody plays, and both are
-  configured so that what this configuration plays by default is the rulebook's game.
+    kings a side may hold, which no draughts rulebook does, and `CaptureRule` ships with its
+    maximum-capture restriction *switched off*, because the World Checkers Draughts Federation
+    rulebook says a player "may select any one that they wish, not necessarily that which gains
+    the most pieces". Both are here because they are variants somebody plays, and both are
+    configured so that what this configuration plays by default is the rulebook's game. The cap
+    is set to a side's full complement, so `LimitedKingsRule` forbids nothing at its shipped
+    value and is only a limit once somebody lowers it.
+  - **The three draws are the rulebook's three.** Article 1.32: agreement, the same position for
+    the third time, and forty moves by each side without advancing a man or removing a piece. A
+    fourth — a draw once neither side has a man left — was here and has been removed; no
+    draughts rulebook has it and it was wrong about the two-kings-against-one endgame it was
+    meant to describe. `notes/object_model.md` records the removal.
 """
 
 from typing import List
@@ -27,7 +34,7 @@ from model.game.rule import Rule
 
 from .capture import CaptureRule
 from .crowning import CrowningRule
-from .draws import FiftyMoveRule, InsufficientMaterialRule, MutualAgreementRule
+from .draws import FiftyMoveRule, MutualAgreementRule, ThreefoldRepetitionRule
 from .immobilisation import ImmobilisationRule
 from .landing import LandingRule
 from .limited_kings import LimitedKingsRule
@@ -39,8 +46,8 @@ RULES = (
     CrowningRule,
     LimitedKingsRule,
     ImmobilisationRule,
-    InsufficientMaterialRule,
     FiftyMoveRule,
+    ThreefoldRepetitionRule,
     MutualAgreementRule,
 )
 
