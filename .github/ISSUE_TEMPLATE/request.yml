@@ -7,7 +7,6 @@ body:
     attributes:
       value: |
         Thank you for submitting a request!
-        This repository uses an autonomous agent workflow. New requests are automatically analyzed, classified, and planned upon approval.
 
   - type: textarea
     id: verbatim_request

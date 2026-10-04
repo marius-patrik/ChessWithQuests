@@ -3,7 +3,7 @@ name: Report Pipeline Failure
 # Watches the other workflows and turns a failure into an issue, so a red run cannot scroll away.
 on:
   workflow_run:
-    workflows: [CI, Deploy Documentation, Release, Autonomous Agent]
+    workflows: [CI, Deploy Documentation, Release]
     types: [completed]
 
 permissions:
