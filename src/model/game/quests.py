@@ -407,16 +407,16 @@ class SurvivePlies(_AfterMoveQuest):
 
 
 class SurviveWithoutCapture(_AfterMoveQuest):
-    """Make at least `count` of your own moves without losing a piece."""
+    """Make at least `count` of your own moves without capturing anything."""
 
     default_name = "Untouchable"
-    default_description = "Play the required number of moves without losing a piece."
+    default_description = "Play the required number of your moves without capturing anything."
 
     def __init__(self, count: int = 1, **kwargs: Any):
-        """Create a no-loss quest.
+        """Create a quiet-move quest.
 
         Args:
-            count: How many of the quest's own moves must be made without a loss.
+            count: How many of the quest's own moves must be made without a capture.
             kwargs: Passed to `_AfterMoveQuest`.
 
         Raises:
@@ -441,7 +441,7 @@ class SurviveWithoutCapture(_AfterMoveQuest):
         ]
 
     def observe_move(self, event: MoveEvent) -> None:
-        """Record the move when nothing was lost on it.
+        """Record the move when nothing was taken on it.
 
         Args:
             event: The move that was played.
