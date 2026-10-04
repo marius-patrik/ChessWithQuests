@@ -764,9 +764,11 @@ Recorded because the question is fair and the answer is not obvious.
   variation between games lives. Closing them is a change to
   `games/checkers/` and to nothing else — which is the strongest evidence yet that
   the abstraction holds.
-- **Approval**: **not approved.** Recorded 2026-10-04 as a measured discrepancy
-  between `PRD.md` FR-54 and `games/checkers/`. The decision to close the gap or to
-  amend FR-54 is the maintainer's; planned PR 17 owns either.
+- **Approval**: recorded 2026-10-04 as a measured discrepancy between `PRD.md`
+    FR-54 and `games/checkers/`, closed the same day against FR-54 as written, and
+    **approved by the maintainer on 2026-10-04**. The ruling covered all five gaps, the
+    one divergence kept on purpose (1.32.1 proposed rather than claimed), and leaving
+    `LimitedKingsRule` and `CaptureRule` declared and inert.
 
 ---
 
