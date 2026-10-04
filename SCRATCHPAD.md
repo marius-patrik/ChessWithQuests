@@ -338,7 +338,7 @@ said thirteen, two, three and three.
 | 8 | Board generalisation | **delivered** | main stack |
 | 9 | `Quest` parent with built-in subclasses | **delivered** — twenty classes, split twelve `after_move` and eight `at_game_end` | main stack |
 | 10 | `Rule` parent, five hooks, configuration loading | **delivered** | main stack |
-| 11 | Orthodox chess rules, removal of type coupling | **partial** — thirteen `Rule` subclasses ship, and the *hard-coded* type coupling is gone. Eleven `getType()` call sites remain in `games/chess/rules/` across five files, and the engine still holds three in `model/game/`, plus five `hasattr` probes in `model/game/clock_fields.py`. See §7 PR 11 | main stack |
+| 11 | Orthodox chess rules, removal of type coupling | **partial** — thirteen `Rule` subclasses ship, and the *hard-coded* type coupling is gone. Thirteen `getType()` call sites remain in `games/chess/rules/` across five files, and the engine still holds three in `model/game/`, plus four `hasattr` probes in `model/game/clock_fields.py`. See §7 PR 11 | main stack |
 | 12 | Multi-hop moves | **delivered, as a different design from the one planned** — `Move` grew no hop sequence; `games/checkers/moves.py` declares `HopMove(Move)`, which carries the hops. See §4.7 | main stack |
 | 13 | Migrate chess into `games/chess/` | **delivered** | main stack |
 | 14 | Wire the orphan subsystems | **delivered** | main stack |
@@ -1025,23 +1025,25 @@ now asks the piece (`ChessNotationWriter._fen_letter`,
 `is_check`, `is_checkmate`, every `getType() == "king"` / `== "pawn"` comparison
 and every `hasattr` probe are gone. `find_king` is gone. **`is_check`
 (`validator.py:244`) and `is_checkmate` are both still there**, and they are
-called from `manager.py:205,209,347,348`. Neither is *hard-coded* coupling —
+called from `manager.py:211,215,353,354`. Neither is *hard-coded* coupling —
 neither names a piece type — but neither was removed either.
 
-**Where `getType()` actually still is.** Eighteen call sites across eight files:
+**Where `getType()` actually still is.** Twenty-one call sites across ten files,
+counted as occurrences of the call rather than lines holding it — `attacks.py:98`,
+`draws.py:340` and `geometric.py:89` each hold two:
 
 | Location | Sites |
 |---|---|
-| `games/chess/rules/` | **11 across 5 files** — `attacks.py:62,98`, `castling.py:84,145,191,215`, `draws.py:128,318,375`, `bishop_colour.py:90`, `promotion.py:102` |
-| `games/checkers/rules/` | 4 across 3 files — `draws.py:100`, `limited_kings.py:68`, `geometric.py:89,131` |
-| `model/game/` | **3 across 2 files** — `validator.py:199`, `manager.py:345,346` |
+| `games/chess/rules/` | **13 across 5 files** — `attacks.py:62,98`, `castling.py:84,145,191,215`, `draws.py:128,333,340,395`, `bishop_colour.py:90`, `promotion.py:102` |
+| `games/checkers/rules/` | 5 across 3 files — `draws.py:100`, `limited_kings.py:68`, `geometric.py:89,131` |
+| `model/game/` | **3 across 2 files** — `validator.py:199`, `manager.py:351,352` |
 
 An earlier revision of this section said "the three remaining `getType()`
 comparisons are in `games/chess/rules/` — `attacks.py`, `castling.py` and
-`draws.py`". There are **eleven** in that directory, across **five** files:
+`draws.py`". There are **thirteen** in that directory, across **five** files:
 `bishop_colour.py` and `promotion.py` were not named.
 
-**Where `hasattr` actually is.** Five probes, all in one file:
+**Where `hasattr` actually is.** Four probes, all in one file:
 `model/game/clock_fields.py:53,64,94,101`. They ask what a clock object holds,
 which is how the Clocks section describes a clock that derives from nothing — see
 `notes/object_model.md` §20. The claim that `hasattr` coupling is left "anywhere
@@ -1512,7 +1514,7 @@ asserted. An unannotated item here is a target, not a verified state.
 | Risk | Severity | Mitigation |
 |---|---|---|
 | Real PGN requires SAN disambiguation, which is easy to get subtly wrong — `Nbd7` versus `N1d7` versus `Nd7` | High | Each case gets its own test: two knights, three queens, two rooks on one rank, a pinned piece that can still legally reach the square, promotion capture. A round-trip against known-good PGN is the backstop |
-| `getType()` and `hasattr` coupling fails **silently** on rename or on a custom piece | High | PR 11 removes it. PR 20 ships tests that fail when a probe breaks, not only when a name changes. **Partly discharged already**: the *hard-coded* kind comparisons are gone and `tests/test_engine_holds_no_chess.py` reads the chess catalogue from the configuration so the gate cannot drift. What remains is 18 `getType()` sites and five `hasattr` probes, listed in §7 PR 11 |
+| `getType()` and `hasattr` coupling fails **silently** on rename or on a custom piece | High | PR 11 removes it. PR 20 ships tests that fail when a probe breaks, not only when a name changes. **Partly discharged already**: the *hard-coded* kind comparisons are gone and `tests/test_engine_holds_no_chess.py` reads the chess catalogue from the configuration so the gate cannot drift. What remains is 16 `getType()` sites in `games/chess/rules/` and `model/game/` — the draughts rules hold five more — and four `hasattr` probes; §7 PR 11 lists them file by file |
 | Deleting 51 collected tests masks a regression | Medium | Every deletion is import-only or metadata-only, and one `docs_hooks.py` test was rewritten to read a `tmp_path` fixture instead of real `notes/`. PR 21 adds behavioural coverage. §5 gives the exact count |
 | The flatten makes the whole repo the docs tree, and `exclude_docs` has to do work `docs_dir: src` did by construction | High | PR 2. Fallback is a dedicated docs directory rather than widening the tree |
 | A flat layout breaks setuptools auto-discovery over `tests/` | Medium | PR 6 sets `packages` explicitly |
