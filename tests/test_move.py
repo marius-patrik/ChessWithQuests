@@ -66,10 +66,12 @@ def test_an_en_passant_victim_reaches_the_capture_lists():
     capture = Move((4, 3), (5, 4), move_type="en_passant", capture_from=(5, 4))
     assert capture.apply_to_board(board) is not None
 
+    # The lists are named for the colour of the piece taken, not the taker: a White pawn
+    # taking a Black one lands in `captured_black`, which is where the panel reads from.
     assert capture.captured_piece is not None
     assert capture.captured_piece.getColor() == -1
-    assert board.captured_white == [capture.captured_piece]
-    assert board.captured_black == []
+    assert board.captured_black == [capture.captured_piece]
+    assert board.captured_white == []
 
 
 def test_undoing_an_en_passant_capture_restores_the_capture_lists():
