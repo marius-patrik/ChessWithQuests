@@ -146,6 +146,12 @@ class GameManager:
         self.game_logger = GameLogger()
         self.quest_manager.reset()
         if self.configuration is not None:
+            # `reset`, not re-attaching: `attach` is a rule's own chance to seed its state, and
+            # a rule that seeds nothing keeps the last game's. Only `reset` clears the dict
+            # first, so a new game cannot inherit a castling right already spent, an en passant
+            # offer still standing, or a move list nobody asked it to forget. Every shipped rule
+            # happens to reseed in `attach`, so nothing tested this until a rule did not.
+            self.configuration.reset()
             self.move_validator.set_rules(
                 self.configuration.enabled_rules(),
                 clock=self.timer,

@@ -73,6 +73,14 @@ class WonAtThreeMoves(Rule):
         super().__init__(**values)
         self.state["moves"] = 0
 
+    def attach(self):
+        """Start its own counter, as a rule that keeps state does.
+
+        `Rule.reset` clears the state and calls this, so a new game begins at zero
+        without the rule having to remember to do it.
+        """
+        self.state["moves"] = 0
+
     def on_move_made(self, position, move):
         self.state["moves"] += 1
 
@@ -310,7 +318,10 @@ def test_a_rules_state_resets_each_game_and_never_reaches_disk(games_dir, tmp_pa
     assert configuration.rules[2].value == {}
 
     configuration.reset()
-    assert configuration.rules[2].state == {}
+    # Reset clears the state and calls `attach`, which is where a rule seeds its starting
+    # values — the same contract every shipped chess rule uses. So "reset" means "back to the
+    # start of a game", which is a counter at zero, not an absent key.
+    assert configuration.rules[2].state == {"moves": 0}
     assert configuration.rules[2].enabled is True
 
 
@@ -322,6 +333,50 @@ def test_the_configured_value_survives_a_reset(games_dir):
 
     assert configuration.rules[1].value["landing"] == (3, 3)
     assert configuration.rules[1].landing == (3, 3)
+
+
+def test_a_new_game_clears_a_rule_that_seeds_nothing_in_attach():
+    """`attach` is a rule's own chance to seed its state; only `reset` clears what is there.
+
+    Every shipped rule happens to reseed in `attach`, so the fifty-move and draw-offer tests
+    passed with the manager re-attaching instead of resetting. This rule deliberately does not,
+    which is the case only `reset` covers.
+    """
+
+    class RemembersEveryMove(Rule):
+        """A rule that keeps state and whose `attach` deliberately seeds nothing."""
+
+        default_name = "Remembers"
+
+        def __init__(self, **values):
+            super().__init__(**values)
+            self.state["seen"] = []
+
+        def attach(self):
+            """Seed nothing, so anything left over is visible."""
+
+        def on_move_made(self, position, move):
+            self.state["seen"].append(move)
+
+    keeper = RemembersEveryMove()
+    configuration = Configuration(
+        name="memory",
+        path="",
+        board=Board((8, 8), setup_pieces=False),
+        pieces=[],
+        rules=[keeper],
+        quests=[],
+    )
+    game = GameManager(configuration=configuration)
+    keeper.state["seen"] = [Move((0, 0), (1, 0))]
+    assert keeper.state["seen"] != []
+
+    game.new_game()
+
+    fresh = next(
+        rule for rule in game.move_validator.active_rules() if rule.default_name == "Remembers"
+    )
+    assert fresh.state == {}, "the last game's moves were still in the new game's rule"
 
 
 # --- loading is bounded
