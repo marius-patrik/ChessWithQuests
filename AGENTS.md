@@ -64,27 +64,10 @@ Every incoming user prompt or task must immediately be converted into one or mor
 - **Confirmation Gate**: The interpretation requires explicit user confirmation (e.g. commenting `approve`) before any implementation plan gets made.
 - **Child Plan Issues**: Once the interpretation is confirmed by the user, a separate child issue is automatically created with the `Plan` label natively linked via GitHub sub-issues (`--parent <request_id>`), containing the detailed implementation plan. All subsequent code branches and pull requests bind to the plan issue.
 
-### 13. Harness-Agnostic Containerized Agent & Conversational CI Lifecycle
-An autonomous AI agent runs containerized in GitHub Actions. The runner, the container and the
-harness registry come from the shared pipeline in `marius-patrik/DarkFactory`, pinned by commit SHA
-in `.github/darkfactory.json`; `.github/workflows/agent.yml` is a caller, not a copy.
-- **Harness-agnostic**: no pipeline code knows which coding-agent CLI is executing. Antigravity
-  (`agy`), Claude Code, Codex, Kimi, Grok, Cursor and opencode are declared as data - a binary, an
-  argv template and a model chain - so adding one is a configuration change.
-- **Fallback across harnesses, not just models**: quota exhaustion on one harness escalates to the
-  next. This repository previously ran a single-vendor runner, and a single vendor's quota halted
-  delivery outright; that is the divergence this rule removes.
-- **Graceful degradation**: harnesses whose binary or credentials are absent are skipped rather
-  than failed, so holding three credentials of twelve gives a shorter chain, not a broken agent.
-- **Authentication**: provider credentials live in repository secrets and are passed explicitly to
-  the shared workflow, because secrets do not cross a `workflow_call` boundary on their own.
-- **Auto-Detection & Interpretation**: incoming unlabelled issues are tagged `Request`, classified
-  with type and area labels from this repository's own taxonomy, and answered with an
-  interpretation comment.
-- **Conversational Feedback Loop**: the agent monitors comments on Request issues, Plan issues and
-  pull requests, responds to human feedback and executes requested adjustments.
-- **Autonomous Implementation & Review**: on plan approval (`approve`) the agent creates the
-  branch, implements code and tests, opens a bot-authored Draft PR and runs a self-review loop.
+### 13. Withdrawn 2026-10-04
+The agent workflow this rule described no longer exists. The number is tombstoned rather than
+renumbered: `SCRATCHPAD.md` refers to "Rule 13" by number, and renumbering would silently repoint
+every one of those references at different content.
 
 ### 14. Conventional Commits & Taxonomy Enforcement
 All commits must strictly adhere to the Conventional Commits specification:
