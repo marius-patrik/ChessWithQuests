@@ -1,1 +1,1 @@
-"""Miscellaneous utilities package providing notation writers, metadata, and quest managers."""
+"""Miscellaneous utilities package providing metadata and quest managers."""

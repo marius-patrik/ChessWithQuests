@@ -23,28 +23,37 @@ from model.game.configuration import Configuration
 from model.game.games import DEFAULT_GAME
 from model.game.quest import Quest
 from model.game.rule import Rule
-from model.misc.export_writers import ChessNotationWriter
 
 from .board import build_board
 from .clocks.fischer import Fischer
 from .export.algebraic import AlgebraicNotation
+from .export.fen import ExportFEN
+from .export.pgn import ExportPGN
+from .export.stenographic import ExportStenographic
 from .pieces import build_pieces
 from .rules import build_rules
 
 
 def build_exporters() -> List[Any]:
-    """Build the export writers chess offers.
+    """Build the export writers chess offers, in the order they are preferred.
 
-    The chess formats — PGN, FEN and the stenographic coordinate record — are chess formats,
-    and `notes/object_model.md` registers that they belong to a configuration. The writer
-    class itself still lives in the engine module `model.misc.export_writers` because
-    `model/game/manager.py` imports it by name; this function is where that import is
-    isolated, so moving the class needs one line changed rather than a search.
+    Order is the preference: `GameManager.default_format` takes the first format the first
+    writer declares, and `save_log` names its file from that. PGN leads, so a chess game
+    written without being asked for a notation is written as PGN and saved as `.pgn`.
+
+    Each writer lives in `export/`, imported relatively, because a configuration is a
+    directory that can be copied into a variant and an absolute `games.chess.…` import would
+    leave the copy writing with the original's writers — silently, with no error and no
+    warning. Which notations exist is chess's answer; `notes/object_model.md` section 7
+    registers the arrangement and the engine keeps only the protocol.
+
+    Adding a notation is one file in `export/` and one line here.
 
     Returns:
-        List[Any]: One writer for the chess configuration.
+        List[Any]: One writer per chess notation: PGN, the position record, and the coordinate
+        record.
     """
-    return [ChessNotationWriter()]
+    return [ExportPGN(), ExportFEN(), ExportStenographic()]
 
 
 def build_configuration() -> Configuration:

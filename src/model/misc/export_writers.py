@@ -1,49 +1,33 @@
-"""Export writers converting games to PGN, FEN, and stenographic notation.
+"""The export writer protocol: the whole of what the engine knows about writing a game.
 
-The writer holds no piece knowledge at all. A piece declares the character it is written as,
-and a configuration that has not declared one is a configuration with no position record —
-which is said out loud rather than guessed at.
+`ExportWriter` names no game and no notation. Two methods are the protocol, and both are
+duck-typed rather than inherited: a writer's `formats()` says which notations it writes, and
+`export(format_type, **kwargs)` writes one of them. `GameManager.writer_for` and
+`GameManager.transcript` match writers on exactly that and need nothing else, which is why
+`tests/test_manager_exporters.py` can stand a writer of its own in front of the manager and
+have the manager behave exactly as it does for a shipped game.
 
-This module should not be here at all: PGN, FEN and algebraic coordinates are chess formats,
-and `notes/object_model.md` registers them as belonging to `games/chess/export/`. The last
-blocker was `model/game/manager.py`, which imported `ChessNotationWriter` by name; it now
-takes its writers from `Configuration.exporters`, so nothing in the engine names this class
-any more and the move is unblocked. Until it happens the chess naming of squares is still
-reached through `_to_algebraic()` below, which imports the chess configuration on demand
-rather than at module level — a module-level import would make `games/chess/__init__.py` and
-this module import each other, and loading any variant configuration would then fail on a
-circular import.
+Which notations exist is a configuration's answer, so the writers live with the configuration
+that uses them — `games/chess/export/` holds chess's, one file per notation. This module
+therefore holds no writer and no notation name: a concrete writer here would be a game the
+engine names, and `tests/test_engine_holds_no_chess.py` fails if one appears or if a module
+under `model/` imports a configuration at all.
+
+A piece's role in a written game is declared by the piece and nowhere else. A writer that
+needs a piece to say how it is written asks the piece, and a piece that has declared nothing
+has no place in the record — which is said out loud rather than guessed at.
 """
 
-from typing import List, Optional, Any, Tuple
-
-from model.misc.metadata import MetadataWriter
-
-
-def _to_algebraic(position: Tuple[int, int]) -> str:
-    """Name a square the way chess names it.
-
-    Args:
-        position: Tuple of (row, col) 0-indexed coordinates.
-
-    Returns:
-        str: The square's chess algebraic notation (e.g. 'e4').
-
-    Raises:
-        ImportError: If the chess configuration is not importable. That configuration is
-            where the chess naming lives, so a writer used without it has no naming to use.
-    """
-    from games.chess.export.algebraic import pos_to_algebraic
-
-    return pos_to_algebraic(position)
+from typing import Any, Tuple
 
 
 class ExportWriter:
-    """Abstract base class for game export serialization writers."""
+    """Abstract base class for export writers.
 
-    def __init__(self):
-        """Initialize an ExportWriter instance."""
-        self.field: str = ""
+    A writer is constructed by the configuration that offers it and is given nothing: no
+    board, no moves, no header. Everything the game supplies arrives through `export`, which
+    is what lets one protocol serve any number of notations.
+    """
 
     def formats(self) -> Tuple[str, ...]:
         """Return the format names this writer writes.
@@ -91,154 +75,3 @@ class ExportWriter:
             NotImplementedError: Must be implemented by subclasses.
         """
         raise NotImplementedError
-
-
-class ChessNotationWriter(ExportWriter):
-    """Serializes chess moves and board states into standard chess formats (PGN, FEN, stenographic)."""
-
-    def __init__(self):
-        """Initialize a ChessNotationWriter instance."""
-        super().__init__()
-
-    def formats(self) -> Tuple[str, ...]:
-        """Return the chess formats this writer writes.
-
-        Returns:
-            Tuple[str, ...]: PGN, FEN and the stenographic coordinate record — the formats
-            `notes/object_model.md` section 7 places in `games/chess/export/`, reachable from
-            here because this class has not moved yet.
-        """
-        return ("PGN", "FEN", "Stenographic")
-
-    @staticmethod
-    def _fen_letter(piece: Any) -> str:
-        """Return the character a piece declares for a position record.
-
-        Args:
-            piece: The piece being written.
-
-        Returns:
-            str: The piece's declared letter, in lower case.
-
-        Raises:
-            ValueError: If the piece declares no character. A piece with nothing to say about
-                a position record has no position record, and writing it as something else
-                would be a lie about the position.
-        """
-        get_fen = getattr(piece, "getFen", None)
-        letter = get_fen() if callable(get_fen) else None
-        if not letter:
-            get_type = getattr(piece, "getType", None)
-            name = get_type() if callable(get_type) else None
-            raise ValueError(
-                f"a piece of type {name!r} declares no character for a position record, "
-                "so this position cannot be written"
-            )
-        return str(letter).lower()
-
-    def to_stenographic(self, moves: List[Any]) -> str:
-        """Convert a list of moves to stenographic coordinate format (e.g. 'e2e4 e7e5').
-
-        Args:
-            moves: List of Move instances with start_pos and end_pos.
-
-        Returns:
-            Space-delimited string of concatenated coordinate pairs.
-        """
-        tokens = []
-        for m in moves:
-            start = _to_algebraic(m.start_pos)
-            end = _to_algebraic(m.end_pos)
-            tokens.append(f"{start}{end}")
-        return " ".join(tokens)
-
-    def to_fen(self, board: Any, active_color: int = 1) -> str:
-        """Convert board state to Forsyth-Edwards Notation (FEN) string.
-
-        Args:
-            board: Board instance. Its rows and cols decide how many ranks and files the
-                record carries, so a board of any size serialises.
-            active_color: Active side color (1 for White, -1 for Black).
-
-        Returns:
-            FEN record string.
-
-        Raises:
-            ValueError: If a piece on the board declares no character for a position record.
-                Nothing is guessed: an undeclared piece has no place in a position record,
-                and a record that quietly called it a pawn would be wrong in a way no reader
-                could see.
-        """
-        ranks = []
-        for r in range(board.rows - 1, -1, -1):
-            empty = 0
-            rank_str = ""
-            for c in range(board.cols):
-                piece = board.get_piece_at((r, c))
-                if piece is None:
-                    empty += 1
-                else:
-                    if empty > 0:
-                        rank_str += str(empty)
-                        empty = 0
-                    char = self._fen_letter(piece)
-                    rank_str += (
-                        char.upper()
-                        if (piece.getColor() == 1 or piece.getColor() == "white")
-                        else char.lower()
-                    )
-            if empty > 0:
-                rank_str += str(empty)
-            ranks.append(rank_str)
-
-        board_fen = "/".join(ranks)
-        turn = "w" if active_color == 1 else "b"
-        return f"{board_fen} {turn} - - 0 1"
-
-    def to_pgn(self, moves: List[Any], metadata: Optional[MetadataWriter] = None) -> str:
-        """Export game moves and metadata to Portable Game Notation (PGN) text.
-
-        Args:
-            moves: List of played Move instances.
-            metadata: Optional MetadataWriter instance providing PGN header tags.
-
-        Returns:
-            Complete PGN format string.
-        """
-        headers = (
-            metadata.format_pgn_headers() if metadata else '[Event "Casual Game"]\n[Result "*"]'
-        )
-        move_pairs = []
-        for i in range(0, len(moves), 2):
-            move_num = (i // 2) + 1
-            w_end = getattr(moves[i], "end_pos", None)
-            w_move = _to_algebraic(w_end) if w_end is not None else str(moves[i])
-            if i + 1 < len(moves):
-                b_end = getattr(moves[i + 1], "end_pos", None)
-                b_move = _to_algebraic(b_end) if b_end is not None else str(moves[i + 1])
-                move_pairs.append(f"{move_num}. {w_move} {b_move}")
-            else:
-                move_pairs.append(f"{move_num}. {w_move}")
-
-        moves_text = " ".join(move_pairs)
-        result = metadata.get_header("Result", "*") if metadata else "*"
-        return f"{headers}\n\n{moves_text} {result}".strip()
-
-    def export(self, format_type: str = "PGN", **kwargs: Any) -> str:
-        """Export game information in the requested format ('PGN', 'FEN', or 'STENOGRAPHIC').
-
-        Args:
-            format_type: Format name case-insensitively ('PGN', 'FEN', 'STENOGRAPHIC').
-            **kwargs: Any: Format-specific parameters ('moves', 'board', 'metadata', 'active_color').
-
-        Returns:
-            Serialized string representation.
-        """
-        fmt = format_type.upper()
-        if fmt == "PGN":
-            return self.to_pgn(kwargs.get("moves", []), kwargs.get("metadata"))
-        elif fmt == "FEN":
-            return self.to_fen(kwargs["board"], kwargs.get("active_color", 1))
-        elif fmt == "STENOGRAPHIC":
-            return self.to_stenographic(kwargs.get("moves", []))
-        return ""

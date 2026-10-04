@@ -214,6 +214,51 @@ def test_a_copied_configuration_keeps_its_own_rules(copied_chess):
         assert ".rules." in module, type(rule).__name__
 
 
+def test_a_copied_configuration_writes_with_its_own_exporters(copied_chess):
+    """A copy's game is written by the copy's writers, not the original's.
+
+    The writers used to be an engine class that every configuration shared, so this could not
+    be wrong. They live in `games/chess/export/` now, and the one way to get this wrong is the
+    obvious one: `from games.chess.export.fen import ExportFEN` inside `build_exporters()`
+    still loads, still returns a working writer, and writes every variant in the original's
+    notations while the variant looks edited.
+
+    Args:
+        copied_chess: The throwaway `games/` root holding the copy.
+
+    Returns:
+        None
+    """
+    configuration = load_configuration("house", root=copied_chess)
+
+    assert configuration.exporters
+    for writer in configuration.exporters:
+        module = type(writer).__module__
+        assert module.startswith("_configuration_"), type(writer).__name__
+        assert ".export." in module, type(writer).__name__
+
+
+def test_a_copied_configuration_names_its_squares_its_own_way(copied_chess):
+    """The copy's window is drawn and annotated with the copy's naming.
+
+    Two seams, one failure. The copy's `board.py` is an ordinary engine board here, so its
+    columns are numbered rather than lettered — a copy that kept chess's `ChessBoard` would be
+    drawing the original's file letters. And the naming the move history is written in is the
+    copy's own object, not the original's.
+
+    Args:
+        copied_chess: The throwaway `games/` root holding the copy.
+
+    Returns:
+        None
+    """
+    configuration = load_configuration("house", root=copied_chess)
+
+    assert configuration.board.file_label(0) == "1"
+    assert configuration.notation is not None
+    assert type(configuration.notation).__module__.startswith("_configuration_")
+
+
 def test_a_promotion_in_a_copied_configuration_yields_the_copies_piece(copied_chess):
     """The replacement piece belongs to the configuration being played.
 

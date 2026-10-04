@@ -1,12 +1,19 @@
+"""The chess naming, and one writer per chess notation.
+
+Which notations a game can write is the configuration's answer, so each writer lives in
+`games/chess/export/` beside the naming it needs and the engine keeps only the protocol.
+These tests hold each writer to the record it wrote before the split, byte for byte, and to
+the rule that a writer answers the notations it declares and refuses the rest.
+"""
+
 from games.chess.board import build_board
-from games.chess.export.algebraic import AlgebraicNotation
+from games.chess.export.algebraic import AlgebraicNotation, algebraic_to_pos, pos_to_algebraic
 from games.chess.export.fen import ExportFEN
 from games.chess.export.pgn import ExportPGN
 from games.chess.export.stenographic import ExportStenographic
 import pytest
 from model.game.manager import UnsupportedExportFormat
-from model.misc.notation import pos_to_algebraic, algebraic_to_pos
-from model.misc.export_writers import ChessNotationWriter, ExportWriter
+from model.misc.export_writers import ExportWriter
 from model.misc.metadata import MetadataWriter
 from model.game.board import Board
 from model.game.move import Move
@@ -146,32 +153,3 @@ def test_a_game_with_no_moves_still_writes_an_empty_coordinate_record():
         None
     """
     assert ExportStenographic().export("Stenographic", moves=[]) == ""
-
-
-def test_chess_notation_writer_fen():
-    board = build_board()
-    writer = ChessNotationWriter()
-    fen = writer.to_fen(board, active_color=1)
-    assert "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1" == fen
-
-
-def test_chess_notation_writer_stenographic():
-    writer = ChessNotationWriter()
-    moves = [
-        Move((1, 4), (3, 4)),  # e2 -> e4
-        Move((6, 4), (4, 4)),  # e7 -> e5
-    ]
-    steno = writer.to_stenographic(moves)
-    assert steno == "e2e4 e7e5"
-
-
-def test_chess_notation_writer_pgn():
-    writer = ChessNotationWriter()
-    metadata = MetadataWriter({"Event": "Friendly Match", "Result": "1-0"})
-    moves = [
-        Move((1, 4), (3, 4)),
-        Move((6, 4), (4, 4)),
-    ]
-    pgn = writer.to_pgn(moves, metadata)
-    assert '[Event "Friendly Match"]' in pgn
-    assert "1. e4 e5 1-0" in pgn

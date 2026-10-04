@@ -23,9 +23,6 @@ from model.game.games import DEFAULT_GAME, available_games, games_root
 from model.game.quest import Quest
 from model.game.rule import Rule
 
-#: Subdirectories a configuration directory holds.
-CONFIGURATION_SECTIONS = ("pieces", "rules", "quests", "clocks", "export")
-
 
 class Configuration:
     """One game, assembled: a board, its pieces, its rules, its quests and its clocks.

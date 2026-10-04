@@ -1,10 +1,10 @@
 from games.chess.board import build_board, starting_placement
+from games.chess.export.fen import ExportFEN
 import pytest
 
 from model.game.board import Board
 from model.game.move import Move
 from model.game.validator import MoveValidator
-from model.misc.export_writers import ChessNotationWriter
 from games.chess.pieces.king import King
 from games.chess.pieces.pawn import Pawn
 from games.chess.pieces.queen import Queen
@@ -159,7 +159,7 @@ def test_a_move_a_capture_and_a_promotion_on_every_size(rows, cols):
     assert board.get_piece_at((far_row - 1, 2)).getName() == "Queen"
 
     # And a FEN export over the same board.
-    record = ChessNotationWriter().to_fen(board)
+    record = ExportFEN().to_fen(board)
     placement_field = record.split(" ")[0]
 
     assert len(placement_field.split("/")) == rows
@@ -170,7 +170,7 @@ def test_a_fen_export_never_reports_more_files_than_the_board_has():
     board = Board((rows, cols), setup_pieces=False)
     board.set_piece_at((0, 0), King(1))
 
-    record = ChessNotationWriter().to_fen(board)
+    record = ExportFEN().to_fen(board)
     placement_field = record.split(" ")[0]
     ranks = placement_field.split("/")
 
@@ -183,7 +183,7 @@ def test_a_fen_export_never_reports_more_files_than_the_board_has():
 def test_the_shipped_board_still_serialises_unchanged():
     """Board generalisation must not move a single piece on the size that ships."""
     board = build_board()
-    record = ChessNotationWriter().to_fen(board)
+    record = ExportFEN().to_fen(board)
 
     assert record.split(" ")[0] == "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
     assert board.get_piece_at((0, 1)).getName() == "Knight"
@@ -195,6 +195,6 @@ def test_every_size_yields_a_distinct_board_and_a_distinct_record():
     for rows, cols in SIZES:
         board = Board((rows, cols), setup_pieces=False)
         board.set_piece_at((0, 0), King(1))
-        records.add(ChessNotationWriter().to_fen(board).split(" ")[0])
+        records.add(ExportFEN().to_fen(board).split(" ")[0])
 
     assert len(records) == len(SIZES)

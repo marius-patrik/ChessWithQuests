@@ -27,6 +27,9 @@ import pytest
 
 from games.chess.board import build_board
 from games.chess.export.algebraic import algebraic_to_pos, pos_to_algebraic
+from games.chess.export.fen import ExportFEN
+from games.chess.export.pgn import ExportPGN
+from games.chess.export.stenographic import ExportStenographic
 from games.chess.pieces.knight import Knight
 from games.chess.pieces.king import King
 from games.chess.pieces.queen import Queen
@@ -39,7 +42,6 @@ from model.game.quests import (
     KingOnlyGame,
     build_quests,
 )
-from model.misc.export_writers import ChessNotationWriter
 from model.pieces.piece import Piece
 
 
@@ -70,6 +72,24 @@ def _chess_piece_types() -> frozenset:
 CHESS_PIECE_TYPES = _chess_piece_types()
 
 
+def _engine_modules():
+    """Yield the path of every module under `model/`.
+
+    A per-module `inspect.getsource` cannot catch a module that did not exist when the gate
+    was written, which is how a leak arrives in the first place. So the gate walks the tree
+    rather than a list of files somebody remembered.
+
+    Yields:
+        pathlib.Path: Each module's path, with `__pycache__` ignored.
+    """
+    import model
+
+    root = pathlib.Path(model.__file__).parent
+    for path in sorted(root.rglob("*.py")):
+        if "__pycache__" not in path.parts:
+            yield path
+
+
 # --- the FEN writer reads the piece, and refuses to guess
 
 
@@ -83,7 +103,7 @@ def test_the_fen_writer_holds_no_piece_type_table():
     Raises:
         AssertionError: If the writer declares any piece-to-character mapping.
     """
-    assert not hasattr(ChessNotationWriter, "PIECE_CHARS")
+    assert not hasattr(ExportFEN, "PIECE_CHARS")
 
 
 def test_a_fen_record_is_built_from_what_each_piece_declares():
@@ -96,7 +116,7 @@ def test_a_fen_record_is_built_from_what_each_piece_declares():
     board.set_piece_at((0, 0), Queen(1))
     board.set_piece_at((1, 1), Knight(-1))
 
-    assert ChessNotationWriter().to_fen(board).split()[0] == "4/4/1n2/Q3"
+    assert ExportFEN().to_fen(board).split()[0] == "4/4/1n2/Q3"
 
 
 def test_a_piece_writes_the_character_it_declared_whatever_it_is():
@@ -119,7 +139,7 @@ def test_a_piece_writes_the_character_it_declared_whatever_it_is():
     board = Board((2, 2), setup_pieces=False)
     board.set_piece_at((1, 1), Herald(1))
 
-    assert ChessNotationWriter().to_fen(board).split()[0] == "1A/2"
+    assert ExportFEN().to_fen(board).split()[0] == "1A/2"
 
 
 def test_an_undeclared_piece_is_refused_rather_than_written_as_a_pawn():
@@ -136,7 +156,7 @@ def test_an_undeclared_piece_is_refused_rather_than_written_as_a_pawn():
     board.set_piece_at((1, 1), Piece(1, "longstrider"))
 
     with pytest.raises(ValueError, match="declares no character"):
-        ChessNotationWriter().to_fen(board)
+        ExportFEN().to_fen(board)
 
 
 def test_a_piece_that_declares_no_character_is_refused_even_if_it_looks_like_chess():
@@ -160,7 +180,7 @@ def test_a_piece_that_declares_no_character_is_refused_even_if_it_looks_like_che
     board.set_piece_at((1, 1), Silent(1))
 
     with pytest.raises(ValueError, match="declares no character"):
-        ChessNotationWriter().to_fen(board)
+        ExportFEN().to_fen(board)
 
 
 def test_the_chess_board_still_writes_the_record_it_always_did():
@@ -170,7 +190,7 @@ def test_the_chess_board_still_writes_the_record_it_always_did():
         None
     """
     assert (
-        ChessNotationWriter().to_fen(build_board(), active_color=1)
+        ExportFEN().to_fen(build_board(), active_color=1)
         == "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1"
     )
 
@@ -181,47 +201,55 @@ def test_the_chess_board_still_writes_the_record_it_always_did():
 def test_algebraic_naming_is_not_defined_in_the_engine():
     """The conversion belongs to chess: a file is a letter and a rank is a single digit.
 
-    `model/misc/notation.py` re-exports both names for the two callers outside the
-    configuration layer, but it must not define them.
+    Checked against the whole engine tree rather than against one module, because a re-export
+    shim is a module and a shim can always be replaced by the next one. The engine defined
+    neither function even when it re-exported both, and now it holds neither.
 
     Returns:
         None
     """
-    import model.misc.notation as shim
-
-    engine_source = pathlib.Path(shim.__file__).read_text(encoding="utf-8")
-
-    assert "def pos_to_algebraic" not in engine_source
-    assert "def algebraic_to_pos" not in engine_source
-    assert inspect.getmodule(shim.pos_to_algebraic).__name__ == "games.chess.export.algebraic"
+    assert inspect.getmodule(pos_to_algebraic).__name__ == "games.chess.export.algebraic"
     assert inspect.getmodule(algebraic_to_pos).__name__ == "games.chess.export.algebraic"
 
+    defined = []
+    for path in _engine_modules():
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in (
+                "pos_to_algebraic",
+                "algebraic_to_pos",
+                "file_letter",
+            ):
+                defined.append(f"{path.name}:{node.lineno} {node.name}")
 
-def test_the_engine_shim_serves_the_callers_that_have_not_moved_yet():
-    """`view/player_game_view.py` still imports the old path, so the old path must work.
+    assert defined == []
 
-    The shim is the price of not editing a file another agent owns, and its own docstring says
-    it is a shim and when to delete it.
+
+def test_the_engine_holds_no_notation_shim():
+    """The shim is deleted rather than deprecated, so it cannot come back quietly.
+
+    `model/misc/notation.py` re-exported two chess names into the engine for the sake of one
+    caller, and its own docstring called itself a shim with a deletion date. What is asserted
+    here is the absence of the module, which is the only thing that stops the next caller from
+    adding it again.
 
     Returns:
         None
     """
-    import model.misc.notation as shim
+    import importlib.util
 
-    assert shim.pos_to_algebraic is pos_to_algebraic
-    assert shim.algebraic_to_pos is algebraic_to_pos
+    assert importlib.util.find_spec("model.misc.notation") is None
 
 
 def test_the_writer_still_writes_coordinates_in_chess_algebra():
-    """Reaching the chess configuration on demand must not cost the writer its records.
+    """Reaching the chess naming relatively must not cost the writers their records.
 
     Returns:
         None
     """
     moves = [Move((1, 4), (3, 4)), Move((6, 4), (4, 4))]
 
-    assert ChessNotationWriter().to_stenographic(moves) == "e2e4 e7e5"
-    assert "1. e4 e5" in ChessNotationWriter().to_pgn(moves)
+    assert ExportStenographic().to_stenographic(moves) == "e2e4 e7e5"
+    assert "1. e4 e5" in ExportPGN().to_pgn(moves)
 
 
 # --- the engine's quest roster names no piece
