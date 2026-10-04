@@ -41,6 +41,12 @@ class Configuration:
             optional: a configuration that names its squares in no notation gets its move
             history as coordinate pairs. The engine holds no naming of its own, so there is
             nothing here to be right or wrong about.
+        metadata: The record of who played, when and how the game ended, handed to the
+            writers that need one. It is optional, and the engine reads it without knowing
+            what it is: which tags a written game carries is the same question as which
+            notations it can be written in, and the answer to that is a configuration's. A
+            configuration that declares none gets `None` rather than a record the engine
+            made up, because a record of a game nobody described is a record of nothing.
         package: The module name the configuration is registered under, so a module inside it
             can resolve its relative imports. Empty until the configuration is loaded from a
             directory, which is the only way a relative import can work at all.
@@ -57,6 +63,7 @@ class Configuration:
         clocks: Optional[Iterable[Any]] = None,
         exporters: Optional[Iterable[Any]] = None,
         notation: Optional[Any] = None,
+        metadata: Optional[Any] = None,
         board_factory: Optional[Callable[[], Board]] = None,
     ):
         """Assemble a configuration.
@@ -73,6 +80,9 @@ class Configuration:
             notation: How this configuration names a move, for the window to draw the move
                 history with. Anything answering `move_label(number, move)` will do; None
                 means the game is drawn with coordinates.
+            metadata: The record of the game's facts a writer needs in order to write a game
+                up, handed to the writers that ask for one. Anything will do; None means this
+                configuration describes none, and the engine writes no header of its own.
             board_factory: Builds a fresh board for this configuration. Holding one board
                 means one game; holding the way to build one means as many games as the
                 player has time for.
@@ -86,6 +96,7 @@ class Configuration:
         self.clocks: List[Any] = list(clocks) if clocks else []
         self.exporters: List[Any] = list(exporters) if exporters else []
         self.notation: Optional[Any] = notation
+        self.metadata: Optional[Any] = metadata
         self.board_factory: Optional[Callable[[], Board]] = board_factory
         self.package: str = ""
 

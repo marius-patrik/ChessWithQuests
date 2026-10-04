@@ -238,6 +238,29 @@ def test_a_copied_configuration_writes_with_its_own_exporters(copied_chess):
         assert ".export." in module, type(writer).__name__
 
 
+def test_a_copied_configuration_describes_its_games_its_own_way(copied_chess):
+    """The copy's header record is the copy's, exactly as its board and its writers are.
+
+    The header was `model/misc/metadata.py` for as long as the engine built it, which meant a
+    copy could not change it at all. It is a file in `export/` now, so a copy edits it the way
+    it edits anything else — and the only way to get that wrong is the obvious one, an
+    absolute `from games.chess.export.metadata import ExportMetadata` in the copy's
+    `build_metadata()`, which loads and looks edited while writing the original's fields.
+
+    Args:
+        copied_chess: The throwaway `games/` root holding the copy.
+
+    Returns:
+        None
+    """
+    configuration = load_configuration("house", root=copied_chess)
+
+    assert configuration.metadata is not None
+    module = type(configuration.metadata).__module__
+    assert module.startswith("_configuration_"), module
+    assert ".export." in module, module
+
+
 def test_a_copied_configuration_names_its_squares_its_own_way(copied_chess):
     """The copy's window is drawn and annotated with the copy's naming.
 

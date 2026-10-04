@@ -1,25 +1,38 @@
 """The chess game transcript, written as PGN text by a writer that belongs to chess.
 
 PGN is chess's notation, so the writer that produces it lives here rather than in the engine.
-The header comes from the `MetadataWriter` the manager hands down and the movetext from the
+The header comes from the `ExportMetadata` the manager hands down and the movetext from the
 game's own moves, so the writer decides nothing about either: it is the format's arrangement
 of what it is given, and `notes/object_model.md` section 7 places it beside the configuration
 that uses it.
 
-The record this writes has two recorded defects, which moving it does not fix and does not
-hide: the movetext is destination squares rather than Standard Algebraic Notation, and the
-header falls back to placeholders when a caller passes no metadata. Both belong to
-`SCRATCHPAD.md` §4.1 and to planned PR 19; neither is a reason to keep one writer switching
-on a format-name string.
+**The header is not built here.** A header is a format of its own — *Field - Field - Extra*,
+which the diagram enumerates beside PGN — so this writer composes that writer rather than
+holding a second copy of the roster. It passes on the fields it is given and adds no tag of
+its own, which is what stops the two from drifting apart: a header written on its own and a
+header inside a PGN are the same text produced by the same code.
+
+There is no fallback header any more. The `'[Event "Casual Game"]\n[Result "*"]'` this replaces
+was three facts invented at write time — an event nobody was playing, a site nobody was at —
+and it was what a PGN was written as whenever the caller had no metadata to hand, which is
+what `GameManager` did on every transcript. A writer handed a game and nothing else still
+writes a header, and it is derived from that game.
+
+The movetext is still destination squares rather than Standard Algebraic Notation. That is
+real SAN's remaining half — piece disambiguation, promotion notation and check and mate
+suffixes — and it is `SCRATCHPAD.md` §4.5 item 19's other half. It is recorded here rather
+than fixed here, because a writer that grew SAN would be two notations in one class, which is
+the thing the split into one writer per notation exists to prevent.
 """
 
+from datetime import datetime
 from typing import Any, List, Optional, Tuple
 
 from model.game.manager import UnsupportedExportFormat
 from model.misc.export_writers import ExportWriter
-from model.misc.metadata import MetadataWriter
 
 from .algebraic import pos_to_algebraic
+from .metadata import ExportMetadata
 
 
 class ExportPGN(ExportWriter):
@@ -35,20 +48,32 @@ class ExportPGN(ExportWriter):
         """
         return ("PGN",)
 
-    def to_pgn(self, moves: List[Any], metadata: Optional[MetadataWriter] = None) -> str:
+    def to_pgn(
+        self,
+        moves: List[Any],
+        metadata: Optional[ExportMetadata] = None,
+        players: Optional[List[Any]] = None,
+        result: Any = None,
+        date: Optional[datetime] = None,
+    ) -> str:
         """Export game moves and metadata to Portable Game Notation (PGN) text.
 
         Args:
             moves: List of played Move instances.
-            metadata: MetadataWriter instance providing the header tags. Optional, so the
-                writer can be handed a game and nothing else.
+            metadata: The header writer the configuration declared. Optional, so the writer
+                can be handed a game and nothing else — in which case a header is derived from
+                that game rather than being left out.
+            players: The players the game was played by, which is where the header's two names
+                come from.
+            result: The game's outcome, which is where the header's result comes from.
+            date: When the game began, which is where the header's date comes from.
 
         Returns:
             str: The PGN text: the header, a blank line, and the moves.
         """
-        headers = (
-            metadata.format_pgn_headers() if metadata else '[Event "Casual Game"]\n[Result "*"]'
-        )
+        header = metadata if metadata is not None else ExportMetadata()
+        tags = header.header_values(players=players, result=result, date=date)
+        headers = header.format_tags(tags)
         move_pairs = []
         for i in range(0, len(moves), 2):
             move_num = (i // 2) + 1
@@ -62,8 +87,7 @@ class ExportPGN(ExportWriter):
                 move_pairs.append(f"{move_num}. {w_move}")
 
         moves_text = " ".join(move_pairs)
-        result = metadata.get_header("Result", "*") if metadata else "*"
-        return f"{headers}\n\n{moves_text} {result}".strip()
+        return f"{headers}\n\n{moves_text} {tags['Result']}".strip()
 
     def export(self, format_type: str, **kwargs: Any) -> str:
         """Write the game as PGN text.
@@ -72,7 +96,7 @@ class ExportPGN(ExportWriter):
             format_type: The notation asked for, in the caller's own spelling. The manager
                 looks a writer up without regard to case, so this writer compares the same
                 way rather than expecting one exact string.
-            **kwargs: Any: `moves`, and optionally `metadata`.
+            **kwargs: Any: `moves`, and optionally `metadata`, `players`, `result` and `date`.
 
         Returns:
             str: The game as PGN text.
@@ -87,4 +111,10 @@ class ExportPGN(ExportWriter):
                 f"{format_type!r} is not a notation this writer writes; it writes "
                 f"{', '.join(self.formats())}"
             )
-        return self.to_pgn(kwargs.get("moves", []), kwargs.get("metadata"))
+        return self.to_pgn(
+            kwargs.get("moves", []),
+            kwargs.get("metadata"),
+            kwargs.get("players"),
+            kwargs.get("result"),
+            kwargs.get("date"),
+        )

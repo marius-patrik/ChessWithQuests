@@ -7,6 +7,7 @@ its own. An engine default is a claim about every game, and a variant that does 
 gets it anyway.
 """
 
+from datetime import datetime
 from typing import Any, List, Optional
 
 from model.game.board import Board
@@ -18,7 +19,6 @@ from model.game.rule import Result
 from model.game.timer import Timer
 from model.game.logger import GameLogger
 from model.game.validator import MoveValidator
-from model.misc.metadata import MetadataWriter
 from model.misc.quest_manager import QuestManager
 from model.users.manager import UserManager
 from model.users.user import User
@@ -94,7 +94,14 @@ class GameManager:
         # `transcript` says so rather than reaching for a chess one.
         self.exporters: List[Any] = list(self.configuration.exporters) if self.configuration else []
         self.notation: Optional[Any] = self.exporters[0] if self.exporters else None
-        self.metadata: MetadataWriter = MetadataWriter()
+        # The record of who played, when and how the game ended, is the configuration's to
+        # supply and the manager's only to carry. It used to build a header here and pass it
+        # down, which made the header a thing the engine knew the shape of: the tags it wrote
+        # and the tag it updated after every game were a game's own vocabulary, living in a
+        # module that is supposed to name no game. A configuration that declares none has
+        # none, and a writer that needs one says so rather than being handed a substitute.
+        self.metadata: Optional[Any] = self.configuration.metadata if self.configuration else None
+        self.started_at: datetime = datetime.now()
         self.move_events: List[MoveEvent] = []
         self.completed_quests: List[Any] = []
         self.result: Optional[Result] = None
@@ -141,6 +148,7 @@ class GameManager:
         self.move_events = []
         self.completed_quests = []
         self.elapsed_seconds = 0
+        self.started_at = datetime.now()
         self.timer.reset_time()
         self.start_turn_clock()
         self.game_logger = GameLogger()
@@ -423,6 +431,11 @@ class GameManager:
         A configuration whose second writer writes a format its first does not now reaches
         that writer.
 
+        Every writer is handed the same things: the moves, the board, the configuration's
+        metadata record if it declared one, both players, the result and the date the game
+        began. Which of those a notation needs, and what it calls them, is the writer's
+        answer — the engine passes the game and names no tag.
+
         Args:
             fmt: The notation wanted, matched without regard to case. Defaults to the first
                 the configuration offers.
@@ -461,8 +474,19 @@ class GameManager:
         writer = self.writer_for(fmt)
         wanted = fmt if fmt is not None else self.default_format()
         moves = [event.move for event in self.move_events]
-        self.metadata.set_header("Result", self.result.reason if self.result else "*")
-        return writer.export(wanted, moves=moves, board=self.board, metadata=self.metadata)
+        # The game, described: what was played, who was playing, how it ended and when it
+        # started. A writer decides what of that its notation records and how — which tags
+        # exist, what they are called and what they are set to is a writer's business, and
+        # the manager's is to hand over what actually happened rather than to write it down.
+        return writer.export(
+            wanted,
+            moves=moves,
+            board=self.board,
+            metadata=self.metadata,
+            players=list(self.players),
+            result=self.result,
+            date=self.started_at,
+        )
 
     def save_log(self, path: Optional[str] = None) -> str:
         """Write the transcript of this game to a file.

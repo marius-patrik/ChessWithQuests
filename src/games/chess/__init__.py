@@ -17,7 +17,7 @@ its own right for the same reason, and `rules/` and `pieces/` import relatively 
 reason: the rules a copy composes, and the pieces its promotions produce, are the copy's.
 """
 
-from typing import Any, List
+from typing import Any, List, Optional
 
 from model.game.configuration import Configuration
 from model.game.games import DEFAULT_GAME
@@ -26,15 +26,29 @@ from model.game.rule import Rule
 
 from .board import build_board
 from .clocks.fischer import Fischer
-from .export.algebraic import AlgebraicNotation
+from .export.algebraic import AlgebraicNotation, ExportAlgebraic
 from .export.fen import ExportFEN
+from .export.metadata import ExportMetadata
 from .export.pgn import ExportPGN
 from .export.stenographic import ExportStenographic
 from .pieces import build_pieces
 from .rules import build_rules
 
 
-def build_exporters() -> List[Any]:
+def build_metadata() -> ExportMetadata:
+    """Build the header record chess's games are written with.
+
+    Only what a game knows before it is played goes in here: the name of the event. Who was
+    playing, when it began and how it ended are all derived from the game at write time, so
+    nothing declared here can disagree with what happened.
+
+    Returns:
+        ExportMetadata: A header record naming this configuration's event.
+    """
+    return ExportMetadata({"Event": DEFAULT_GAME})
+
+
+def build_exporters(metadata: Optional[ExportMetadata] = None) -> List[Any]:
     """Build the export writers chess offers, in the order they are preferred.
 
     Order is the preference: `GameManager.default_format` takes the first format the first
@@ -47,13 +61,28 @@ def build_exporters() -> List[Any]:
     warning. Which notations exist is chess's answer; `notes/object_model.md` section 7
     registers the arrangement and the engine keeps only the protocol.
 
+    The header record is one of them and is handed back to the caller, because a record is
+    both a format in its own right and the thing the transcript writer composes its header
+    from. Passing it to `build_configuration` as `metadata` is what puts the same object in
+    both places; called without one, this function builds a fresh record and the configuration
+    gets a second, which is why the composition below passes its own.
+
     Adding a notation is one file in `export/` and one line here.
 
+    Args:
+        metadata: The header record to offer as a format. Defaults to a freshly built one.
+
     Returns:
-        List[Any]: One writer per chess notation: PGN, the position record, and the coordinate
-        record.
+        List[Any]: One writer per chess notation: the transcript, the algebraic record, the
+        header record, the position record, and the coordinate record.
     """
-    return [ExportPGN(), ExportFEN(), ExportStenographic()]
+    return [
+        ExportPGN(),
+        ExportAlgebraic(),
+        metadata if metadata is not None else build_metadata(),
+        ExportFEN(),
+        ExportStenographic(),
+    ]
 
 
 def build_configuration() -> Configuration:
@@ -62,8 +91,10 @@ def build_configuration() -> Configuration:
     Returns:
         Configuration: The chess board, and the pieces, rules, quests, clocks and exporters
         chess brings with it, together with the naming chess gives a move — which is what the
-        window draws the move history with, and what a copy of this directory brings with it.
+        window draws the move history with, and what a copy of this directory brings with it —
+        and the header record its transcripts are written with.
     """
+    metadata = build_metadata()
     return Configuration(
         name=DEFAULT_GAME,
         path="",
@@ -72,7 +103,8 @@ def build_configuration() -> Configuration:
         rules=build_rules(),
         quests=build_quests(),
         clocks=[Fischer()],
-        exporters=build_exporters(),
+        exporters=build_exporters(metadata),
+        metadata=metadata,
         notation=AlgebraicNotation(),
         board_factory=build_board,
     )
