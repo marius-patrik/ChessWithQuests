@@ -15,6 +15,22 @@ other width, and pretending otherwise would move the defect rather than remove i
 from typing import Tuple
 
 
+def file_letter(col: int) -> str:
+    """Return the letter chess names a file by.
+
+    A board is told the name of each of its columns rather than computing one: the engine's
+    `Board.file_label` numbers them, and this is what chess's board answers instead. Keeping
+    the letter here rather than in the board is what stops the naming being written twice.
+
+    Args:
+        col: The file's 0-indexed number.
+
+    Returns:
+        str: The file's letter, so column 0 is `a`.
+    """
+    return chr(ord("a") + col)
+
+
 def pos_to_algebraic(position: Tuple[int, int]) -> str:
     """Convert a (row, col) coordinate tuple to chess algebraic notation (e.g. (0, 4) -> 'e1').
 
@@ -25,9 +41,7 @@ def pos_to_algebraic(position: Tuple[int, int]) -> str:
         str: Algebraic string notation (e.g. 'e4').
     """
     row, col = position
-    col_letter = chr(ord("a") + col)
-    row_num = str(row + 1)
-    return f"{col_letter}{row_num}"
+    return f"{file_letter(col)}{row + 1}"
 
 
 def algebraic_to_pos(algebraic: str) -> Tuple[int, int]:

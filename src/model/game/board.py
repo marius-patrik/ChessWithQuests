@@ -117,6 +117,24 @@ class Board:
             piece for position, piece in surviving if not self.is_within_bounds(*position)
         ]
 
+    def file_label(self, col: int) -> str:
+        """Return what this board calls the column at `col`.
+
+        A board knows how many columns it has and nothing about what they are called, so the
+        answer it gives is the column's own number. A configuration whose columns are named
+        differently says so by overriding this: chess names them with letters, and a draughts
+        board will name them by square number instead. The view draws whatever this returns,
+        which is how a configuration's naming reaches the window without the view importing
+        the configuration.
+
+        Args:
+            col: The column's 0-indexed number.
+
+        Returns:
+            str: The name of that column.
+        """
+        return str(col + 1)
+
     def is_within_bounds(self, row: int, col: int) -> bool:
         """Check if coordinates lie within the board boundaries.
 

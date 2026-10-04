@@ -51,3 +51,37 @@ def test_board_replace_piece():
     queen = Queen(1)
     board.replace_piece((6, 0), queen)
     assert board.get_piece_at((6, 0)) is queen
+
+
+def test_a_board_numbers_its_own_columns():
+    """A board knows how many columns it has and nothing about what they are called.
+
+    The window draws whatever this returns, so this is where a configuration's naming is
+    declared — and where it is not, the naming is the column's own number rather than a
+    default some other game would recognise.
+    """
+    board = Board((5, 7), setup_pieces=False)
+
+    assert [board.file_label(col) for col in range(board.cols)] == [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+    ]
+
+
+def test_the_chess_board_names_its_files_with_letters():
+    """Chess declares the naming, so the letters come from the chess configuration."""
+    from games.chess.export.algebraic import pos_to_algebraic
+
+    board = build_board()
+
+    assert board.file_label(0) == "a"
+    assert board.file_label(4) == "e"
+    assert board.file_label(7) == "h"
+    # One naming, written once: the label under a square and the square's own algebraic name
+    # are the same letter.
+    assert board.file_label(4) == pos_to_algebraic((0, 4))[0]

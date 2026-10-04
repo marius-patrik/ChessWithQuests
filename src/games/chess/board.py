@@ -14,6 +14,7 @@ from typing import List, Tuple
 from model.game.board import Board
 from model.pieces.piece import Piece
 
+from .export.algebraic import file_letter
 from .pieces.bishop import Bishop
 from .pieces.king import King
 from .pieces.knight import Knight
@@ -29,6 +30,27 @@ BACK_RANK = (Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook)
 
 #: The rank a pawn stands on, counted from White's side.
 PAWN_ROW: int = 1
+
+
+class ChessBoard(Board):
+    """A board whose columns are named the way chess names its files.
+
+    The engine's `Board` numbers its columns, because a board knows how many it has and
+    nothing about what they are called. Chess names them with letters, so the naming is
+    declared here and the window draws whatever the board says — which is what keeps the view
+    layer from importing this configuration to find out what to write along the bottom edge.
+    """
+
+    def file_label(self, col: int) -> str:
+        """Return the letter chess names a file by.
+
+        Args:
+            col: The file's 0-indexed number.
+
+        Returns:
+            str: The file's letter, so the first column is `a`.
+        """
+        return file_letter(col)
 
 
 def starting_placement(
@@ -80,10 +102,10 @@ def build_board(rows: int = DIMENSIONS[0], cols: int = DIMENSIONS[1]) -> Board:
         cols: Files the board has.
 
     Returns:
-        Board: An eight by eight board with White on the first two ranks and Black on the
-        last two.
+        ChessBoard: An eight by eight board with White on the first two ranks and Black on the
+        last two, whose files are named the way chess names them.
 
     Raises:
         ValueError: If the board cannot hold the chess starting position.
     """
-    return Board((rows, cols), placement=starting_placement(rows, cols))
+    return ChessBoard((rows, cols), placement=starting_placement(rows, cols))

@@ -136,9 +136,10 @@ class BoardView(ttk.Frame):
 
         for row in range(board.rows):
             for col in range(board.cols):
-                # Drawn from White's side: rank 1 at the bottom, the a-file on the left, which
-                # is how a player expects to read a board. Row 0 holds White's back rank, and
-                # `pos_to_algebraic` calls row 0 rank 1, so the view must agree with it.
+                # Drawn from the first player's side: their back rank along the bottom, and
+                # the leftmost column where a player expects to start counting. Row 0 holds
+                # that rank, so it is the bottom row of the window and the first row of the
+                # board, and the labels below are numbered to agree with the draw.
                 board_row = board.rows - 1 - row
                 left, top = self._origin(col, row)
                 right = left + self.square_size
@@ -227,7 +228,11 @@ class BoardView(ttk.Frame):
         )
 
     def _draw_coordinates(self) -> None:
-        """Label the files along the bottom and the ranks down the left.
+        """Label the columns along the bottom and the rows down the left.
+
+        The column names are the board's to give — `Board.file_label` numbers them, and a
+        configuration overrides that with whatever its own naming is — so the view draws the
+        answer rather than computing one of its own.
 
         Returns:
             None
@@ -238,7 +243,7 @@ class BoardView(ttk.Frame):
             self.canvas.create_text(
                 centre_x,
                 rows * self.square_size - 10,
-                text=self._file_label(col),
+                text=self.board.file_label(col),
                 fill="#3b2a1a",
                 font=("TkDefaultFont", 9),
             )
@@ -251,18 +256,6 @@ class BoardView(ttk.Frame):
                 fill="#3b2a1a",
                 font=("TkDefaultFont", 9),
             )
-
-    @staticmethod
-    def _file_label(col: int) -> str:
-        """Return the letter naming a file.
-
-        Args:
-            col: The file's index.
-
-        Returns:
-            str: The file's letter, so a column is `a` onwards.
-        """
-        return chr(ord("a") + col)
 
     def _clicked(self, event: tk.Event) -> None:
         """Report the square the player clicked.
