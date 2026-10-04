@@ -1110,10 +1110,13 @@ class CompositeQuest(_AtGameEndQuest):
         Returns:
             None
         """
-        for item in event.history:
-            self.observe_move(item)
+        # A member that watches moves a move at a time was already given every move as it was
+        # played, by `observe_move` above. Replaying the history here counted each of them a
+        # second time, so three captures reached a member's target of three and doubled every
+        # count besides. Only the end-of-game members are told now.
         for quest in self.quests:
-            quest.observe_result(event)
+            if getattr(quest, "when", None) != WHEN_AFTER_MOVE:
+                quest.observe_result(event)
 
         satisfied = [quest.validate() for quest in self.quests]
         self._current = sum(1 for value in satisfied if value)

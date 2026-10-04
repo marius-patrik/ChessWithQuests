@@ -381,12 +381,17 @@ def test_composite_quest_requires_all_or_any():
     second = CastleN()
 
     all_of = CompositeQuest([first, second], mode="all")
+    # A member that watches moves is told them live; `observe_result` must not replay them,
+    # or a member's counts double and a composite asks for a target nothing reaches.
+    all_of.observe_move(move_event(captured="pawn"))
     all_of.observe_result(result_event(history=[move_event(captured="pawn")]))
+    assert first.progress()[0] == 1, f"the member counted {first.progress()[0]} captures, not 1"
     assert first.validate() is True
     assert second.validate() is False
     assert all_of.validate() is False
 
     any_of = CompositeQuest([first, second], mode="any")
+    any_of.observe_move(move_event(captured="pawn"))
     any_of.observe_result(result_event(history=[move_event(captured="pawn")]))
     assert any_of.validate() is True
 
@@ -532,3 +537,25 @@ def test_material_ahead_is_not_satisfied_by_being_behind():
     ahead = MaterialAhead(color=1, margin=3)
     ahead.observe_result(result_with(white_took=3, black_took=0))
     assert ahead.validate() is True
+
+
+def test_a_composite_does_not_count_its_members_moves_twice():
+    """Each move was given live and then the whole history replayed, doubling every count."""
+    from model.game.events import MoveEvent
+    from model.game.quests import CaptureN, CompositeQuest
+
+    member = CaptureN(count=3)
+    composite = CompositeQuest([member])
+
+    history = [
+        MoveEvent(move=object(), position=None, color=1, captured_piece_type="pawn")
+        for _ in range(3)
+    ]
+    composite.observe_move(history[0])
+    composite.observe_move(history[1])
+    composite.observe_move(history[2])
+    from model.game.events import ResultEvent
+
+    composite.observe_result(ResultEvent(outcome="win", winner=1, history=history))
+
+    assert member.progress()[0] == 3, f"the member counted {member.progress()[0]} captures, not 3"
