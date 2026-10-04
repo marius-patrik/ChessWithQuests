@@ -280,6 +280,37 @@ def test_a_deleted_variant_is_gone_and_nothing_else_is(games_dir):
     assert os.path.isdir(os.path.join(games_dir, DEFAULT_GAME))
 
 
+def test_a_name_that_is_not_one_path_segment_cannot_reach_the_disk(games_dir, tmp_path):
+    """`delete_configuration("..")` removed the directory *containing* `games/`.
+
+    The name was joined to the root and handed to `shutil.rmtree` without ever being asked
+    whether it was a single path segment, so a relative marker reached everything above the
+    configurations. The same hole let a rename move that directory aside.
+
+    Args:
+        games_dir: The throwaway `games/` root.
+        tmp_path: pytest's temporary directory, the parent of `games/`.
+
+    Returns:
+        None
+    """
+    outside = tmp_path / "precious.txt"
+    outside.write_text("not a configuration", encoding="utf-8")
+
+    with pytest.raises(ValueError):
+        delete_configuration("..", root=games_dir)
+    with pytest.raises(ValueError):
+        delete_configuration(os.path.join(DEFAULT_GAME, ".."), root=games_dir)
+    with pytest.raises(ValueError):
+        rename_configuration("..", "elsewhere", root=games_dir)
+    with pytest.raises(ValueError):
+        rename_configuration(DEFAULT_GAME, "../elsewhere", root=games_dir)
+
+    assert outside.read_text(encoding="utf-8") == "not a configuration"
+    assert os.path.isdir(os.path.join(games_dir, DEFAULT_GAME))
+    assert os.path.isdir(str(tmp_path)), "the directory holding games/ must still be there"
+
+
 def test_deleting_a_configuration_that_is_not_there_says_so(games_dir):
     """Deleting nothing must not read as having deleted the default.
 

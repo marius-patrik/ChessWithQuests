@@ -275,6 +275,9 @@ def rename_configuration(name: str, new_name: str, root: Optional[str] = None) -
         FileNotFoundError: If there is no configuration named `name`.
         FileExistsError: If `new_name` is already taken.
     """
+    # Both names become path segments. Validating only the new one left `name` free to be "..",
+    # which renamed the directory *containing* `games/` out from under the caller.
+    _validate_name(name)
     _validate_name(new_name)
     if new_name == DEFAULT_GAME:
         raise ValueError(f"{DEFAULT_GAME} is the default configuration and cannot take a name")
@@ -308,6 +311,10 @@ def delete_configuration(name: str, root: Optional[str] = None) -> None:
         FileNotFoundError: If there is no configuration named `name`.
     """
     allowed = os.path.abspath(root or games_root())
+    # Without this, `name=".."` resolved to the directory *containing* `games/` and
+    # `shutil.rmtree` removed everything above it: the function was handed a name and used
+    # it as a path without ever asking whether it was one path segment.
+    _validate_name(name)
     if name == DEFAULT_GAME:
         raise PermissionError(f"{DEFAULT_GAME} is the default configuration and cannot be deleted")
     target = os.path.join(allowed, name)
