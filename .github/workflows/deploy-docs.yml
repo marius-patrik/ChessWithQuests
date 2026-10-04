@@ -16,8 +16,8 @@ permissions:
 
 jobs:
   deploy:
-    uses: marius-patrik/DarkFactory/.github/workflows/deploy-docs.yml@7ecba1617f553e6a34ceb31177e1ac84d08c350f
+    uses: marius-patrik/agent-DarkFactory/.github/workflows/deploy-docs.yml@7ecba1617f553e6a34ceb31177e1ac84d08c350f
     with:
-      pipeline-repo: marius-patrik/DarkFactory
+      pipeline-repo: marius-patrik/agent-DarkFactory
       pipeline-ref: "7ecba1617f553e6a34ceb31177e1ac84d08c350f"
     secrets: inherit

@@ -1,5 +1,5 @@
 {
-  "$comment": "Everything about this repository that the shared pipeline needs and cannot detect. The pipeline lives in marius-patrik/DarkFactory and is pinned below; the workflows here are callers, not copies.",
+  "$comment": "Everything about this repository that the shared pipeline needs and cannot detect. The pipeline lives in marius-patrik/agent-DarkFactory and is pinned below; the workflows here are callers, not copies.",
   "identity": {
     "owner": "marius-patrik",
     "repo": "ChessWithQuests",
@@ -18,7 +18,7 @@
   },
   "upstream": {
     "$comment": "The shared pipeline. `ref` is the pin: bump it to adopt a pipeline update, and the diff shows exactly what changed.",
-    "repo": "marius-patrik/DarkFactory",
+    "repo": "marius-patrik/agent-DarkFactory",
     "ref": "7ecba1617f553e6a34ceb31177e1ac84d08c350f"
   },
   "versioning": {
@@ -182,7 +182,7 @@
     "projects": [
       {
         "name": "DarkFactory",
-        "url": "https://marius-patrik.github.io/DarkFactory/"
+        "url": "https://marius-patrik.github.io/agent-DarkFactory/"
       },
       {
         "name": "Omnis",
