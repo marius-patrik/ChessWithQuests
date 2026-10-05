@@ -193,12 +193,14 @@ each of them.
 
 | Gap | Evidence |
 |---|---|
-| **Export is the largest remaining hole.** No per-format writer class exists. `ChessNotationWriter` still lives in `model/misc/export_writers.py` and still switches on a format-name string in `export()` | `model/misc/export_writers.py:209`. `games/chess/export/` holds only `algebraic.py`, a coordinate conversion. `games/checkers/export/__init__.py` declares no exporters at all |
-| **FEN writes four placeholder fields.** Castling rights, the en passant square, the halfmove clock and the fullmove number are written as `- - 0 1` whatever the game state | `model/misc/export_writers.py:178` |
-| **PGN movetext is not SAN.** `to_pgn` writes each move's destination square, and the header falls back to `'[Event "Casual Game"]\n[Result "*"]'` when no `MetadataWriter` is passed | `model/misc/export_writers.py:180-206` |
-| **Stenographic is a coordinate pair, not a stenographic record.** `to_stenographic` joins start and end squares per move, with no compression | `model/misc/export_writers.py:121` |
-| **`ChessNotationWriter` is still an engine class.** `notes/object_model.md` section 7 places per-format writers in the configuration that uses them | `games/chess/__init__.py:build_exporters` isolates the import as a single line, so the move is one edit rather than a search |
-| **`ChessNotationWriter.export` is unexercised.** No test constructs the class and calls `export`; the suite calls `to_fen`, `to_pgn` and `to_stenographic` directly, and `tests/test_manager_exporters.py` uses its own stub writer and asserts the manager never names `ChessNotationWriter`. The format switch at `model/misc/export_writers.py:209` therefore has no test at all | `tests/test_notation_and_writers.py`, `tests/test_manager_exporters.py` |
+| **Export is the largest remaining hole — and it is now the *records*, not the mechanism.** There is one writer class per format, in `games/chess/export/`, and the engine holds only the `ExportWriter` protocol. What each writer writes is still wrong: see the three rows below. | `games/chess/export/{pgn,fen,stenographic}.py` |
+| **FEN writes four placeholder fields.** Castling rights, the en passant square, the halfmove clock and the fullmove number are written as `- - 0 1` whatever the game state | `games/chess/export/fen.py`, `ExportFEN.to_fen` |
+| **PGN movetext is not SAN.** `ExportPGN.to_pgn` writes each move's destination square, and the header falls back to `'[Event "Casual Game"]\n[Result "*"]'` when no `MetadataWriter` is passed | `games/chess/export/pgn.py` |
+| **Stenographic is a coordinate pair, not a stenographic record.** `ExportStenographic.to_stenographic` joins start and end squares per move, with no compression | `games/chess/export/stenographic.py` |
+| ~~**`ChessNotationWriter` is still an engine class.**~~ **Closed 2026-10-05.** The class is deleted, the writers are `games/chess/export/`'s, and `build_exporters()` declares them in order | `notes/object_model.md` §7 |
+| ~~**`ChessNotationWriter.export` is unexercised.**~~ **Closed 2026-10-05.** There is no format switch left to exercise; each writer's `export` is called in `tests/test_notation_and_writers.py`, in any spelling, and refuses a notation it does not write | `tests/test_notation_and_writers.py` |
+| **Two of the diagram's five formats have no writer at all.** *Letter* as a format of its own and *Field - Field - Extra*. `algebraic.py` provides the naming *letter* needs and `AlgebraicNotation` hands it to the window, but nothing writes a game in it | `PRD.md` FR-44, FR-48; `SCRATCHPAD.md` §4.5 items 18 and 19 |
+| **`MetadataWriter` is still an engine class, and still PGN-shaped.** It is not an `ExportWriter`, it holds the PGN seven-tag roster by name, and `manager.py:97` builds it with no arguments, so no configuration can supply its own header. Moving it needs a `Configuration.metadata` slot — see `notes/object_model.md` §9 | `model/misc/metadata.py`, `model/game/manager.py:97` |
 | **`games/checkers` now plays WCDF English draughts**, having not done so until 2026-10-04: the king steps (1.17, 1.21), the forty-move count is 80 plies (1.32.2), a repetition rule exists (1.32.1), and the invented insufficient-material draw is gone. One divergence is deliberate — 1.32.1 is a claim to a referee and the engine proposes the draw itself. The perft gate cannot see the king's reach: no man crowns inside the eight plies it walks | `games/checkers/pieces/king.py`, `games/checkers/rules/draws.py`, `games/checkers/rules/__init__.py` |
 
 `pyproject.toml` **does** ship both configurations. Commit `319ed0d` added
@@ -347,8 +349,8 @@ said thirteen, two, three and three.
 | 14 | Wire the orphan subsystems | **delivered** | main stack |
 | 15 | View layer with the game-start modal | **delivered** — `BoardView`, `PlayerGameView`, `PlayerView`, `QuestCard`, `QuestList`, `StartModal` | main stack |
 | 16 | Settings surface | **delivered** — the five sections, the corner configuration selector with create/rename/delete/duplicate, and a code editor that validates before the code joins a configuration | main stack |
-| 17 | `games/checkers/` | **partial** — the board, two piece kinds, eight rules, the clock and four quests, held to the published perft counts, and playing WCDF English draughts since 2026-10-04 (`notes/object_model.md` §21). `build_configuration()` declares `exporters=[]`, so it ships **zero** exporters, not two missing ones | main stack |
-| 18 | Export generalised | **not started** — the `ExportWriter` base and `formats()` exist, but the format switch does, and there is no per-format subclass in `games/<variant>/export/` | — |
+| 17 | `games/checkers/` | **partial** — the board, two piece kinds, eight rules, the clock and four quests, held to the published perft counts. `build_configuration()` declares `exporters=[]`, so it ships **zero** exporters, not two missing ones. The game it plays is flying-kings, not WCDF English draughts; `notes/object_model.md` §21 | main stack |
+| 18 | Export generalised | **delivered, minus two items** — one writer class per format in `games/chess/export/`, the format switch and the `ChessNotationWriter` class deleted, the engine holding only the `ExportWriter` protocol and `tests/test_engine_holds_no_chess.py` walking `model/` to keep it that way. **Not delivered**: *letter* as a format of its own, and the metadata header as a writer (`MetadataWriter` is still an engine class with no configuration-supplied values), which is this item's other half | this branch |
 | 19 | Export formats: PGN, FEN, field-field-extra, stenographic | **not started** | — |
 | 20 | Czech aliases and remaining dead code | **partial** — all fifteen aliases ship, `Knight` is canonical, `Tower`, `Horse` and `Controller` are gone. Absent: the `controller/controller.py` → `game_manager_controller.py` rename, and the dead-code re-check | main stack |
 | 21 | Behavioural test coverage | **partial** — no test asserts on repository metadata any more, §4.3's list is unreferenced rather than untriaged, and §8 items 2, 6, 8 and 12 are not fully asserted | main stack |
@@ -409,8 +411,9 @@ four members that are declared, documented and used, and said of
 §4.3 records the second correction and this paragraph the first.
 
 `Applied` is **not** a member of `Move` — it is a module-level `NamedTuple` at
-`model/game/move.py:21`, imported by `HopMove` and by
-`model/misc/export_writers.py`. `HopMove` adds `hops`, `captures`,
+`model/game/move.py:21`, imported by `HopMove` — and, since 2026-10-05, by
+nothing in the engine: the engine's writer was the only other reader and it is
+deleted. `HopMove` adds `hops`, `captures`,
 `captured_pieces` and `route`, and overrides `apply_to_board`; the engine's
 `unapply_from_board` is reused verbatim, because `HopMove` returns the engine's own
 `Applied` record.
@@ -485,14 +488,14 @@ operations.
 the same as uncovered, and PR 21 is the pass that distinguishes them. One coverage
 gap this file recorded earlier is closed — a `Board` of non-8×8 dimensions is
 built and played on in `tests/test_board_generalisation.py`, at 8×8, 10×10 and 5×7.
-The other is **not**: `ChessNotationWriter.export` is exercised by no test at all.
-`tests/test_manager_exporters.py` uses its own `OnlyOneNotation` stub and never
-constructs the class — it asserts the manager module's source does not contain the
-name — while `tests/test_notation_and_writers.py` constructs `ChessNotationWriter`
-but calls `to_fen`, `to_pgn` and `to_stenographic` directly. The format switch
-at `model/misc/export_writers.py:209` therefore has no test, and the export
-writers' *outputs* remain largely unverified because the outputs are largely wrong
-(§4.1).
+The other was **not** closed at the time of writing and is closed now: the format switch
+had no test at all, because `tests/test_manager_exporters.py` stood its own `OnlyOneNotation`
+in front of the manager and never constructed the shipped writer, which is precisely why a
+writer that returned `""` for an unknown notation could sit in the tree unnoticed. Since
+2026-10-05 every writer's `export` is called in `tests/test_notation_and_writers.py`, in the
+manager's case-insensitive spelling and in a spelling it does not declare, and the unknown
+notation raises. The writers' *outputs* remain largely unverified in substance because the
+outputs are largely wrong (§4.1) — that is item 19's work, not this one's.
 
 ---
 
@@ -625,7 +628,7 @@ note file describes a class or member the diagram does not draw.
 
 **One acceptance criterion was wrong and is withdrawn.** It read "the only
 remaining `pass` is `ExportWriter.export`'s abstract raise". That is wrong twice
-over: `ExportWriter.export` (`model/misc/export_writers.py:75`) **raises**
+over: `ExportWriter.export` (`model/misc/export_writers.py`) **raises**
 `NotImplementedError` and contains no `pass` at all, and three real `pass`
 statements remain, all of them the same deliberate shape — a tkinter `TclError`
 swallowed when a grab or an `after` job has already gone:
@@ -1063,9 +1066,9 @@ position, and FR-14 is what it exists for.
 **What the engine no longer holds.** The hard-coded special cases are gone:
 `MoveValidator.find_king` is replaced by `find_royal` (`validator.py:181`), which
 asks the active rule set which kind is royal rather than comparing a string; and
-the `PIECE_CHARS` table with its `"p"` fallback is gone from the FEN writer, which
-now asks the piece (`ChessNotationWriter._fen_letter`,
-`export_writers.py:96`).
+the `PIECE_CHARS` table with its `"p"` fallback is gone from the position-record
+writer, which now asks the piece (`ExportFEN._fen_letter` in
+`games/chess/export/fen.py`, since 2026-10-05).
 
 **What PR 11 said it also removes, and did not.** The claim was that `find_king`,
 `is_check`, `is_checkmate`, every `getType() == "king"` / `== "pawn"` comparison
@@ -1160,8 +1163,9 @@ corresponding issue.
 
 **Needs**: 9, 11. **Blocks**: 15.
 
-`QuestManager`, `UserManager`, `User`, `MetadataWriter`, `ChessNotationWriter`,
-`WindowController` are instantiated and driven by the game loop.
+`QuestManager`, `UserManager`, `User`, `MetadataWriter`, the configuration's
+export writers (one class per format since 2026-10-05), `WindowController` are
+instantiated and driven by the game loop.
 `GameManager.players` is linked to users. `Timer.add_time` actually applies
 increment. The `hasattr(user, "add_quest")` probe becomes a real call:
 **`manager.py:384`** calls `user.add_quest(quest)`. (An earlier revision of this
@@ -1217,7 +1221,8 @@ owed.
 corresponding issue.
 #### PR 18 — Export generalised
 
-**State**: not started.
+**State**: **mechanism delivered 2026-10-05**; *letter* as a format and the metadata
+header are not.
 
 **Needs**: 11. **Blocks**: 17, 19.
 
@@ -1230,6 +1235,16 @@ game needs immediately.
 **Acceptance criteria**: no format switch and no format-name string exists anywhere in the
 engine; adding a format is one file and no engine change; the metadata header is
 derived from the players and result, with no placeholder strings.
+
+**What landed**: `ExportPGN`, `ExportFEN` and `ExportStenographic` in
+`games/chess/export/`, `build_exporters()` declaring them in that order, the
+`ChessNotationWriter` class and the `model/misc/notation.py` shim deleted, and
+`tests/test_engine_holds_no_chess.py` grown from a per-module list into a walk
+over `model/` whose vocabulary is read from the chess configuration at run time.
+The last criterion is not met and cannot be yet: `MetadataWriter` is still
+`model/misc/metadata.py` with the PGN seven-tag roster hard-coded in it, because
+`manager.py:97` builds it with no arguments and `Configuration` has no slot to
+supply one.
 
 **Needs**: 11. **Blocks**: 19.
 
@@ -1533,8 +1548,14 @@ offers the two formats that mean something for it. **The engine-change half
 **Export**
 
 25. Every format the diagram names is implemented: *letter*, *PGN*, *FEN*,
-    *Field - Field - Extra*, *Stenographic*, and the game transcript.
-26. No format switch and no format-name string exists in the engine.
+    *Field - Field - Extra*, *Stenographic*, and the game transcript. **Three of five.**
+    *PGN*, *FEN* and *Stenographic* ship, one writer class each; *letter* and
+    *Field - Field - Extra* do not exist as code.
+26. No format switch and no format-name string exists in the engine. **True as of
+    2026-10-05**, and asserted structurally: `tests/test_engine_holds_no_chess.py` walks
+    every module under `model/` with the writer names and format names read from the chess
+    configuration, and separately refuses any `ExportWriter` subclass and any configuration
+    import under `model/`.
 27. FEN round-trips for the three positions named in the product requirements.
 28. PGN movetext is genuine SAN, verified against known-good PGN.
 

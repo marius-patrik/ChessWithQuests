@@ -35,17 +35,17 @@ what the test actually reaches.
 
 ## What is partial
 
-- **Export is the largest hole.** `ChessNotationWriter` still switches on a
-  format-name string instead of there being one writer class per format. FEN
-  writes `- - 0 1` for castling rights, the en passant square, the halfmove clock
-  and the fullmove number. PGN movetext is destination squares rather than SAN,
-  and its header falls back to placeholder strings. The stenographic writer emits
-  coordinate pairs with no compression. No configuration ships a per-format
-  writer, and `src/games/checkers/` declares `exporters=[]` — no writer at all.
+  - **Export is one writer per format now, and what each one writes is still wrong.**
+    `ExportPGN`, `ExportFEN` and `ExportStenographic` live in `src/games/chess/export/`;
+    the engine keeps only the `ExportWriter` protocol. FEN writes `- - 0 1` for
+    castling rights, the en passant square, the halfmove clock and the fullmove
+    number. PGN movetext is destination squares rather than SAN. The stenographic
+    writer emits coordinate pairs with no compression. *Letter* and
+    *Field - Field - Extra* are not written at all, and `src/games/checkers/` still
+    declares `exporters=[]` — no writer of any kind.
 - **`src/games/checkers` plays WCDF English draughts**, having not done so until
     2026-10-04. Four things were wrong — the king flew where rule 1.17 has it
     step, the forty-move count defaulted to 100 plies where 1.32.2 says 80, there
-    was no repetition rule for 1.32.1, and a sufficient-material draw ended
     two-kings-against-one while it was still winnable. One divergence is kept on
     purpose: 1.32.1 is a claim to a referee and the engine proposes the draw
     itself. `notes/object_model.md` §21 records each, and what the perft gate
