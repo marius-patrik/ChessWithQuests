@@ -235,10 +235,11 @@ each of them.
 
 | Gap | Evidence |
 |---|---|
-| **Export is the largest remaining hole — and it is now the *records*, not the mechanism.** All five of the diagram's formats are one writer class each, in `games/chess/export/`, and the engine holds only the `ExportWriter` protocol. What two of those writers write is still wrong: see the two rows below. | `games/chess/export/{pgn,fen,algebraic,metadata}.py` |
-| **FEN writes four placeholder fields.** Castling rights, the en passant square, the halfmove clock and the fullmove number are written as `- - 0 1` whatever the game state | `games/chess/export/fen.py`, `ExportFEN.to_fen` |
-| **PGN movetext is not SAN.** `ExportPGN.to_pgn` writes each move's destination square. The header half of that row is closed: it no longer falls back to anything, because a writer handed a game and nothing else derives the header from that game | `games/chess/export/pgn.py` |
-| **Stenographic is a coordinate pair, not a stenographic record.** `ExportStenographic.to_stenographic` joins start and end squares per move, with no compression | `games/chess/export/stenographic.py` |
+| ~~**Export is the largest remaining hole — and it is now the *records*, not the mechanism.**~~ **Closed 2026-10-05.** All five of the diagram's formats are one writer class each, in `games/chess/export/`, and the engine holds only the `ExportWriter` protocol. All three of the wrong records — the three rows below — were corrected in the same change | `games/chess/export/{pgn,fen,stenographic}.py` |
+| ~~**FEN writes four placeholder fields.**~~ **Closed 2026-10-05.** `return f"{board_fen} {turn} - - 0 1"` wrote the same four values whatever the game was doing. Castling rights now come from the two pieces and their flags (the same question `rules/castling.py` asks, with the kind names read out of that rule rather than written here), the en passant target from the last move, the halfmove clock from the plies since a capture or an advance — which is `FiftyMoveRule`'s own number, asserted equal so no second counter exists — and the fullmove number from the move count. `GameManager.transcript` also hands the writer the side to move, which nothing passed and which made every position with Black to move read `w` | `games/chess/export/fen.py`, `model/game/manager.py` |
+| ~~**PGN movetext is not SAN.**~~ **Closed 2026-10-05.** The movetext is Standard Algebraic Notation: piece letters, `x`, the file or rank that says which identical piece moved, the file a pawn took from, `O-O`/`O-O-O` read off the rook's square, `=Q`, and `+`/`#`. SAN is a question about a position and a `Move` carries none, so the writer **replays** the game — a fresh board from its own configuration, its own copy of the rules, notified of each move as `GameManager.make_move` notifies them. Asserted against the Opera Game's published movetext, written in as a literal, and case by case | `games/chess/export/pgn.py`, `tests/test_transcript_notation.py` |
+| ~~**Stenographic is a coordinate pair, not a stenographic record.**~~ **Closed 2026-10-05.** The record is compressed with a standard library codec — `STANDARD_CODECS` is `zlib`, `gzip`, `bz2` and `lzma` and nothing else — with `zlib` as the standard choice and the codec configurable per writer and per call. The bytes are written as base85 because a writer returns a `str`, and the record names the codec that produced it so `from_stenographic` can read it back. What the three sentences of the specification settle, and what was decided, is in the module docstring | `games/chess/export/stenographic.py`, `tests/test_coordinate_record.py` |
+| ~~**`PRD.md` FR-52 claims a FEN import that does not exist.**~~ **Closed 2026-10-05, by amendment.** FR-52 said a reader was "directed by the user on 2026-10-02" and `notes/object_model.md` §12 recorded it. No reader exists, and the owner's rule is that the diagram is the whole specification — and the diagram draws writers. FR-47 and FR-52 are amended and §12's approval line is withdrawn. **The reader is not built** | `PRD.md` FR-47/FR-52, `notes/object_model.md` §12, §27 |
 | **The draughts letter record does not write the route of a capture chain.** `ExportLetter` writes the departure square and the arrival square, which is the rulebook's own convention (FMJD Annex 1 article 8.2), but a chain of three jumps that arrives on 30 by one route and a different chain that arrives on 30 by another read alike. The disambiguating long form — every square landed on, `18x25x30` — is what `PDN` prescribes for exactly this and is **not written**. Recorded rather than fixed: a chain is one move in this engine, so the record is correct about what was played and silent about how | `games/checkers/export/letter.py`, `move_text` |
 | ~~**A rule or quest file written into a configuration joined nothing.**~~ **Closed 2026-10-05.** `view/settings_dialog.py` wrote `rules/<stem>.py`, the editor validated it and reported no problems, and `games/chess/rules/__init__.py` held a literal tuple of the thirteen rules chess ships — so the file was written, checked, and never composed. No error, no warning, no rule. `rules/` and `quests/` are composed out of their own files now, in file-name order, and a file that cannot be imported refuses the load by name | `model/game/configuration.py` `compose_section`, `games/chess/rules/__init__.py`, `tests/test_section_composition.py` |
 | ~~**A piece, clock or notation file written into a configuration joined nothing either.**~~ **Closed 2026-10-05.** The same defect one section over: `pieces/`, `clocks/` and `export/` were declared `None` — "composed by hand" — while `games/chess/pieces/__init__.py` held a literal `PIECES` tuple and both configurations' `build_exporters()` listed their writers out. All five sections are composed out of their own directories now, each against a parent class (`Clock` was built for it), and a section's declared preference orders its entries without removing any | `model/game/configuration.py` `CONFIGURATION_SECTIONS`, `model/game/clock.py`, `tests/test_section_composition.py` |
@@ -396,7 +397,7 @@ said thirteen, two, three and three.
 | 16 | Settings surface | **delivered** — the five sections, the corner configuration selector with create/rename/delete/duplicate, and a code editor that validates before the code joins a configuration | main stack |
 | 17 | `games/checkers/` | **partial** — the board, two piece kinds, eight rules, the clock and four quests, held to the published perft counts, and **two writers**: `ExportLetter` and its own `ExportMetadata`, declared `Letter` and `Field-Field-Extra` by `build_exporters()`. There is no position record and none was invented. The game it plays is flying-kings, not WCDF English draughts; `notes/object_model.md` §21 | main stack |
 | 18 | Export generalised | **delivered** — one writer class per format in `games/chess/export/`, the format switch and the `ChessNotationWriter` class deleted, the engine holding only the `ExportWriter` protocol and `tests/test_engine_holds_no_chess.py` walking `model/` to keep it that way. The item's other half closed 2026-10-05: *letter* is `ExportAlgebraic`, and the header is `ExportMetadata` supplied through `Configuration.metadata` | this branch |
-| 19 | Export formats: PGN, FEN, field-field-extra, stenographic | **partial** — all five formats have a writer and the header is derived from the game with no placeholder strings. **Not delivered**: real SAN movetext (disambiguation, check and mate suffixes), FEN's four computed fields, and the stenographic record's compression. See §4.1 | this branch |
+| 19 | Export formats: PGN, FEN, field-field-extra, stenographic | **delivered 2026-10-05** — all five formats have a writer, the header is derived from the game with no placeholder strings, the movetext is real SAN read off a replay, FEN computes all six fields, and the coordinate record is compressed with a standard library codec and reads back. See §4.1 and `notes/object_model.md` §27 | this branch |
 | 20 | Czech aliases and remaining dead code | **partial** — all fifteen aliases ship, `Knight` is canonical, `Tower`, `Horse` and `Controller` are gone. Absent: the `controller/controller.py` → `game_manager_controller.py` rename, and the dead-code re-check | main stack |
 | 21 | Behavioural test coverage | **partial** — no test asserts on repository metadata any more, §4.3's list is unreferenced rather than untriaged, and §8 items 2, 6, 8 and 12 are not fully asserted | main stack |
 
@@ -1437,8 +1438,8 @@ walks a perft to depth 9.**
 corresponding issue.
 #### PR 19 — Export formats
 
-**State**: partial — the five formats and the header have writers; the records three of them
-write are not yet right. See §4.1.
+**State**: delivered 2026-10-05 — the five formats and the header have writers, and the records
+all three of the remaining formats wrote are now right. See §4.1 and `notes/object_model.md` §27.
 
 **Needs**: 18. **Blocks**: 21.
 
@@ -1630,14 +1631,15 @@ offers the two formats that mean something for it. **The engine-change half
 **Export**
 
 25. Every format the diagram names is implemented: *letter*, *PGN*, *FEN*,
-    *Field - Field - Extra*, *Stenographic*, and the game transcript. **Five of five.**
-    One writer class each, in `games/chess/export/`: `ExportAlgebraic`,
-    `ExportPGN`, `ExportMetadata`, `ExportFEN`, `ExportStenographic`, declared in
-    that order by `games/chess/__init__.py:build_exporters` so PGN still leads.
-    Having a writer is not the same as writing the right record, and items 27 and 28
-    are still open. **The second configuration writes two of them, 2026-10-05:**
-    `games/checkers/export/` holds `ExportLetter` (declared `Letter`) and its own
-    `ExportMetadata` (declared `Field-Field-Extra`), declared by
+    *Field - Field - Extra*, *Stenographic*, and the game transcript. **Five of
+    five, and as of 2026-10-05 each writes the record its format is.** One writer
+    class each, in `games/chess/export/`: `ExportAlgebraic`, `ExportPGN`,
+    `ExportMetadata`, `ExportFEN`, `ExportStenographic`, declared in that order by
+    `games/chess/__init__.py:build_exporters` so PGN still leads. Having a writer is
+    not the same as writing the right record, and on 2026-10-02 three of them wrote the
+    wrong one — items 27 and 28, both closed below. **The second configuration writes
+    two of them, 2026-10-05:** `games/checkers/export/` holds `ExportLetter` (declared
+    `Letter`) and its own `ExportMetadata` (declared `Field-Field-Extra`), declared by
     `build_exporters()` with the record first. It writes no position record, and
     `ExportLetter` refuses `FEN` by name — the absence is stated in
     `games/checkers/export/__init__.py` rather than probed for at runtime.
@@ -1646,8 +1648,39 @@ offers the two formats that mean something for it. **The engine-change half
     every module under `model/` with the writer names and format names read from the chess
     configuration, and separately refuses any `ExportWriter` subclass and any configuration
     import under `model/`.
-27. FEN round-trips for the three positions named in the product requirements.
-28. PGN movetext is genuine SAN, verified against known-good PGN.
+27. FEN round-trips for the three positions named in the product
+    requirements. **Amended, 2026-10-05, and no longer claimed as a round trip.** The
+    round trip cannot be asserted without a reader, and no reader exists: FR-52 said one
+    was "directed by the user on 2026-10-02" and the transcript does not support that —
+    the owner's rule is that the diagram is the whole specification, and **the diagram
+    draws writers, not readers**, which `notes/object_model.md` §12's own rationale
+    argued. §12's approval line is withdrawn and FR-47 is amended. **The reader is not
+    built.** What the three named positions now carry is asserted in
+    `tests/test_position_record.py`, against facts rather than against a reader of this
+    repository's own making: the starting position is compared with the string every
+    chess program agrees on; a mid-game position is asserted to carry `KQkq` and an en
+    passant square, and a position after a two-square advance to carry the target; the
+    castling rights are checked against the castling rule's own conditions and the
+    halfmove clock against `FiftyMoveRule.state["plies"]`, which it is asserted equal to,
+    so there is no second counter.
+28. PGN movetext is genuine SAN, verified against known-good PGN. **True, and
+    asserted against a published game rather than against this writer's own output.**
+    `tests/test_transcript_notation.py` replays **the Opera Game** — Morphy against the
+    Duke of Brunswick and Count Isouard, Paris 1858 — and asserts the whole movetext
+    against a literal transcribed from the English Wikipedia article on 2026-10-05:
+    `1. e4 e5 2. Nf3 d6 3. d4 Bg4 4. dxe5 Bxf3 5. Qxf3 dxe5 6. Bc4 Nf6 7. Qb3 Qe7 8. Nc3
+    c6 9. Bg5 b5 10. Nxb5 cxb5 11. Bxb5+ Nbd7 12. O-O-O Rd8 13. Rxd7 Rxd7 14. Rd1 Qe6
+    15. Bxd7+ Nxd7 16. Qb8+ Nxb8 17. Rd8# 1-0`. That one game carries a queen capture,
+    a knight capture, three checks, a long castle, a mate and `Nbd7` — a file
+    disambiguation — at once. **Every remaining case is its own test**, because §9 names
+    `Nbd7` versus `N1d7` versus `Nd7` as three different answers: two knights by file
+    (`Nbd2`/`Nfd2`), two knights taking on one square (`Nbxd4`/`Nfxd4`), two rooks on one
+    rank (`Rfe1`/`Rae1`), two rooks on one file (`R1a2`/`R3a2`), three queens (`Qd4d8`,
+    needing both), a pawn's file on a capture (`exd5`/`cxd5`), a promotion with check
+    (`e8=Q+`) and one that takes (`exd8=Q+`), and **a pinned knight**, which does *not*
+    make the mover ambiguous — `Nb3` beside `Ndb3` — because a hint is written only from
+    moves that are legal. That last one is the case a geometry-based implementation gets
+    wrong, and it is why the disambiguation asks the validator rather than the board.
 
 **Object model and hygiene**
 
@@ -1682,7 +1715,7 @@ offers the two formats that mean something for it. **The engine-change half
 
 | Risk | Severity | Mitigation |
 |---|---|---|
-| Real PGN requires SAN disambiguation, which is easy to get subtly wrong — `Nbd7` versus `N1d7` versus `Nd7` | High | Each case gets its own test: two knights, three queens, two rooks on one rank, a pinned piece that can still legally reach the square, promotion capture. A round-trip against known-good PGN is the backstop |
+| ~~Real PGN requires SAN disambiguation, which is easy to get subtly wrong — `Nbd7` versus `N1d7` versus `Nd7`~~ | **Discharged 2026-10-05.** The mitigation was each case getting its own test plus a known-good PGN, and both exist: seven disambiguation cases in `tests/test_transcript_notation.py`, and the Opera Game's published movetext as a literal the whole transcript is compared against. The pinned case is asserted in both directions — `Nb3` when the rival knight may not move, `Ndb3` when it may — because that is the one a geometry-based implementation gets wrong |
 | `getType()` and `hasattr` coupling fails **silently** on rename or on a custom piece | High | PR 11 removes it. PR 20 ships tests that fail when a probe breaks, not only when a name changes. **Partly discharged already**: the *hard-coded* kind comparisons are gone and `tests/test_engine_holds_no_chess.py` reads the chess catalogue from the configuration so the gate cannot drift. What remains is 16 `getType()` sites in `games/chess/rules/` and `model/game/` — the draughts rules hold five more — and four `hasattr` probes; §7 PR 11 lists them file by file |
 | Deleting 51 collected tests masks a regression | Medium | Every deletion is import-only or metadata-only, and one `docs_hooks.py` test was rewritten to read a `tmp_path` fixture instead of real `notes/`. PR 21 adds behavioural coverage. §5 gives the exact count |
 | The flatten makes the whole repo the docs tree, and `exclude_docs` has to do work `docs_dir: src` did by construction | High | PR 2. Fallback is a dedicated docs directory rather than widening the tree |

@@ -38,17 +38,24 @@ what the test actually reaches.
 
 ## What is partial
 
-- **Export is the largest hole.** All five of the diagram's formats have one
-  writer class each — `ExportPGN`, `ExportAlgebraic`, `ExportMetadata`,
-  `ExportFEN` and `ExportStenographic`, in `src/games/chess/export/`, and the engine
-  keeps only the `ExportWriter` protocol — so what three of them write is still
-  wrong. FEN writes `- - 0 1` for castling rights, the en passant square, the
-  halfmove clock and the fullmove number. PGN movetext is destination squares
-  rather than SAN. The stenographic writer emits coordinate pairs with no
-  compression. The header is derived from the players and the outcome and carries
-  no placeholders. `src/games/checkers/` writes the two formats it has — the letter
-  notation and its own header — and has **no position record**, because English
-  draughts has none to write and inventing one would be inventing a notation.
+- **Export writes every record the formats claim.** All five of the diagram's
+  formats have one writer class each — `ExportPGN`, `ExportAlgebraic`,
+  `ExportMetadata`, `ExportFEN` and `ExportStenographic`, in `src/games/chess/export/`,
+  and the engine keeps only the `ExportWriter` protocol. **PGN movetext is
+  Standard Algebraic Notation** — read off a replay of the game, so the file that
+  says which knight moved and the suffix that says check or mate are answers about
+  the position and not about the move. **FEN computes all six fields**: the
+  castling rights from the two pieces and their flags, the en passant target from
+  the last move, the halfmove clock as the plies since a capture or an advance
+  (which is `FiftyMoveRule`'s own number — asserted equal, so there is no second
+  counter), and the fullmove number from the move count. **The coordinate record
+  is compressed** with a standard library codec, `zlib` by default and
+  configurable, and names the codec it used. **There is no FEN reader**: the
+  diagram draws writers, not readers, and `notes/object_model.md` §12's approval
+  line for one has been corrected rather than acted on. `src/games/checkers/` writes
+  the two formats it has — the letter notation and its own header — and has **no
+  position record**, because English draughts has none to write and inventing one
+  would be inventing a notation.
 - **`src/games/checkers` is not WCDF English draughts.** The king flies where the
   rulebook steps one square, the fifty-move rule defaults to 100 plies where the
   rulebook says 80, there is no threefold repetition, and insufficient material

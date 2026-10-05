@@ -472,14 +472,29 @@ Recorded because the question is fair and the answer is not obvious.
   docstring is the stale half, not this section. Correcting it is a code change and
   is owed; it was not made in the documentation pass that amended this file.
 
-### 12. FEN Import
+### 12. FEN Import — withdrawn, 2026-10-05
 
-- **Date**: 2026-10-02
-- **Context**: the diagram defines only writers. Nothing in it reads a position.
-- **Deviation**: an importer is added alongside the FEN writer.
-- **Rationale**: the round-trip conformance requirement needs a reader. Import is
-  the direction the diagram does not draw.
-- **Approval**: directed by the user on 2026-10-02.
+- **Date**: registered 2026-10-02, withdrawn 2026-10-05.
+- **Context**: the diagram defines only writers. Nothing in it reads a position. That was
+  stated here from the beginning and it is the reason this entry is withdrawn rather than acted
+  on.
+- **What was registered**: an importer added alongside the FEN writer, on the grounds that
+  "the round-trip conformance requirement needs a reader".
+- **Why it is withdrawn**: the diagram is the whole assignment specification — *"the actual
+  diagram is the only assignment specification there was - if its not there we dont need it"* —
+  and it draws five writers and no reader. `PRD.md` FR-47 and FR-52 existed only to justify the
+  reader, and both are amended in the same change. The round-trip requirement was adopted to
+  give FR-46 something to be tested against; FR-46 is what needed the help, and the record is
+  now tested against a fixed point (the published starting position), against the castling
+  rule's own conditions, and against `FiftyMoveRule`'s own counter — which is a stronger claim
+  than a round trip through a reader of this repository's own making would have been.
+- **Approval line, corrected**: the entry read *"directed by the user on 2026-10-02"*. **That is
+  withdrawn.** Nothing in the transcript directs a FEN import; the decision recorded here is the
+  maintainer's, on the owner's standing rule that the diagram is the whole specification, and it
+  is recorded with this date. No reader is built.
+- **What remains**: `games/chess/export/fen.py` writes the record. §27 records the one reader
+  that *is* built — a coordinate record's own inverse — and why it is not the thing this entry
+  was about.
 
 ### 13. Timer to Clock, and the Clock Parent
 
@@ -1124,6 +1139,56 @@ earlier section registered.
 - **Approval**: directed by the user, 2026-10-05, to compose `pieces`, `clocks` and `export`
   from their own directories "using the same mechanism and the same policy", with the two
   judgement calls named as questions to be answered rather than inherited.
+
+---
+
+### 27. Two Writers Gained a Replay, Four Gained Methods, and One Gained a Reader
+
+- **Date**: 2026-10-05
+- **Context**: `PRD.md` FR-45, FR-46 and FR-49 each claimed a record the writer did not write.
+  PGN's movetext was a destination square per move, FEN ended in `- - 0 1`, and the coordinate
+  record had no compression. What follows is the arrangement each needed, none of which the
+  diagram draws.
+- **Deviations, and why each is where it is.**
+  1. **`ExportPGN.Replay` holds a board and a validator.** Standard Algebraic Notation is a
+     question about a position: which knight moved when two can, and whether the move gave
+     check or mate. A `Move` carries no position, so the writer replays the game on a fresh
+     board dealt by its own configuration with **its own copy of the rules**, notified of every
+     move exactly as `GameManager.make_move` notifies them. It composes its own rules rather
+     than being handed the live ones because the rules in force hold the game being played —
+     which colours have castled, whose two-square advance may be taken, which positions a
+     repetition has seen — and replaying through them would leave a finished game whose rules
+     had forgotten it. It is a chess-configuration concern and it lives in
+     `games/chess/export/`, which is where §7 places every other notation concern.
+  2. **`ExportPGN.to_pgn` takes the position the moves were played from.** It defaults to this
+     configuration's own starting position, which is what a game in this configuration starts
+     from. The parameter is what lets the notation be tested on positions a game cannot reach —
+     three queens, a promotion that gives check — and it is how a caller whose game did not
+     start here is not given notation read against a game that is not the one being written.
+  3. **`ExportFEN` gained four public methods** — `castling_rights`, `en_passant_target`,
+     `halfmove_clock` and `fullmove_number` — one per field it computes. The diagram's
+     `ChessNotationWriter` box draws a format list and `item`, and §23 records that no `item`
+     exists; a method per field is no further from the drawing than the one method the box does
+     not have.
+  4. **`ExportStenographic.from_stenographic` is a reader**, and this is the one that needed
+     saying out loud. It reads back a record this writer wrote. §12 was withdrawn because the
+     diagram draws no reader of a *position*; this reads back the writer's own output, which is
+     the direction FR-50's *game transcript* describes ("as a single parameter") and which a
+     record nobody can read back is not. It is not an importer, it takes no game state, and it
+     is not a format in its own right — it is the inverse of the write.
+  5. **`GameManager.transcript` hands every writer `active_color`** beside the moves, the board,
+     the metadata, the players, the result and the date. Whose turn it is is a fact about the
+     game and a writer decides what its notation does with it; before this, FEN's `active_color`
+     was a default of `1` that nothing passed, so every position with the second colour to move
+     was written `w`. This is §19's kind of departure — the manager hands over rather than
+     knowing — and not a diagram deviation.
+- **No engine change was needed for any of it.** `Replay` and the FEN methods are chess's; the
+  one engine change is a kwarg the manager already passes to every writer, and it names no
+  game. `tests/test_engine_holds_no_chess.py` walks `model/` with the writer and format names
+  read from the configuration and is unchanged.
+- **Approval**: this is the change `PRD.md` §7.7's four records were amended for, and the
+  maintainer's standing rule that the diagram is the whole specification is what §12's
+  withdrawal rests on. Recorded 2026-10-05.
 
 ---
 
