@@ -1180,13 +1180,19 @@ and the difference is the setting rather than a code path; no `getType()` or
 custom piece whose kind is not `"king"` neither crashes nor silently disables
 check.
 
-**Which of those hold.** The first holds for twelve of the thirteen:
-`BishopColourRule` is named only as a string in the rule-order list at
-`tests/test_chess_rules.py:62` and no test drives it on or off through a game. The
-second does **not** hold — see the two tables above. The third holds:
-`test_validator.py:20-26` shows a validator with no rules in force has no royal
-piece and `test_chess_rules.py:276-281` shows a non-`king` kind disables check
-without crashing.
+**Which of those hold.** The first now holds for **all thirteen**, as of
+2026-10-05: `BishopColourRule` had been named only as a string in the rule-order
+list and no test had constructed it, and
+`tests/test_chess_rules.py::test_a_bishop_on_a_light_square_cannot_reach_a_dark_one`,
+`::test_a_bishop_on_a_dark_square_cannot_reach_a_light_one` and
+`::test_a_bishop_promoted_on_a_square_is_confined_to_that_squares_shade` now ask it
+the question it exists to answer — a bishop confined to the shade of the square it
+stood on, including a promoted one, whose shade is the square it was promoted *on*
+rather than the square the pawn left. The rule is taken from `build_rules()`, so
+removing it fails all three. The second does **not** hold — see the two tables above.
+The third holds: `test_validator.py:20-26` shows a validator with no rules in force
+has no royal piece and `test_chess_rules.py:276-281` shows a non-`king` kind disables
+check without crashing.
 
 **Needs**: 10. **Blocks**: 13, 14, 18.
 
@@ -1580,10 +1586,16 @@ asserted. An unannotated item here is a target, not a verified state.
    a kind, a precedence and an optional winner.
 8. Every rule in `notes/chess_rules.md` implemented, each driven on and off
    through one game. **Implemented: yes, thirteen of thirteen. Driven on and off:
-   twelve of thirteen.** `BishopColourRule` is the exception. It appears in
-   `tests/test_chess_rules.py:62` only as a string in the rule-order assertion,
-   and no test constructs it, so the rule `notes/chess_rules.md` §2 mandates has
-   no behavioural test at all.
+   thirteen of thirteen, as of 2026-10-05.** `BishopColourRule` was the exception
+   and no longer is: it had appeared in `tests/test_chess_rules.py:62` only as a
+   string in the rule-order assertion, and no test constructed it, so the rule
+   `notes/chess_rules.md` §2 mandates had no behavioural test at all. **The gate now
+   closes that gap rather than leaving it recorded**: three tests in the same file ask
+   it whether a bishop may leave its own shade, from a light square, from a dark
+   square, and one promoted onto a square it may not leave afterwards. The rule is
+   fetched from `build_rules()` by its declared name rather than constructed, so a
+   configuration that stopped composing it fails all three rather than passing them
+   vacuously.
 9. Logic beyond any shipped set is expressible without touching the engine.
 10. Two colliding rules resolve by precedence, tested with rules written to
     collide.

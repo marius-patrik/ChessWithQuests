@@ -16,7 +16,7 @@ from games.chess.pieces.queen import Queen
 from games.chess.pieces.rook import Rook
 from games.chess.board import build_board
 from games.chess.rules import build_rules
-from games.chess.rules.attacks import has_legal_move
+from games.chess.rules.attacks import has_legal_move, square_color
 from games.chess.rules.check import in_check
 from games.chess.rules.castling import CASTLE_KING_SIDE, CASTLE_QUEEN_SIDE, CastlingRule
 from games.chess.rules.en_passant import EnPassantRule
@@ -49,8 +49,22 @@ def castling_ready_board(king_file=4):
     board.set_piece_at((0, king_file), King(1))
     board.set_piece_at((0, 0), Rook(1))
     board.set_piece_at((0, 7), Rook(1))
-    board.set_piece_at((7, 4), King(-1))
+    board.set_piece_at((7, king_file), King(-1))
     return board
+
+
+def bishop_colour_rule():
+    """Return the rule that confines each bishop to the shade of square it started on.
+
+    Taken from the rules a configuration composes rather than constructed here, so a
+    configuration that stopped composing it has no rule to answer with and these tests fail.
+
+    Returns:
+        BishopColourRule: The rule, attached, so its record of where bishops began is empty.
+    """
+    rule = next(rule for rule in build_rules() if rule.default_name == "Bishop colour")
+    rule.attach()
+    return rule
 
 
 def test_chess_declares_thirteen_rules_in_a_fixed_order():
@@ -286,6 +300,97 @@ def test_promotion_is_offered_to_the_four_choices():
         "Bishop",
         "Knight",
     }
+
+
+# --- bishop colour, which `notes/chess_rules.md` section 2 states as a rule of the game
+
+
+def test_a_bishop_on_a_light_square_cannot_reach_a_dark_one():
+    """A bishop is confined to the colour of square it started on, and this is that side of it.
+
+    `square_color` is the parity of row plus column and the rule compares nothing else, so a
+    light square is one that reads 1 — f1 does — and a dark square one that reads 0. A real
+    `Bishop` only ever offers diagonal destinations, which are all one shade anyway, so the
+    rule is what makes the confinement a property of a *kind* rather than of one piece class's
+    vectors. That is why the dark square is asked about directly.
+
+    Returns:
+        None
+    """
+    board = empty_board()
+    bishop = Bishop(1)
+    board.set_piece_at((0, 5), bishop)  # f1
+    rule = bishop_colour_rule()
+
+    # One diagonal step is how the rule learns where a bishop began: it records the shade of
+    # whatever arrived on the destination square.
+    step = Move((0, 5), (1, 6), piece=bishop)
+    step.apply_to_board(board)
+    rule.on_move_made(board, step)
+
+    assert square_color(board, (0, 5)) == 1  # f1, light
+    assert rule.permits_move(board, Move((1, 6), (2, 7), piece=bishop)) is True  # h3, light
+    assert rule.permits_move(board, Move((1, 6), (3, 3), piece=bishop)) is False  # d4, dark
+
+
+def test_a_bishop_on_a_dark_square_cannot_reach_a_light_one():
+    """The other side of the same rule, which is a different reading of the parity.
+
+    Returns:
+        None
+    """
+    board = empty_board()
+    bishop = Bishop(1)
+    board.set_piece_at((0, 2), bishop)  # c1
+    rule = bishop_colour_rule()
+
+    step = Move((0, 2), (1, 1), piece=bishop)
+    step.apply_to_board(board)
+    rule.on_move_made(board, step)
+
+    assert square_color(board, (0, 2)) == 0  # c1, dark
+    assert rule.permits_move(board, Move((1, 1), (0, 0), piece=bishop)) is True  # a1, dark
+    assert rule.permits_move(board, Move((1, 1), (0, 5), piece=bishop)) is False  # f1, light
+
+
+def test_a_bishop_promoted_on_a_square_is_confined_to_that_squares_shade():
+    """The shade comes from where the bishop appeared, not from where the pawn stood.
+
+    A pawn reaches the far rank by a step straight up the file, so its promotion square is
+    always the opposite shade from the square it left — b7 is light and b8 is dark. So a
+    promoted bishop that inherited the pawn's shade would reach the light squares the bishop
+    is not allowed, and refusing h1 is what shows the shade came from b8 instead.
+
+    Nothing about the promotion move itself is affected: the piece that moves is a pawn, and a
+    pawn is not a confined kind, so the rule has no opinion about what it becomes.
+
+    Returns:
+        None
+    """
+    board = empty_board()
+    pawn = Pawn(1)
+    board.set_piece_at((6, 1), pawn)  # b7
+    promotion = PromotionRule()
+    rule = bishop_colour_rule()
+
+    offered = [
+        move
+        for move in promotion.available_moves(board, pawn)
+        if move.promotion_piece is not None and move.promotion_piece.getType() == "bishop"
+    ]
+    assert len(offered) == 1
+    crowning = offered[0]
+
+    assert rule.permits_move(board, crowning) is True
+    crowning.apply_to_board(board)
+    rule.on_move_made(board, crowning)
+
+    bishop = board.get_piece_at((7, 1))
+    assert isinstance(bishop, Bishop), "b8 did not arrive holding the bishop that was chosen"
+    assert square_color(board, (6, 1)) == 1  # b7, light — the square the pawn left
+    assert square_color(board, (7, 1)) == 0  # b8, dark — where the bishop arrived
+    assert rule.permits_move(board, Move((7, 1), (6, 0), piece=bishop)) is True  # a7, dark
+    assert rule.permits_move(board, Move((7, 1), (0, 7), piece=bishop)) is False  # h1, light
 
 
 def test_the_validator_asks_the_rules_rather_than_guessing():
