@@ -540,8 +540,9 @@ in front of the manager and never constructed the shipped writer, which is preci
 writer that returned `""` for an unknown notation could sit in the tree unnoticed. Since
 2026-10-05 every writer's `export` is called in `tests/test_notation_and_writers.py`, in the
 manager's case-insensitive spelling and in a spelling it does not declare, and the unknown
-notation raises. The writers' *outputs* remain largely unverified in substance because the
-outputs are largely wrong (§4.1) — that is item 19's work, not this one's. **The draughts
+notation raises. The writers' *outputs* are no longer largely wrong: items 27 and 28 above are
+    closed, the Opera Game is asserted movetext for movetext, and the FEN fields are asserted
+    against the rules and the counter that compute them. **The draughts
 writers are held against a played game rather than a pasted one**
 (`tests/test_checkers_export.py`): a game is played to a result through the manager, and the
 record is walked move by move rather than compared against a string written out by hand, so a
@@ -1639,8 +1640,18 @@ offers the two formats that mean something for it. **The engine-change half
       repetition rule exists (1.32.1), and the sufficient-material draw that ended
       two-kings-against-one is gone. Two variants remain declared and inert, and one
       divergence is deliberate: 1.32.1 is a claim to a referee and the engine
-      proposes the draw itself. It still offers **zero** formats, not two.
-      `notes/object_model.md` §21 records each; planned PR 17 owns the exporters.
+      proposes the draw itself.
+      **The formats half now holds, and this paragraph said it did not.** An earlier
+      revision of this item ended "It still offers **zero** formats, not two", which
+      was true when written and false by the same commit that wrote it — the sentence
+      contradicted item 25 below, written in the same change, and the reader working
+      down the definition of done got two opposite answers. `games/checkers` declares
+      **two**: `ExportLetter` (declared `Letter`) and its own `ExportMetadata`
+      (declared `Field-Field-Extra`). What it still offers **no** format for is a
+      position record — English draughts has no FEN, and `ExportLetter` refuses that
+      name by name rather than the tree being probed at run time.
+      `notes/object_model.md` §21 records each; `python -m chesswithquests --check`
+      prints both.
 
 **Interface**
 
@@ -1670,7 +1681,9 @@ offers the two formats that mean something for it. **The engine-change half
     `Letter`) and its own `ExportMetadata` (declared `Field-Field-Extra`), declared by
     `build_exporters()` with the record first. It writes no position record, and
     `ExportLetter` refuses `FEN` by name — the absence is stated in
-    `games/checkers/export/__init__.py` rather than probed for at runtime.
+    `games/checkers/export/__init__.py` rather than probed for at runtime. **Item 20
+    above said the same configuration offered zero formats; it does not, and this
+    item is the one that says so.**
     **The algebraic writer mis-read one thing of its own, 2026-10-05, and it is
     closed here:** it chose `O-O` from the spelling of `Move.move_type`, which
     is the single word `castling` for either castle, so a game that castled on both
