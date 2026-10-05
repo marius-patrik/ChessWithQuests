@@ -9,9 +9,21 @@ the first move.
 Row zero is White's side and row seven is Black's, which is the order the rest of this engine
 already uses and the order a piece's declared forward vector points in: White's declared
 diagonals have a positive row offset, so White moves towards row seven and a White man is
-crowned on row seven. Nothing here knows the word "rank" or the numbering one to thirty-two;
-a draughts position has neither, and the squares are addressed as `(row, col)` like every
-other square in the engine.
+crowned on row seven. Nothing here knows the word "rank".
+
+**The numbering one to thirty-two is here**, because it is a fact about this board rather
+than about any notation, and it is *derived* from the one fact above rather than written out:
+the played squares in board order, numbered from one. Counting them is what produces square
+one on White's back row and square thirty-two on the crown row, so there is no second table
+anywhere that could disagree with `is_played_square`. `games/checkers/export/letter.py` writes
+moves in this naming and `CheckersBoard` draws the board edge in it, and both ask this module
+rather than repeating it.
+
+What is *not* here is a position grammar. The numbers name squares; they do not describe a
+position, and `games/checkers/export/__init__.py` gives the long argument for why a draughts
+game has no position record. Addressing a square as `(row, col)` remains true of every square
+in the engine, and this numbering is a second name for the same place rather than a
+replacement for it.
 """
 
 from typing import Any, List, Tuple
@@ -67,6 +79,44 @@ def played_squares(position: Any) -> List[Tuple[int, int]]:
         for col in range(position.cols)
         if is_played_square(row, col)
     ]
+
+
+def square_number(row: int, col: int, rows: int = DIMENSIONS[0], cols: int = DIMENSIONS[1]) -> int:
+    """Return the number a draughts player calls a square by.
+
+    The numbering is the played squares counted in board order from one, which is what makes
+    one to four White's back row and twenty-nine to thirty-two the crown row. It is *counted*
+    rather than written out, so it cannot disagree with `is_played_square`: change which
+    squares are played and the numbers follow, because there is no second table to change
+    with them.
+
+    Args:
+        row: Zero-based row index.
+        col: Zero-based column index.
+        rows: Rows the board has.
+        cols: Columns the board has.
+
+    Returns:
+        int: The square's number, counting from one.
+
+    Raises:
+        ValueError: If the coordinate is outside the board, or is one of the light squares
+            the game is not played on. A light square has no number in this game's naming,
+            and handing one back would put a name on a place no piece can ever stand.
+    """
+    if not (0 <= row < rows and 0 <= col < cols):
+        raise ValueError(f"({row}, {col}) is not on a {rows}x{cols} draughts board")
+    if not is_played_square(row, col):
+        raise ValueError(
+            f"({row}, {col}) is a light square; English draughts numbers only the squares "
+            "the game is played on"
+        )
+    return sum(
+        1
+        for earlier_row in range(rows)
+        for earlier_col in range(cols)
+        if is_played_square(earlier_row, earlier_col) and (earlier_row, earlier_col) <= (row, col)
+    )
 
 
 def starting_placement(
@@ -135,5 +185,6 @@ __all__ = [
     "build_board",
     "is_played_square",
     "played_squares",
+    "square_number",
     "starting_placement",
 ]
