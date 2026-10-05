@@ -311,14 +311,19 @@ def test_a_piece_that_declares_no_character_is_refused_even_if_it_looks_like_che
 
 
 def test_the_chess_board_still_writes_the_record_it_always_did():
-    """Removing the table must not change one character of chess's own output.
+    """Removing the table must not change one character of chess's own placement.
+
+    The four fields after the side to move used to be `- - 0 1` whatever the game was doing,
+    and they are now computed. The placement is byte for byte what it always was, and the
+    fields after it are the ones every chess program agrees on for a board nothing has
+    happened to yet: `KQkq - 0 1`.
 
     Returns:
         None
     """
     assert (
         ExportFEN().to_fen(build_board(), active_color=1)
-        == "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1"
+        == "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
     )
 
 

@@ -478,6 +478,8 @@ class GameManager:
         # started. A writer decides what of that its notation records and how — which tags
         # exist, what they are called and what they are set to is a writer's business, and
         # the manager's is to hand over what actually happened rather than to write it down.
+        # Whose turn it is is handed over for the same reason: a record of a position says
+        # who is to move, and the writer cannot know it from the board.
         return writer.export(
             wanted,
             moves=moves,
@@ -486,6 +488,7 @@ class GameManager:
             players=list(self.players),
             result=self.result,
             date=self.started_at,
+            active_color=self.active_player,
         )
 
     def save_log(self, path: Optional[str] = None) -> str:

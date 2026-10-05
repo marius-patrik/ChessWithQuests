@@ -79,7 +79,7 @@ def test_the_position_record_writer_declares_one_notation_and_writes_it():
 
     assert writer.formats() == ("FEN",)
     assert writer.export("FEN", board=build_board(), active_color=1) == (
-        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1"
+        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
     )
     assert writer.export("fen", board=build_board(), active_color=1).startswith("rnbqkbnr/")
     assert writer.export(" Fen ", board=build_board(), active_color=1).startswith("rnbqkbnr/")
