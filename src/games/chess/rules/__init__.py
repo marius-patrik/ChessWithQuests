@@ -1,54 +1,42 @@
-"""The chess rules, composed explicitly.
+"""The chess rules: every rule the files in this directory declare.
 
-There is no registry and nothing is discovered by name. `build_rules()` below is the whole
-list of what chess is, written out, so the set of rules in force is closed and greppable
-and a rule that is not named here is not in force.
+The composition is the directory. `build_rules()` below hands this package to
+`model.game.configuration.compose_section`, which composes the modules it holds, so a rule
+written into `rules/` is in force the next time this configuration is loaded and there is no
+list here to add its name to. What was here instead was a hand-written tuple: the code editor
+validated a written rule, wrote the file, reported no problems — and the game played on
+without it, saying nothing at all.
 
-Every import here is relative. This directory is part of a configuration that can be copied,
-and an absolute `games.chess.rules.…` import meant a copy composed the *original's* rules —
-while its board, pieces, clocks and quests were its own.
+What the thirteen rules are has not changed, and neither has the set: castling, en passant,
+promotion, bishop colour confinement, check, checkmate, stalemate, insufficient material, the
+fifty-move rule, threefold repetition, mutual agreement, flag fall, and which piece kind is
+royal. `attacks.py` declares none of them and is composed as a helper, which is what a section
+holding shared code beside its entries looks like.
+
+Order is the order `compose_section` composes in, and it is a tie-break rather than a
+preference: this package first, then the other files by name. Two rules proposing an outcome
+at once are settled by precedence, and by this order when their precedence is equal.
+
+Composition is over this package rather than over a name, because this directory can be
+copied. `cp -r games/chess games/house` must compose the copy's rules, not these.
 """
 
-from typing import Any, List
+import sys
+from typing import List, Optional
 
+from model.game.configuration import compose_section
 from model.game.rule import Rule
-from .bishop_colour import BishopColourRule
-from .castling import CastlingRule
-from .check import CheckRule, CheckmateRule, StalemateRule
-from .draws import (
-    FiftyMoveRule,
-    InsufficientMaterialRule,
-    MutualAgreementRule,
-    ThreefoldRepetitionRule,
-)
-from .en_passant import EnPassantRule
-from .flag import FlagFallRule
-from .promotion import PromotionRule
-from .royal import RoyalPieceKind
-
-#: Every rule orthodox chess plays by, in the order they are declared.
-RULES = (
-    RoyalPieceKind,
-    CastlingRule,
-    EnPassantRule,
-    PromotionRule,
-    BishopColourRule,
-    CheckRule,
-    CheckmateRule,
-    StalemateRule,
-    InsufficientMaterialRule,
-    FiftyMoveRule,
-    ThreefoldRepetitionRule,
-    MutualAgreementRule,
-    FlagFallRule,
-)
 
 
-def build_rules() -> List[Rule]:
-    """Build one instance of every chess rule, at its orthodox value.
+def build_rules(notes: Optional[List[str]] = None) -> List[Rule]:
+    """Build one instance of every rule this configuration's rules directory declares.
+
+    Args:
+        notes: A list to record one line in per file that declares no rule, so the settings
+            form can name it. Defaults to None, which discards them.
 
     Returns:
-        List[Rule]: The rules in force, in declaration order. That order is also the tie
-        break when two propose an outcome at once.
+        List[Rule]: The rules in force, in the order `compose_section` composes them. That
+        order is also the tie-break when two propose an outcome at once.
     """
-    return [rule() for rule in RULES]
+    return compose_section(sys.modules[__name__], notes)

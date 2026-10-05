@@ -5,13 +5,15 @@
 it says "checkers" to the engine: it is a board, two piece kinds and eight rules, composed
 out loud below, and the engine reads none of them by name.
 
-Composition is explicit. `build_configuration()` is the whole list of what this game is —
-there is no registry, nothing is discovered by name, and a rule that is not named here is
-not in force. This is the proof the abstraction was for: `chess` and `checkers` are two
-directories and one engine, and nothing under `model/`, `controller/` or `view/` changed to
-make the second one exist. The configuration imports itself by relative path throughout, so
-`cp -r games/checkers games/house` produces a directory that plays *its own* rules rather
-than these.
+Composition is out loud and it is the directory. `build_configuration()` below says what this
+game is, and `rules/` and `quests/` are composed out of the files they hold: a rule written
+into `rules/` is in force because it is a file in `rules/`. There is no registry and no plugin
+loader, so what is in force is what the tree holds and nothing else. This is the proof the
+abstraction was for: `chess` and `checkers` are two directories and one engine, and nothing
+under `model/`, `controller/` or `view/` changed to make the second one exist. The
+configuration imports itself by relative path throughout and `compose_section` composes the
+section it is handed, so `cp -r games/checkers games/house` produces a directory that plays
+*its own* rules rather than these.
 
 Three things are worth stating here rather than leaving to be discovered:
 
@@ -37,13 +39,13 @@ from typing import Any, List, Optional
 
 from model.game.configuration import Configuration
 
+from . import quests as quest_files
 from .board import build_board
 from .clocks.fischer import Fischer
 from .export.letter import ExportLetter, NumberedNotation
 from .export.metadata import ExportMetadata
 from .pieces.king import King
 from .pieces.man import Man
-from .quests import build_quests
 from .rules import build_rules
 
 #: The name this configuration is loaded by.
@@ -102,6 +104,11 @@ def build_exporters(metadata: Optional[ExportMetadata] = None) -> List[Any]:
 def build_configuration() -> Configuration:
     """Assemble the checkers configuration.
 
+    The one list is the sections: `rules/` and `quests/` are composed out of the files they
+    hold, so nothing here has to name a rule for it to be in force. Both compositions are
+    handed the same list, and it is read afterwards, which is what lets a file in either
+    section that declares nothing be reported by name rather than dropped in silence.
+
     Returns:
         Configuration: The checkers board, and the pieces, rules, quests, clocks and
         exporters it brings with it, together with the naming it gives a move — which is what
@@ -109,16 +116,20 @@ def build_configuration() -> Configuration:
         it — and the header record its games are described by.
     """
     metadata = build_metadata()
+    uncomposed: List[str] = []
+    rules = build_rules(uncomposed)
+    quests = quest_files.build_quests(uncomposed)
     return Configuration(
         name=NAME,
         path="",
         board=build_board(),
         pieces=[Man, King],
-        rules=build_rules(),
-        quests=build_quests(),
+        rules=rules,
+        quests=quests,
         clocks=[Fischer()],
         exporters=build_exporters(metadata),
         metadata=metadata,
         notation=NumberedNotation(),
         board_factory=build_board,
+        uncomposed=uncomposed,
     )

@@ -1447,7 +1447,14 @@ def test_reset_returns_a_field_to_its_declaration(tk_root, games_dir):
     variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
     dialog = SettingsDialog(tk_root, variant, root=games_dir)
     tk_root.update()
-    _subject, fields, editors = dialog.entries_by_section["Rules"][0]
+    # A rule that declares `royal_kind`, chosen by what it declares rather than by its
+    # position: the section composes its files in file-name order, so which rule the form
+    # lists first is a property of the file names and not something this test is about.
+    _subject, fields, editors = next(
+        entry
+        for entry in dialog.entries_by_section["Rules"]
+        if any(field.name == "royal_kind" for field in entry[1])
+    )
     royal = next(field for field in fields if field.name == "royal_kind")
     editors["royal_kind"].set("monarch")
 

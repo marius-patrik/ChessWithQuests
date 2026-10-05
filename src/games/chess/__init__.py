@@ -4,16 +4,18 @@
 `quests/`, `clocks/` and `export/` hold one file per entry. It is the default configuration
 and cannot be edited or deleted: a variant starts by duplicating it.
 
-Composition is explicit. `build_configuration()` below is the whole list of what chess is —
-there is no registry, nothing is discovered by name, and a rule that is not named here is
-not in force.
+Composition is out loud and it is the directory. `build_configuration()` below says what this
+game is, and `rules/` and `quests/` are composed out of the files they hold: a rule written
+into `rules/` is in force because it is a file in `rules/`. There is no registry and no
+plugin loader, so what is in force is what the tree holds and nothing else.
 
 Every import below is relative, and that is load-bearing rather than stylistic. This directory
 is a copyable unit: `cp -r games/chess games/house` and a variant exists. An absolute
 `games.chess.…` import inside a copy would still reach back here, so the copy would load this
 board, these pieces and these rules while looking like it had loaded its own — silently, with
 no error and no warning. `model/game/configuration.py` loads a configuration as a package in
-its own right for the same reason, and `rules/` and `pieces/` import relatively for the same
+its own right for the same reason, `compose_section` composes the section it is handed rather
+than a section it looked up by name, and `rules/` and `pieces/` import relatively for the same
 reason: the rules a copy composes, and the pieces its promotions produce, are the copy's.
 """
 
@@ -24,6 +26,7 @@ from model.game.games import DEFAULT_GAME
 from model.game.quest import Quest
 from model.game.rule import Rule
 
+from . import quests as quest_files
 from .board import build_board
 from .clocks.fischer import Fischer
 from .export.algebraic import AlgebraicNotation, ExportAlgebraic
@@ -88,37 +91,54 @@ def build_exporters(metadata: Optional[ExportMetadata] = None) -> List[Any]:
 def build_configuration() -> Configuration:
     """Assemble the chess configuration.
 
+    The one list is the sections: `rules/` and `quests/` are composed out of the files they
+    hold, so nothing here has to name a rule for it to be in force. Both compositions are
+    handed the same list, and it is read afterwards, which is what lets a file in either
+    section that declares nothing be reported by name rather than dropped in silence.
+
     Returns:
         Configuration: The chess board, and the pieces, rules, quests, clocks and exporters
-        chess brings with it, together with the naming chess gives a move — which is what the
-        window draws the move history with, and what a copy of this directory brings with it —
-        and the header record its transcripts are written with.
+        chess brings with it, together with the naming chess gives a move — which is what
+        the window draws the move history with, and what a copy of this directory brings with
+        it — and the header record its transcripts are written with.
     """
     metadata = build_metadata()
+    uncomposed: List[str] = []
+    rules = build_rules(uncomposed)
+    quests = build_quests(uncomposed)
     return Configuration(
         name=DEFAULT_GAME,
         path="",
         board=build_board(),
         pieces=build_pieces(),
-        rules=build_rules(),
-        quests=build_quests(),
+        rules=rules,
+        quests=quests,
         clocks=[Fischer()],
         exporters=build_exporters(metadata),
         metadata=metadata,
         notation=AlgebraicNotation(),
         board_factory=build_board,
+        uncomposed=uncomposed,
     )
 
 
-def build_quests() -> List[Quest]:
+def build_quests(notes: Optional[List[str]] = None) -> List[Quest]:
     """Build the quests chess offers by default.
 
     `CaptureOfType` and `KingOnlyGame` are here rather than in `model/game/quests.py`'s
     roster, because both insist on naming a piece type and only chess can say which one. The
     engine holds the classes and the parameters; this is where the answers live.
 
+    Whatever `quests/` holds is composed on top of them, so a quest written there joins this
+    configuration without being named here.
+
+    Args:
+        notes: A list to record one line in per file that declares no quest. Defaults to None,
+            which discards them.
+
     Returns:
-        List[Quest]: A small starter set, all of them switchable from the settings form.
+        List[Quest]: A small starter set, all of them switchable from the settings form, plus
+        whatever the files in `quests/` declare.
     """
     from model.game.quests import (
         CaptureN,
@@ -136,4 +156,5 @@ def build_quests() -> List[Quest]:
         MakeCheckN(count=3, reward=40),
         KingOnlyGame(royal_kind="king", reward=60),
         WonBy(color=1, reward=75),
+        *quest_files.build_quests(notes),
     ]

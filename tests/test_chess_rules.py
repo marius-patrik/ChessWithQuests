@@ -54,14 +54,23 @@ def castling_ready_board(king_file=4):
 
 
 def test_chess_declares_thirteen_rules_in_a_fixed_order():
-    """The set of rules in force is closed, ordered, and written out by hand."""
+    """The set of rules in force is closed, ordered, and read off the section's own files.
+
+    The order used to be a hand-written tuple, and the file names in `rules/` were the
+    order it happened to be written in. It is now the order `compose_section` composes in:
+    the section's own module first, then the files by name — which is `bishop_colour.py`,
+    `castling.py`, `check.py`, `draws.py`, `en_passant.py`, `flag.py`, `promotion.py`,
+    `royal.py`, with `attacks.py` declaring none of them. `attacks.py` sorts first of all and
+    contributes nothing, which is what a helper module in a section is for.
+
+    The second assertion is the one that cannot drift: it says the order is the files, so a
+    rule moved into a file of a different name moves with it rather than needing the list
+    above edited.
+    """
     rules = build_rules()
     assert [rule.default_name for rule in rules] == [
-        "Royal piece",
-        "Castling",
-        "En passant",
-        "Promotion",
         "Bishop colour",
+        "Castling",
         "Check",
         "Checkmate",
         "Stalemate",
@@ -69,7 +78,25 @@ def test_chess_declares_thirteen_rules_in_a_fixed_order():
         "Fifty-move rule",
         "Threefold repetition",
         "Draw by agreement",
+        "En passant",
         "Flag fall",
+        "Promotion",
+        "Royal piece",
+    ]
+    assert [type(rule).__module__.rsplit(".", 1)[-1] for rule in rules] == [
+        "bishop_colour",
+        "castling",
+        "check",
+        "check",
+        "check",
+        "draws",
+        "draws",
+        "draws",
+        "draws",
+        "en_passant",
+        "flag",
+        "promotion",
+        "royal",
     ]
 
 
