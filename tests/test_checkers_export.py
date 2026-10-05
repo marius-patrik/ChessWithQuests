@@ -1,23 +1,28 @@
-"""The draughts header: who played, when, and how it ended.
+"""What the checkers configuration declares, and what a played draughts game writes.
 
-`games/checkers/export/metadata.py` holds `ExportMetadata`, which writes the game's own facts
-as `[Name "Value"]` pairs derived at write time — the two names from the users who played, the
-date from the day the game began, the result from the outcome the rules reached.
+`games/checkers/__init__.py` composes two writers — the letter notation and the header — and
+the naming the window draws the move history with. Which notations exist is the
+configuration's answer: `GameManager.default_format` takes the first, `save_log` names its file
+from it, and `Configuration.metadata` is how the header reaches the writers that ask for one.
 
-**There is no placeholder string here and no `?`**, and that is the one place this header
-differs from chess's. A PGN header *is* the seven-tag roster and obliges a record to carry
-`Event`, `Site` and `Round` whatever the program knows, so `?` is PGN's own way of saying *not
-supplied* — a claim rather than an invention. No published roster obliges an English draughts
-record to carry a tag it has nothing for, so this writer leaves the field out instead. Its
-result is written the way a draughts score sheet writes it, `2-1`, `1-2` or `2-2`, rather than
-chess's `1-0`.
+**A finished game is played rather than assembled.** The record is walked move by move against
+the moves the manager actually made, because a record pasted into a test is a record that can
+be pasted in wrongly. **The refusal of `FEN` is a claim about the game, not a gap**:
+`games/checkers/export/__init__.py` argues that English draughts has no position record and
+that writing one to satisfy a writer would be inventing a notation.
 
-**The naming of a square is the board's**, so every test here that mentions one uses
+**A configuration is a directory, so a copy of it brings its own writers with it.** That is
+what the last test here is for: the module a writer class came from is the proof, exactly as it
+is for the board's pieces.
+
+**The numbering is the board's**, so every test here that mentions a square number uses
 `tests/test_draughts_perft.py`'s independent derivation of the same arrangement to say which
 square it means.
 """
 
+import pathlib
 from datetime import datetime
+from pathlib import Path
 from typing import Any, List, Optional
 
 import pytest
@@ -31,7 +36,8 @@ from games.checkers.export.metadata import (
     WHITE_WON,
     ExportMetadata,
 )
-from model.game.manager import UnsupportedExportFormat
+from model.game.configuration import load_configuration
+from model.game.manager import GameManager, UnsupportedExportFormat
 from model.game.move import Move
 from model.game.rule import Result
 from tests.test_draughts_perft import coordinates, square_of
@@ -388,3 +394,171 @@ def test_the_header_writer_declares_the_notation_the_diagram_draws():
 
     with pytest.raises(UnsupportedExportFormat, match="Field-Field-Extra"):
         writer.export("Letter")
+
+
+# --- what the configuration declares
+
+
+def test_the_checkers_configuration_offers_two_notations_and_leads_with_the_record():
+    """The two this game has, in the order that makes the record the default.
+
+    Order matters twice over: `default_format` takes the first, and `save_log` names its file
+    from it, so a draughts game written without being asked for a notation is a `.letter`.
+
+    Returns:
+        None
+    """
+    from games.checkers import build_configuration
+
+    configuration = build_configuration()
+    offered = [name for writer in configuration.exporters for name in writer.formats()]
+
+    assert offered == ["Letter", "Field-Field-Extra"]
+    assert configuration.metadata in configuration.exporters
+    assert isinstance(configuration.notation, NumberedNotation)
+
+
+def test_a_draughts_game_written_without_being_asked_for_a_notation_is_a_letter_record():
+    """And the file it is saved to is named for that, which is the extension following from
+    the declaration rather than from a list written beside the writer.
+
+    Returns:
+        None
+    """
+    configuration = load_configuration("checkers")
+    game = GameManager(configuration=configuration)
+
+    assert game.default_format() == "Letter"
+    assert game.notation.formats() == ("Letter",)
+
+
+def test_the_configuration_hands_the_manager_the_same_header_it_offers_as_a_format():
+    """Otherwise a game would be written with a header the configuration does not export.
+
+    Returns:
+        None
+    """
+    from games.checkers import build_configuration
+
+    configuration = build_configuration()
+
+    assert configuration.metadata is not None
+    assert configuration.metadata in configuration.exporters
+    assert type(configuration.metadata).__module__ == "games.checkers.export.metadata"
+
+
+# --- a whole game, played rather than assembled
+
+
+def test_a_finished_draughts_game_exports_in_both_its_notations():
+    """A game played to a result through the manager, written out by both of its writers.
+
+    The moves are the manager's own, so the square numbers in the record are the numbers of
+    the squares the pieces actually stood on. The move list is walked position by position
+    rather than compared against a written-out record, because a record pasted into a test is
+    a record that can be pasted in wrongly.
+
+    Returns:
+        None
+    """
+    game = GameManager(configuration=load_configuration("checkers"))
+    while game.get_result() is None:
+        offered = game.move_validator.get_all_valid_moves(game.active_player, game.board)
+        assert offered, "a side with no move has lost, so the game is over"
+        move = sorted(offered, key=lambda candidate: (candidate.start_pos, candidate.end_pos))[0]
+        assert game.make_move(move)
+    result = game.finish_game()
+
+    assert result is not None
+    assert game.move_events
+
+    written = [move_text(event.move) for event in game.move_events]
+    record = game.transcript("Letter")
+    for text in written:
+        assert text in record
+
+    took_something = [
+        event.move
+        for event in game.move_events
+        if getattr(event.move, "captures", ()) or event.move.captured_piece is not None
+    ]
+    assert took_something, "a game this long takes something; the cross would go untested"
+
+    quiet = [
+        move_text(event.move) for event in game.move_events if event.move not in took_something
+    ]
+    assert all("x" not in text and "-" in text for text in quiet)
+    assert all(text.count("x") == 1 for text in written if text not in quiet)
+
+    header = game.transcript("Field-Field-Extra")
+    assert '[Result "' in header
+    assert header.count("[") == len(TAG_ROSTER)
+
+
+def test_a_draughts_game_refuses_a_position_record_by_name():
+    """There is no FEN for English draughts, so asking for one is answered rather than fudged.
+
+    Returns:
+        None
+    """
+    game = GameManager(configuration=load_configuration("checkers"))
+
+    with pytest.raises(UnsupportedExportFormat, match="checkers exports"):
+        game.transcript("FEN")
+
+
+def test_a_saved_draughts_game_is_named_for_the_notation_it_was_written_in(tmp_path, monkeypatch):
+    """`save_log` names the file from the declared format, so the extension is a consequence.
+
+    Returns:
+        None
+    """
+    game = GameManager(configuration=load_configuration("checkers"))
+    game.make_move(
+        sorted(
+            game.move_validator.get_all_valid_moves(game.active_player, game.board),
+            key=lambda candidate: (candidate.start_pos, candidate.end_pos),
+        )[0]
+    )
+
+    # No path: the default is `logs/game-<moves>.<format>`, and the extension is the part
+    # this test is about. A caller who names a file gets the name they asked for.
+    monkeypatch.chdir(tmp_path)
+    path = Path(game.save_log())
+
+    assert path.suffix == ".letter"
+    assert path.read_text(encoding="utf-8") == game.transcript("Letter")
+
+
+def test_a_copied_checkers_configuration_writes_with_its_own_writers_and_its_own_naming(tmp_path):
+    """A copy of the directory brings its own writers, its own naming and its own board with it.
+
+    Everything here is imported relatively, so the proof that it is relative is the module a
+    class came from: a writer loaded through `games.checkers` would say so, and one loaded
+    through the copy says `_configuration_…` instead. An absolute
+    `from games.checkers.export.letter import ExportLetter` in the copy's `build_exporters()`
+    would load, look edited, and write the original's notation.
+
+    Returns:
+        None
+    """
+    import shutil
+
+    from model.game.games import games_root
+
+    games = tmp_path / "games"
+    shutil.copytree(
+        pathlib.Path(games_root()) / "checkers",
+        games / "house",
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
+    configuration = load_configuration("house", root=str(games))
+
+    assert configuration.exporters
+    for writer in configuration.exporters:
+        module = type(writer).__module__
+        assert module.startswith("_configuration_"), type(writer).__name__
+        assert ".export." in module, type(writer).__name__
+
+    assert type(configuration.notation).__module__.startswith("_configuration_")
+    assert type(configuration.board).__module__.startswith("_configuration_")
