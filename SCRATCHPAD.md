@@ -32,9 +32,10 @@ Breaking any of these is a rejected change regardless of quality.
 5. **Rules and quests are the only code-driven layers**, and both use the same
    pattern: a parent class with subclasses, composed explicitly, never a
    registry. Everything else is data. Composition is explicit as well: a
-   configuration's `rules/` and `quests/` sections compose the files their own
-   directory holds, so the tree is the list and a rule is in force for having
-   been written.
+   configuration's `pieces/`, `rules/`, `quests/`, `clocks/` and `export/`
+   sections each compose the files their own directory holds, so the tree is the
+   list and a rule, a piece, a clock or a notation is in force for having been
+   written.
 6. **Every change arrives as a pull request.** Nothing lands unreviewed. Do not
    merge — that is the maintainer's decision alone.
 7. **Commit messages are Conventional Commits**, scoped by area: `area:model`,
@@ -108,14 +109,14 @@ logs/                 game logs, configurable, git-ignored
 tests/  notes/  theme/  .github/
 ```
 
-`model/` keeps the parent classes — `Piece`, `Rule`, `Quest`, `Board` — and the
-machinery every configuration shares: the move, the validator, the game manager,
-the timer, the logger, the player, the user and the notation base. **There is no
-`Clock` class.** `notes/object_model.md` §13 registers one as the intention and
-§20 records that it is unbuilt; both shipped clocks derive from nothing, and
-`model/game/clock_fields.py` describes a clock by asking what it holds. Any
-sentence in this file or `PRD.md` that lists `Clock` among the parent classes is
-naming something that does not exist.
+`model/` keeps the parent classes — `Piece`, `Rule`, `Quest`, `Clock`, `Board` —
+and the machinery every configuration shares: the move, the validator, the game
+manager, the timer, the logger, the player, the user and the notation base.
+`Clock` is the configurable parent `notes/object_model.md` §13 registered as the
+intention; it is built, because `clocks/` cannot be composed against a parent
+class that is not there, and `model/game/clock_fields.py` still describes a clock
+by asking what it holds so that a clock written in a variant is configurable
+whether or not it derives from `Clock`.
 
 **Everything in a configuration directory is a Python file.** It could not all be
 data: rules and quests carry logic, so one language avoids a format split and
@@ -123,20 +124,34 @@ keeps the tree readable.
 
 **A section is composed out of the files it holds.** `CONFIGURATION_SECTIONS` in
 `model/game/configuration.py` declares which directories a configuration has and
-what each one composes, and `compose_section` builds one instance of every `Rule`
-or `Quest` subclass the modules in that directory declare. `build_rules()` and
-`build_quests()` stay declared functions in each configuration — they hand their
-own section's package to the composer — and there is no registry, no plugin loader
-and no scan of anything outside the section. So a file written into `rules/` is in
-force because it is a file in `rules/`, which is what `PRD.md` FR-33 requires and
-what the code editor's "No problems found" used to promise and the product did not
-keep (§4.1). Order is the section's own module first and the remaining files by
-name, because rule order is the tie-break when two rules propose an outcome at
-once. A file that cannot be imported refuses the load and names itself; one that
-declares nothing is left out and named in `Configuration.uncomposed`, because
-`rules/attacks.py` is a helper three rule files share and refusing the load over it
-would stop the game starting. `pieces/`, `clocks/` and `export/` are composed by
-hand and say so in the same declaration.
+the parent class each one composes, and `compose_section` builds one entry per
+`Piece`, `Rule`, `Quest`, `Clock` or `ExportWriter` subclass the modules in that
+directory declare. `build_pieces()`, `build_rules()`, `build_quests()`,
+`build_clocks()` and `build_exporters()` stay declared functions in each
+configuration — they hand their own section's package to the composer — and there
+is no registry, no plugin loader and no scan of anything outside the section. So a
+file written into `rules/` is in force, a piece written into `pieces/` is in the
+catalogue, a clock in `clocks/` is offered and a notation in `export/` is
+written with, each because it is a file in that directory. Order is the section's
+own module first and the remaining files by name, because rule order is the
+tie-break when two rules propose an outcome at once. A file that cannot be
+imported refuses the load and names itself; one that declares nothing is left out
+and named in `Configuration.uncomposed`, because `rules/attacks.py` is a helper
+three rule files share and refusing the load over it would stop the game
+starting.
+
+**A section may declare which of its entries lead, and that orders rather than
+selects.** `export/` declares `PREFERRED`, because which notation a game is saved
+in is a preference rather than a fact about a directory: `default_format` takes
+the first format the first writer declares and `save_log` names its file from it.
+Every writer the directory holds is composed whatever the preference says, and a
+writer the preference does not name is offered last; what is refused is a name in
+`PREFERRED` that the directory does not declare, because a preference and a
+directory that disagree is how a notation quietly stops existing.
+
+**One section composes classes rather than instances.** `Configuration.pieces` is
+a catalogue of what a board may hold, and a piece is placed with a colour and a
+square, so the composed entry is the class and `CLASS_ENTRY_SECTIONS` says so.
 
 **A configuration is a folder that can be copied.** `cp -r games/chess
 games/house`, change what differs, and a variant exists. `cp -r games/checkers
@@ -226,7 +241,8 @@ each of them.
 | **Stenographic is a coordinate pair, not a stenographic record.** `ExportStenographic.to_stenographic` joins start and end squares per move, with no compression | `games/chess/export/stenographic.py` |
 | **The draughts letter record does not write the route of a capture chain.** `ExportLetter` writes the departure square and the arrival square, which is the rulebook's own convention (FMJD Annex 1 article 8.2), but a chain of three jumps that arrives on 30 by one route and a different chain that arrives on 30 by another read alike. The disambiguating long form — every square landed on, `18x25x30` — is what `PDN` prescribes for exactly this and is **not written**. Recorded rather than fixed: a chain is one move in this engine, so the record is correct about what was played and silent about how | `games/checkers/export/letter.py`, `move_text` |
 | ~~**A rule or quest file written into a configuration joined nothing.**~~ **Closed 2026-10-05.** `view/settings_dialog.py` wrote `rules/<stem>.py`, the editor validated it and reported no problems, and `games/chess/rules/__init__.py` held a literal tuple of the thirteen rules chess ships — so the file was written, checked, and never composed. No error, no warning, no rule. `rules/` and `quests/` are composed out of their own files now, in file-name order, and a file that cannot be imported refuses the load by name | `model/game/configuration.py` `compose_section`, `games/chess/rules/__init__.py`, `tests/test_section_composition.py` |
-| ~~**`ChessNotationWriter` is still an engine class.**~~ **Closed 2026-10-05.** The class is deleted, the writers are `games/chess/export/`'s, and `build_exporters()` declares them in order | `notes/object_model.md` §7 |
+| ~~**A piece, clock or notation file written into a configuration joined nothing either.**~~ **Closed 2026-10-05.** The same defect one section over: `pieces/`, `clocks/` and `export/` were declared `None` — "composed by hand" — while `games/chess/pieces/__init__.py` held a literal `PIECES` tuple and both configurations' `build_exporters()` listed their writers out. All five sections are composed out of their own directories now, each against a parent class (`Clock` was built for it), and a section's declared preference orders its entries without removing any | `model/game/configuration.py` `CONFIGURATION_SECTIONS`, `model/game/clock.py`, `tests/test_section_composition.py` |
+| ~~**`ChessNotationWriter` is still an engine class.**~~ **Closed 2026-10-05.** The class is deleted and the writers are `games/chess/export/`'s, each a file in that directory and composed from it | `notes/object_model.md` §7 |
 | ~~**`ChessNotationWriter.export` is unexercised.**~~ **Closed 2026-10-05.** There is no format switch left to exercise; each writer's `export` is called in `tests/test_notation_and_writers.py`, in any spelling, and refuses a notation it does not write | `tests/test_notation_and_writers.py` |
 | ~~**Two of the diagram's five formats have no writer at all.**~~ **Closed 2026-10-05.** *Letter* is `ExportAlgebraic` in `games/chess/export/algebraic.py`, declaring `Algebraic`, and *Field - Field - Extra* is `ExportMetadata` in `games/chess/export/metadata.py`. All five of the diagram's formats are one writer each | `PRD.md` FR-44, FR-48; `notes/reference_diagram.md` |
 | ~~**`MetadataWriter` is still an engine class, and still PGN-shaped.**~~ **Closed 2026-10-05.** It is `games/chess/export/metadata.py`'s `ExportMetadata`, a writer like the other four; `Configuration.metadata` is how a configuration supplies one, `GameManager` builds none and writes no tag into one, and `model/misc/metadata.py` is deleted | `games/chess/export/metadata.py`, `model/game/configuration.py`, `model/game/manager.py` |

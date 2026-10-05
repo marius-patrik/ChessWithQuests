@@ -212,7 +212,7 @@ listed here are already English in the diagram.
 | `MetadataWriter` | `ExportMetadata` | the box's one drawn member (`method(type): type`) does not exist in it. The rename follows from the class becoming one writer among five — `games/chess/export/metadata.py`, declaring *Field - Field - Extra* |
 | `Quest` | `Quest` | already English |
 | `Kwest` | `Quest` | appears only inside `splnene_kwesty` |
-| `Timer` | `Timer` | the configurable parent `Clock` is registered but **not built** — `notes/object_model.md` §13 and §20 |
+| `Timer` | `Timer`, with the configurable parent `Clock` beside it | `Clock` is built — `model/game/clock.py`, `notes/object_model.md` §13 and §26 — so `clocks/` composes against a declared parent class |
 | `GameManagerController` | `GameManagerController` | already English; the diagram has no `GameController` or `WindowController` box |
 | `GameVeiw` | no class of that name | diagram typo. The board is `BoardView` in `view/game_view.py` and the window is `PlayerGameView` in `view/player_game_view.py` — `notes/object_model.md` section 15 |
 | `HracGameView` | `PlayerGameView` | the `Hrac` part is Czech. `HracView` is `PlayerView` |

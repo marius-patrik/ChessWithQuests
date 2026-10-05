@@ -334,6 +334,9 @@ Recorded because the question is fair and the answer is not obvious.
   `GameManager` no longer builds a header and no longer writes a tag into it — it hands the
   writers the players, the outcome and the date, and a writer decides what those are called.
   **The two absences above are closed**, and `SCRATCHPAD.md` §4.1's two export rows with them.
+  **And `build_exporters` composes `export/` rather than listing the five** (§26, 2026-10-05).
+  The declared order survives as `PREFERRED` in the section's own module, so `default_format()`
+  and `save_log`'s extension are unchanged while a writer nobody listed is still composed.
 - **The naming the window draws, 2026-10-05.** Deleting the shim forced a decision about
   `view/player_game_view.py`, which labelled the move history through it. The view may not
   import a configuration — a copy would then be drawn and annotated in the original's naming,
@@ -387,12 +390,13 @@ Recorded because the question is fair and the answer is not obvious.
   | a clock | `clock_fields(clock)` | `model/game/clock_fields.py:28` |
   | the renderer | `SECTIONS`, `_WIDGETS`, the section builders | `view/settings_dialog.py:37` |
 
-  **`Clock` is not among them because there is no `Clock` class** — §13 registered
-  one as the intention and §20 records that it is unbuilt. That is why a clock is
-  declared by a function rather than by a method: there is no parent for the hook
-  to hang off. A clock that *does* declare its own `value_fields()` is asked first
-  (`clock_fields.py:43`), so a configuration with a richer clock gets a richer form
-  for free.
+  **`Clock` is not among them because it declares none** — §13 registered the class
+  as the intention and §20 recorded it as unbuilt, and §26 builds it (2026-10-05) so
+  that `clocks/` has a parent to compose against. That is why a clock is still
+  declared by a function rather than by a method: `clock_fields` asks what the object
+  holds, so a clock that is not a `Clock` subclass is configurable too. A clock that
+  *does* declare its own `value_fields()` is asked first (`clock_fields.py:43`), so a
+  configuration with a richer clock gets a richer form for free.
 - **Rationale**: it is what lets one settings screen serve every surface, so a new
   field is one widget rather than one bespoke form. Without it the settings
   surface duplicates itself five times.
@@ -486,13 +490,15 @@ Recorded because the question is fair and the answer is not obvious.
   `Timer`; a configurable parent `Clock` is to carry the settings a configuration
   declares — an initial time and an increment — and a `Timer` is constructed from
   it.
-- **Status: registered, not built.** There is **no `Clock` class** in this
-  repository. Both shipped clocks — `games/chess/clocks/fischer.py` and
-  `games/checkers/clocks/fischer.py` — derive from nothing. What exists instead is
-  `model/game/clock_fields.py`, a function that declares a clock's fields by asking
-  what the clock object holds; see §20 for why it is a function and not a method.
-  `PRD.md` §4 and §6 have been corrected not to name `Clock` as a parent class
-  that exists. **A real `Clock` parent remains unbuilt and is recommended.**
+- **Status: built, 2026-10-05, by §26.** `model/game/clock.py` holds `Clock`, and
+  both shipped clocks — `games/chess/clocks/fischer.py` and
+  `games/checkers/clocks/fischer.py` — derive from it, declaring their own defaults
+  and nothing else. What stopped this earlier was composition: `CONFIGURATION_SECTIONS`
+  could not name a parent for `clocks/`, so the section had to be declared `None`
+  and composed by hand, and a section declared `None` is one whose files join nothing.
+  A section can only be composed against a class that exists, so the class was built.
+  `model/game/clock_fields.py` stays the declaration function, and §20's reason for
+  it standing rather than hanging off the parent still holds.
 - **Rationale**: the increment is required by the configuration surface and has
   no drawn home. Splitting the drawn countdown from the configurable settings
   leaves the drawn class intact rather than renaming it away.
@@ -624,10 +630,13 @@ Recorded because the question is fair and the answer is not obvious.
 - **Context**: `Configuration.pieces` and `Configuration.exporters` were written
   as empty lists by every configuration and read by nothing.
 - **Change**: populated rather than dropped. `games/chess/pieces/__init__.py`
-  declares `PIECES` and `build_pieces()`, and `games/chess/__init__.py` declares
+  declared `PIECES` and `build_pieces()`, and `games/chess/__init__.py` declared
   `build_exporters()`. Section 4 registers a configuration as a bundle of *pieces*
   and per-configuration export writers, so removing either attribute would
-  contradict a registered decision while filling them in carries it out.
+  contradict a registered decision while filling them in carries it out. **§26
+  replaced both lists with the directories themselves** (2026-10-05): `pieces/` and
+  `export/` are composed sections now, so the attribute is filled in by what the
+  directory holds rather than by a list somebody had to remember to edit.
 - **Consequence recorded, and closed on 2026-10-03; carried out on 2026-10-05.**
   `Configuration.exporters` is now read: `model/game/manager.py` takes its writers from it
   instead of constructing a writer unconditionally, so the engine named no chess writer at all
@@ -749,14 +758,14 @@ Recorded because the question is fair and the answer is not obvious.
   being finished.
 - **What this departs from, recorded as required.** Three departures, none of which is a
   diagram deviation:
-  1. **`model/game/clock_fields.py` is new and has no diagram counterpart.** A clock is the
-     one configurable type that is a plain object rather than a parent class with subclasses —
-     both shipped configurations ship a `Fischer` and neither derives from anything — so there
-     is no `Clock` class for a declaration to hang off. The module declares a clock's fields
-     from what the clock holds, and asks the clock first if it declares its own. Section 13
-     registered a `Clock` parent as the intention; this is a declaration function standing in
-     for the class that has not been written. **A real `Clock` parent remains unbuilt and is
-     recommended.**
+  1. **`model/game/clock_fields.py` is new and has no diagram counterpart.** The module
+     declares a clock's fields from what the clock holds, and asks the clock first if it
+     declares its own. Section 13 registered a `Clock` parent as the intention and §26 built
+     it (2026-10-05), so the second half of this departure is closed: `Clock` exists and both
+     shipped clocks derive from it. **The function stays**, because it is what makes a clock
+     configurable whether or not it derives from `Clock` — a variant may write a plain object
+     with an initial time and an increment, and FR-6 is satisfied by what the clock holds
+     rather than by what it inherits.**
   2. **`Piece.apply_values()` is new.** `value_fields()` is a declaration; something has to
      write the values back, and two of the declared values are not single attributes — the two
      symbols are one tuple, and the vectors are a list of pairs shown as text. Parsing them in
@@ -1027,14 +1036,11 @@ earlier section registered.
   takes the section's *package*, and a configuration is loaded as a package rooted
   at its own directory (§16), so it composes `…house.rules` for a copy called
   `house`. Composing by name would have undone that in one line.
-- **What is still not composed**: `pieces/`, `clocks/` and `export/`, which
-  `CONFIGURATION_SECTIONS` declares with `None` because what belongs in them is a
-  choice rather than an entry per file — a piece catalogue, a preferred notation
-  order. `games/chess/pieces/__init__.py` therefore still holds a `PIECES` tuple
-  and a piece file a player writes joins nothing, which is the same defect one
-  section over. **Recorded, not fixed**: it is outside what was asked for, and
-  `tests/test_engine_holds_no_chess.py` reads `PIECES` by name to build its
-  vocabulary, so changing it is its own change.
+- **What was still not composed, and is now**: this section recorded `pieces/`,
+  `clocks/` and `export/` as the same defect one section over, declared `None` and
+  composed by hand — `games/chess/pieces/__init__.py` holding a `PIECES` tuple and
+  `build_exporters()` a list of five writers, so a piece file a player wrote joined
+  nothing. **Section 26 closes it**, and closes it by the same mechanism.
 - **Approval**: directed by the user, 2026-10-02, *"make it so the Rule class
   handles this so Rules are the only place thats logic (code) driven and not just
   data driven and that allows us to add any logic we want we can then implement an
@@ -1042,6 +1048,82 @@ earlier section registered.
   rules"*, *"code editor is not backlog that should be how rules are edited in
   settings now"*, and *"custom rulesets and rules should be written as files to
   the same place other files are"*.
+
+### 26. Every Section Is Composed Out of the Files It Holds
+
+- **Date**: 2026-10-05
+- **Context**: §25 composed `rules/` and `quests/` and recorded the rest as the same defect
+  one section over. `pieces/`, `clocks/` and `export/` were declared `None` in
+  `CONFIGURATION_SECTIONS` — "composed by hand, because what belongs in them is a choice" —
+  while `games/chess/pieces/__init__.py` held a literal `PIECES` tuple,
+  `games/checkers/__init__.py` wrote `pieces=[Man, King]`, both configurations wrote
+  `clocks=[Fischer()]`, and both wrote their export writers out in a list. A piece, a clock
+  or a notation a player wrote joined nothing: no error, no warning, no entry. The stated
+  reason was also the defect — a directory beside a hand-written list is a list somebody has
+  to remember to edit, which is what the settings form's editor cannot see.
+- **Change**: all five sections name a parent class and are composed out of their own
+  directory. `CONFIGURATION_SECTIONS` maps `pieces` to `Piece`, `rules` to `Rule`, `quests` to
+  `Quest`, `clocks` to `Clock` and `export` to `ExportWriter`. `build_pieces()`,
+  `build_clocks()` and `build_exporters()` hand their section's package to `compose_section`
+  exactly as `build_rules()` and `build_quests()` already did. A section mapped to `None` is
+  **refused by name** rather than composed, so "composed by hand" cannot come back quietly as
+  a way of saying what a section holds.
+- **The two judgement calls, decided.**
+  1. **A clock's base class is built, not found.** §13 registered `Clock` as the intention and
+     §20 recorded it as unbuilt, and both shipped clocks derived from nothing — so
+     `CONFIGURATION_SECTIONS` had no class to name for `clocks/` and the section could not be
+     composed at all. `model/game/clock.py` holds `Clock` and both `Fischer` classes derive
+     from it, declaring only their defaults. The decision a reader now makes from
+     `clocks/fischer.py` is the same one they make from `rules/capture.py`: does this file
+     declare something of the kind the section composes. A duck-typed alternative — anything
+     answering `reset`/`tick`/`get_time` — was rejected as a second mechanism and a question
+     no directory could answer.
+  2. **Composing `export` does instantiate the writers, automatically.** The five chess
+     notations were a list because their *order* is a preference — `default_format` takes the
+     first format the first writer declares and `save_log` names its file from it — and
+     reading that list as a membership is what let a writer nobody listed silently not exist.
+     So the directory decides membership and a declared preference decides only the order:
+     `PREFERRED` in each `export/__init__.py` names the classes that lead, every writer the
+     directory holds is composed whatever the preference says, an unnamed writer is offered
+     last, and a preference naming a writer the directory does not hold **refuses the load**.
+     PGN still leads and a chess game is still saved as `.pgn`; the letter notation still
+     leads for draughts.
+- **One section composes classes rather than instances, and says so.**
+  `CLASS_ENTRY_SECTIONS` names `pieces`. `Configuration.pieces` is a catalogue of what a board
+  may hold, and a piece is placed with a colour and a square, so the entry is the class and
+  `Piece(color, piece_type)` — which cannot be built with no arguments at all — is never built
+  by the composer. Everything else in a section is one object the game holds for the whole of
+  it, and those are instances. This is the shape §20 recorded as a limit and did not change.
+- **The header record is read back out rather than built twice.** `build_metadata()` used to
+  take the record as an argument and put the caller's object in the writer list, which is how
+  the two stayed the same object. Composition hands over no argument, so `build_metadata
+  (exporters)` finds the record *among* the composed writers and declares the configuration's
+  fields on it. One object in both places, which is what
+  `tests/test_notation_and_writers.py` asserts and what keeps a header inside a PGN the header
+  the configuration offered.
+- **Order, unchanged and restated**: the section's own module first, then the remaining files
+  by name, the preference applied over the top. For `pieces/` and `clocks/` nothing depends on
+  the order; for `export/` it decides which notation is the default; for `rules/` it is the
+  tie-break §25 registered.
+- **Why this does not reintroduce the copy failure §19 and §25 closed**: unchanged. The
+  composer takes the section's package and a configuration is loaded as a package rooted at
+  its own directory, so it composes `…house.pieces` for a copy called `house`, and
+  `games/chess/__init__.py:11-17` still governs every relative import inside the copy.
+  `tests/test_section_composition.py` holds it for a piece, a clock and a writer a copy's own
+  player wrote.
+- **`Configuration.uncomposed` still names every file that joined nothing**, on every load
+  path: `build_configuration()` hands the same list to all five compositions, so a file that
+  declares nothing is reported whichever section it was written into. The refusal for a file
+  that cannot be imported is §25's, unchanged.
+- **Out of scope, recorded not fixed**: `games/chess/rules/promotion.py` holds
+  `PROMOTION_PIECES`, a second hand-written piece list — a kind a copy writes into `pieces/`
+  joins the catalogue but cannot be promoted to, which is a different question from the
+  catalogue and belongs to the rule. `view/settings_dialog.py` offers the code editor on the
+  Rules and Quests tabs only and `model/game/source_validation.py` validates `"rule"` and
+  `"quest"` only, so a piece, a clock or a writer is still written by hand.
+- **Approval**: directed by the user, 2026-10-05, to compose `pieces`, `clocks` and `export`
+  from their own directories "using the same mechanism and the same policy", with the two
+  judgement calls named as questions to be answered rather than inherited.
 
 ---
 

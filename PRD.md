@@ -169,19 +169,25 @@ games/chess/
   clocks/       clock configuration
 ```
 
-**A section is composed out of the files it holds.** `rules/` and `quests/` are
-composed from their own modules: `build_rules()` and `build_quests()` are declared
-functions that hand the section's package to `compose_section`, which builds one
-instance of every `Rule` or `Quest` subclass those modules declare. A file
-dropped into `rules/` is therefore in force because it is a file in `rules/` —
-there is no list to edit. The order is the section's own module first and then the
-remaining files by name, because rule order is the tie-break when two rules propose
-an outcome at once. `pieces/`, `clocks/` and `export/` are composed by hand,
-because what belongs in them is a choice rather than an entry per file. A file in a
-composed section that cannot be imported refuses the configuration's loading and
-names itself; one that declares no rule or quest is left out and named in the
-settings form, because a section legitimately holds helper modules beside its
-entries.
+**A section is composed out of the files it holds.** All five of `pieces/`,
+`rules/`, `quests/`, `clocks/` and `export/` are composed from their own modules:
+`build_pieces()`, `build_rules()`, `build_quests()`, `build_clocks()` and
+`build_exporters()` are declared functions that hand the section's package to
+`compose_section`, which builds one entry per `Piece`, `Rule`, `Quest`, `Clock` or
+`ExportWriter` subclass those modules declare — the class itself for `pieces/`,
+because a piece is placed with a colour and a square, and an instance for the
+rest. A file dropped into any of them is therefore in force because it is a file
+in that directory — there is no list to edit. The order is the section's own
+module first and then the remaining files by name, because rule order is the
+tie-break when two rules propose an outcome at once. A section may declare which
+of its entries lead — `export/` does, because the notation a game is saved in is a
+preference and not a fact about a directory — and that orders the entries without
+removing any: a writer the directory holds and the preference does not name is
+still offered, last, while a preference for a writer the directory does not hold
+refuses the configuration's loading by name. A file in a composed section that
+cannot be imported refuses the configuration's loading and names itself; one that
+declares no entry of that section's kind is left out and named in the settings
+form, because a section legitimately holds helper modules beside its entries.
 
 **`quests/` holds no quest files in either shipped configuration.** The twenty
 quest classes live in `model/game/quests.py` and a configuration instantiates them:
@@ -203,12 +209,13 @@ games/house`, change what differs, and a new variant exists. Duplication is
 the extension mechanism: to change the board, duplicate the configuration and change
 the board. One game runs one board.
 
-`model/` keeps the parent classes — `Piece`, `Rule`, `Quest`, `Board` — and the
-machinery every configuration needs, such as the move, the validator and the game
-manager. Only configuration-specific implementations live in `games/`. **There is
-no `Clock` class.** `notes/object_model.md` §13 registers one as the intention and
-§20 records that it is unbuilt; both shipped clocks derive from nothing, and
-`model/game/clock_fields.py` describes one by asking what it holds.
+`model/` keeps the parent classes — `Piece`, `Rule`, `Quest`, `Clock`, `Board` —
+and the machinery every configuration needs, such as the move, the validator and
+the game manager. `Clock` is the configurable parent `notes/object_model.md` §13
+registers as the intention and §20 recorded as unbuilt; it is built because
+`clocks/` cannot be composed against a parent class that is not there.
+`model/game/clock_fields.py` still describes a clock by asking what it holds, so a
+clock written in a variant is configurable whether or not it derives from `Clock`.
 
 ## 7. Functional requirements
 
@@ -268,8 +275,8 @@ no `Clock` class.** `notes/object_model.md` §13 registers one as the intention 
 | FR-30 | A selector in the corner chooses **which configuration is being edited**. It appears in settings only. |
 | FR-31 | Below it are sections, one per configurable surface: **Board, Pieces, Rules, Quests, Clocks**. |
 | FR-32 | **All data-based configuration is form-exposed**, assembled from each type's declaration by one renderer. |
-| FR-33 | The Rules and Quests sections offer a code editor for authoring logic, which writes into the configuration directory. **A file written there joins the configuration**: each of the two sections is composed out of the files it holds, so the rule or quest in it is in force the next time that configuration is loaded, with no list to edit. The form loads the configuration again after a save and says what is in force. |
-| FR-34 | The editor validates before the code may join the configuration, reporting errors in the editor rather than at game start. **A file in a composed section that cannot be imported refuses the configuration's loading and names itself**, so a file edited outside the product cannot join the game silently; a file that declares no rule or quest is left out rather than refused, and the settings form names it. |
+| FR-33 | The Rules and Quests sections offer a code editor for authoring logic, which writes into the configuration directory. **A file written into any composed section joins the configuration**: each of `pieces/`, `rules/`, `quests/`, `clocks/` and `export/` is composed out of the files it holds, so the rule, quest, piece, clock or notation in it is in force the next time that configuration is loaded, with no list to edit. The form loads the configuration again after a save and says what is in force. |
+| FR-34 | The editor validates before the code may join the configuration, reporting errors in the editor rather than at game start. **A file in a composed section that cannot be imported refuses the configuration's loading and names itself**, so a file edited outside the product cannot join the game silently; a file that declares no entry of that section's kind is left out rather than refused, and the settings form names it. |
 | FR-35 | Settings can be saved, reset to the shipped defaults, or cancelled. |
 
 ### 7.6 Game start and view
