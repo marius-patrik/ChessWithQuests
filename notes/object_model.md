@@ -1197,6 +1197,86 @@ earlier section registered.
 
 ---
 
+### 28. The Engine Names the Default Configuration, and That Is Configuration
+
+- **Date**: 2026-10-05
+- **Context**: `SCRATCHPAD.md` constraint 1.4 is that the engine holds no chess, and
+  `SCRATCHPAD.md` §8 item 14 is its one-line form: *"Nothing in the engine mentions a king, a
+  pawn, a check or a mate."* `model/game/games.py:12` reads `DEFAULT_GAME = "chess"`. It is
+  the one chess string in the engine, and nothing recorded it.
+- **Why the gate does not catch it, which is not an oversight.** `tests/test_engine_holds_no_chess.py`
+  reads its vocabulary at run time rather than keeping it beside the code it guards — from
+  `build_pieces()` for piece kinds (`bishop`, `horse`, `king`, `pawn`, `queen`, `rook`), from
+  the `ExportWriter` subclasses `games/chess/export/` declares, and from the notations
+  `load_configuration("chess").exporters` offers (`algebraic`, `fen`, `field-field-extra`,
+  `pgn`, `stenographic`). A configuration's own **name** is in none of those three sets, and
+  the string `chess` is not in any of them.
+- **Deviation, and the reasoning that defends it**: `DEFAULT_GAME` is a **product
+  configuration value, not chess knowledge.** The engine must be able to answer "which
+  configuration does a game start in when the player selects nothing", and that question has
+  an answer whatever game the distribution ships. `Configuration.is_default`
+  (`model/game/configuration.py:164`) is the same fact read from the other side, and it is a
+  real concept with tests — `tests/test_view.py:455` asserts the start modal's configuration
+  *is* the default, and `tests/test_settings_surface.py:338` asserts a copy is not. FR-27 and
+  FR-28 — the default cannot be renamed or deleted — cannot be enforced at all without
+  naming it. Removing the string would not make the engine configuration-agnostic; it would
+  move the same name to `chesswithquests/__init__.py`, where `build_application`'s default
+  argument lives and where a gate walking only `model/` would no longer see it, which is
+  hiding the coupling rather than removing it.
+- **Why the engine-leak vocabulary must not grow to cover it.** The gate's three sets are all
+  *vocabulary a game teaches the engine*: piece kinds it must not special-case, writer classes
+  it must not hold, and notation names it must not know. A configuration name is none of
+  those — it is the product's answer to "which one is the default", and a distribution whose
+  default were `go` would change this string and nothing else. **Adding configuration names
+  to that vocabulary would make the gate fail on every shipped product and pass on none of
+  them**: it would forbid the string the product requires while never catching a piece kind, a
+  writer or a notation, which is the only thing the gate is for. The honest form of the
+  invariant is therefore the one `SCRATCHPAD.md` §8 item 14 already gives — nothing in the
+  engine names *what a piece is* — and `chess` names no piece, no rule and no notation.
+- **Approval**: **not approved.** Recorded 2026-10-05 as the one place the engine names a
+  game, with the reasoning above, so that a reader who finds it knows it was weighed rather
+  than missed. **No code changed**: the alternative reading — that the default belongs to the
+  configuration layer alone — was considered and not adopted, because §20's `is_default` and
+  FR-27 and FR-28 already make the engine the place that knows the answer.
+
+---
+
+### 29. The Code Editor Reaches Rules and Quests, and the Other Three Sections Are Hand-Written by Design
+
+- **Date**: 2026-10-05
+- **Context**: every section now composes from its own directory — §25 and §26 — so a piece, a
+  clock or a writer written into `pieces/`, `clocks/` or `export/` joins the configuration with
+  no list to edit, and `PRD.md` FR-33 says exactly that. The code editor does not follow.
+  `view/code_editor.py:editable_sources` is generic in its section argument, but
+  `model/game/source_validation.py:413` raises `ValueError` for any `kind` that is not `"rule"`
+  or `"quest"`, so only the Rules and Quests sections have a button that opens it.
+  Nothing recorded that, and a reader of FR-33 alone would read it as an oversight.
+- **Not an oversight — the owner's own words narrow the requirement**: *"code editor is not
+  backlog that should be how **rules** are edited in settings now"*. Rules are the
+  requirement, and quests came with them because a quest is authored logic in the same sense
+  and in the same file format.
+- **Why a piece, a clock or a writer is not reachable, stated rather than left open.** The
+  editor exists to write **logic that must run**, and it is bounded by §10's validation because
+  that code is *executed*: the validator compiles and calls into the file to confirm the hooks
+  are there, and the product loads it at game start. A piece is not a rule and a writer is not
+  a rule, so there is no hook contract to check them against — `RULE_METHODS` and
+  `RULE_ATTRIBUTES` in `source_validation.py` have no counterpart for either, and inventing
+  one would be a second declaration of a contract §9 already governs by fields. Each of the
+  other three sections is instead edited by hand or through the form: a piece and a clock are
+  form-exposed by §9's declaration framework (`Piece.value_fields()`,
+  `model/game/clock_fields.py`), and a writer's declared fields are data the same way.
+- **What this does not claim**: it does not claim the three sections are unreachable, only
+  that they are reached by writing the file rather than by typing into the form. A file in any
+  of the five sections is composed into the configuration the next time it is loaded, which is
+  the property FR-33 asks for and which holds for all five.
+- **Approval**: **not approved.** Recorded 2026-10-05 as the scope the editor ships with, so
+  that FR-33's "each of `pieces/`, `rules/`, `quests/`, `clocks/` and `export/`" is not read
+  as a promise of five editors. **No code changed**: the alternative — a validating editor for
+  the other three — needs a declaration contract that does not exist, which is §9's work and
+  not this one's.
+
+---
+
 ## Naming decisions requiring approval context
 
 Recorded here because they are deviations from what the diagram draws and

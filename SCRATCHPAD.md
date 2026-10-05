@@ -1788,7 +1788,12 @@ offers the two formats that mean something for it. **The engine-change half
 30. Every deviation recorded in `notes/object_model.md` with approval context.
     **Now true.** The audit behind this correction found eleven unrecorded
     departures; §21, §22, §23 and §24 of that file record them, and §3, §7, §9,
-    §11, §13 and §15 have been corrected against the code.
+    §11, §13 and §15 have been corrected against the code. **Two more are recorded
+    2026-10-05, both weighed and neither approved:** §28, the one chess string in
+    the engine (`DEFAULT_GAME = "chess"`), which is a product configuration value
+    and which the engine-leak gate's vocabulary deliberately does not and should not
+    cover; and §29, the code editor reaching rules and quests only, the other three
+    sections being written by hand by design.
 31. `notes/chess_rules.md` amended where board generalisation departs from it.
 32. Nothing in §4.3's unreferenced list survives the PR 20 re-check; the §4.4
     docstring gaps are closed. **The docstring half holds; the other half has not
