@@ -1,1 +1,1 @@
-"""Game domain package encapsulating chess board, rules, timer, moves, and quest entities."""
+"""Game domain package: board, rules, timer, moves, and quest entities."""

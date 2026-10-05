@@ -31,13 +31,21 @@ import pytest
 
 from model.game.configuration import (
     Configuration,
+    ConfigurationSourceError,
     copy_configuration,
     delete_configuration,
     load_configuration,
     load_configuration_at,
+    load_default_configuration,
     rename_configuration,
 )
-from model.game.games import DEFAULT_GAME, games_root
+from games.chess import CONFIGURATION_NAME
+from model.game.games import default_configuration_name, games_root
+
+#: The shipped default, named by the configuration that is it. The guards under test read the
+#: root's declaration, so a test that asked the engine for the name would be asking the thing
+#: being tested.
+DEFAULT_GAME = CONFIGURATION_NAME
 from model.game.source_validation import validate_source
 from view.code_editor import CodeEditor, editable_sources
 from view.settings_dialog import SECTIONS, SettingsDialog
@@ -47,6 +55,10 @@ from view.settings_dialog import SECTIONS, SettingsDialog
 def games_dir(tmp_path):
     """Copy the shipped chess configuration into a throwaway `games/` root.
 
+    The root's declaration is copied with it, because a `games/` root is the configuration
+    *and* the statement of which one is the default: a root without it protects nothing, and
+    the guards under test would then be asserting that nothing happens.
+
     Args:
         tmp_path: Pytest's temporary directory.
 
@@ -54,13 +66,7 @@ def games_dir(tmp_path):
         str: The path of the `games/` root, which is what the library functions are pointed
         at so the shipped directory is never touched.
     """
-    root = tmp_path / "games"
-    shutil.copytree(
-        pathlib.Path(games_root()) / DEFAULT_GAME,
-        root / DEFAULT_GAME,
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
-    )
-    return str(root)
+    return str(_copy_games(tmp_path))
 
 
 def test_the_default_configuration_refuses_to_be_written_into(games_dir):
@@ -118,6 +124,111 @@ def test_the_default_configuration_cannot_be_renamed_or_deleted(games_dir):
         delete_configuration(DEFAULT_GAME, root=games_dir)
 
     assert os.path.isdir(os.path.join(games_dir, DEFAULT_GAME))
+
+
+def test_renaming_onto_the_default_name_is_refused(games_dir):
+    """FR-28 protects the default's name as well as its directory.
+
+    A variant that took the default's name would either have to be refused — the shipped
+    configuration a player is comparing every variant against has to still be there — or the
+    guards would follow the name to a directory that is not it. Which one it is has to be the
+    root's declaration, since the engine names no configuration.
+
+    Args:
+        games_dir: The throwaway `games/` root.
+
+    Returns:
+        None
+    """
+    copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+
+    with pytest.raises(ValueError, match="cannot take a name"):
+        rename_configuration("house", DEFAULT_GAME, root=games_dir)
+
+    assert os.path.isdir(os.path.join(games_dir, DEFAULT_GAME))
+    assert os.path.isdir(os.path.join(games_dir, "house"))
+
+
+def test_a_copy_of_the_default_is_protected_by_nothing(games_dir, tmp_path):
+    """The copy is editable, renamable and deletable, which is what a copy is for.
+
+    A declaration *inside* a configuration could not say this: a copy is byte-identical to its
+    original, so it would say whatever the original says and the variant would inherit the
+    protection every variant exists to escape. The declaration is in the root, so `house` is
+    simply not what the root names.
+
+    Args:
+        games_dir: The throwaway `games/` root.
+        tmp_path: Pytest's temporary directory.
+
+    Returns:
+        None
+    """
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+
+    assert variant.is_default is False
+    written = variant.save_values()
+    assert os.path.isfile(written)
+
+    renamed = rename_configuration("house", "villa", root=games_dir)
+    assert renamed.name == "villa"
+
+    delete_configuration("villa", root=games_dir)
+    assert not os.path.exists(os.path.join(games_dir, "villa"))
+    assert os.path.isdir(os.path.join(games_dir, DEFAULT_GAME))
+
+
+def test_a_root_that_declares_no_default_protects_nothing(games_dir):
+    """Nothing said which configuration to protect, so nothing is protected.
+
+    The guards read a declaration rather than a name in the engine, and a distribution is free
+    to ship configurations without saying which one a game starts in. It then has to answer the
+    question some other way — `load_default_configuration` plays the first configuration shipped
+    — and the answer carries no protection with it, because no declaration was made.
+
+    Args:
+        games_dir: The throwaway `games/` root.
+
+    Returns:
+        None
+    """
+    os.remove(os.path.join(games_dir, "default.json"))
+
+    assert default_configuration_name(games_dir) is None
+    assert load_configuration(DEFAULT_GAME, root=games_dir).is_default is False
+    assert load_default_configuration(root=games_dir).name == DEFAULT_GAME
+
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    assert variant.is_default is False
+
+    delete_configuration(DEFAULT_GAME, root=games_dir)
+    assert not os.path.exists(os.path.join(games_dir, DEFAULT_GAME))
+
+
+def test_a_broken_variant_is_still_deletable(games_dir):
+    """The guards must not depend on a configuration loading to ask what it is.
+
+    They read a file rather than importing anything, which is what keeps this true: a variant
+    whose rule does not import cannot be loaded, and a guard that had to load it in order to
+    decide whether it was the default would make the one repair a player needs — deleting the
+    thing they broke — the one operation that fails.
+
+    Args:
+        games_dir: The throwaway `games/` root.
+
+    Returns:
+        None
+    """
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    broken = pathlib.Path(variant.path) / "rules" / "zz_broken.py"
+    broken.write_text("this is not python(", encoding="utf-8")
+
+    with pytest.raises(ConfigurationSourceError):
+        load_configuration("house", root=games_dir)
+
+    delete_configuration("house", root=games_dir)
+
+    assert not os.path.exists(os.path.join(games_dir, "house"))
 
 
 def test_a_variant_is_written_where_the_guard_does_not_reach(games_dir):
@@ -428,6 +539,7 @@ def _copy_games(tmp_path) -> pathlib.Path:
         root / DEFAULT_GAME,
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
     )
+    shutil.copyfile(pathlib.Path(games_root()) / "default.json", root / "default.json")
     return root
 
 

@@ -27,6 +27,7 @@ still load its own files — including its own writers and its own naming of a s
 
 import ast
 import inspect
+import os
 import pathlib
 import re
 import textwrap
@@ -215,6 +216,27 @@ def _chess_format_names():
     for writer in load_configuration("chess").exporters:
         names |= {str(name).lower() for name in writer.formats()}
     return frozenset(names)
+
+
+def _shipped_configuration_names():
+    """Return the directory names of every configuration the product ships.
+
+    Read from the installed `games/` rather than kept here, for the reason the piece
+    vocabulary above is: a gate holding a hand-written list of names is a gate that has stopped
+    looking, and a configuration added to the product later would join the walk without joining
+    what the walk holds it against.
+
+    Returns:
+        frozenset: Every shipped configuration's directory name, in lower case.
+    """
+    from model.game.games import games_root
+
+    root = games_root()
+    return frozenset(
+        name.lower()
+        for name in os.listdir(root)
+        if os.path.isdir(os.path.join(root, name)) and not name.startswith(("_", "."))
+    )
 
 
 # --- the FEN writer reads the piece, and refuses to guess
@@ -440,6 +462,70 @@ def test_no_module_under_the_engine_names_a_chess_writer_or_a_notation():
                 offenders.append(f"{path.name}: {name}")
 
     assert offenders == [], f"the engine names a chess writer or notation: {offenders}"
+
+
+def test_no_module_under_the_engine_names_a_configuration():
+    """The engine names no game at all — not a writer, not a notation, not a configuration.
+
+    This is the fourth leak, and the one the earlier reading of the invariant left out.
+    `SCRATCHPAD.md` §8 item 14 says nothing in the engine names a king, a pawn, a check or a
+    mate, which is true of `chess` as a *piece set* — and `model/game/games.py` read
+    `DEFAULT_GAME = "chess"` for two years of gate-passing, because a configuration's own name
+    is not a piece kind, a writer class or a notation, and the gate held only those three. It
+    was argued in `notes/object_model.md` §28 that a configuration name is product configuration
+    rather than chess knowledge and that widening the gate would make it fail on every shipped
+    product; the gate is widened here instead and the declaration moved to `games/default.json`,
+    so the engine holds the *concept* and the distribution holds the name.
+
+    The vocabulary is the shipped configuration directories, read from the installed `games/`,
+    so a configuration the product adds later joins the walk without anyone editing this. The
+    match is case-insensitive and word-bounded for the reasons the notation walk gives, and
+    docstrings are exempt the same way — an engine module is allowed to *talk* about a
+    configuration in order to say that it names none.
+
+    Returns:
+        None
+    """
+    vocabulary = _shipped_configuration_names()
+    visited = set(_engine_modules())
+    importable = set(_importable_engine_modules())
+
+    assert vocabulary, "the walk would hold nothing to match against"
+    assert importable and importable <= visited
+
+    offenders = []
+    for path in sorted(visited):
+        source = _code_without_docstrings(path).lower()
+        for name in sorted(vocabulary):
+            if re.search(rf"\b{re.escape(name)}\b", source):
+                offenders.append(f"{path.name}: {name}")
+
+    assert offenders == [], f"the engine names a configuration: {offenders}"
+
+
+def test_the_engine_holds_a_default_configuration_by_concept_and_not_by_name():
+    """What the engine keeps is the *question*, and it answers it from the root's declaration.
+
+    `Configuration.is_default` compares this configuration's directory with the one the root
+    names, and `default_configuration_name` reads `games/default.json`. Neither knows what the
+    name is, which is what makes a distribution whose default were some other game a data
+    change; and neither imports a configuration, so a variant that does not load is still
+    deletable.
+
+    Returns:
+        None
+    """
+    from games.chess import CONFIGURATION_NAME
+    from model.game.configuration import load_configuration
+    from model.game.games import default_configuration_name, games_root
+
+    declared = default_configuration_name(games_root())
+
+    assert (
+        declared == CONFIGURATION_NAME
+    ), "the root declares a default this repository does not ship"
+    assert load_configuration(declared).is_default is True
+    assert load_configuration("checkers").is_default is False
 
 
 def test_no_module_under_the_engine_defines_an_export_writer():

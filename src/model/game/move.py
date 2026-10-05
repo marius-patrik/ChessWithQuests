@@ -33,7 +33,7 @@ class Applied(NamedTuple):
 
 
 class Move:
-    """Encapsulates a chess move with coordinates, piece states, and execution logic.
+    """Encapsulates a move with coordinates, piece states, and execution logic.
 
     Attributes:
         start_pos: The (row, col) square the move begins on.

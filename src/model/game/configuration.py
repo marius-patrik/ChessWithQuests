@@ -22,7 +22,7 @@ from typing import Callable, Any, Dict, FrozenSet, Iterable, List, Optional
 
 from model.game.board import Board
 from model.game.clock import Clock
-from model.game.games import DEFAULT_GAME, available_games, games_root
+from model.game.games import available_games, default_configuration_name, games_root
 from model.game.quest import Quest
 from model.game.rule import Rule
 from model.misc.export_writers import ExportWriter
@@ -162,7 +162,7 @@ class Configuration:
 
     @property
     def is_default(self) -> bool:
-        """Whether this is the shipped default configuration, which may not be edited.
+        """Whether this is the configuration a game starts in, which may not be edited.
 
         The default configuration is the one a game runs when the player selects nothing, so
         it is the reference every variant is compared against. A variant starts by duplicating
@@ -170,10 +170,21 @@ class Configuration:
         something enforces it, because `save_values` can write into its directory perfectly
         well.
 
+        **The answer is the root's, not this object's.** The configurations root declares which
+        of its directories is the default (`games/default.json`, read by
+        `default_configuration_name`), and a configuration is the default exactly when it is
+        the one that root names. A declaration inside a configuration could not answer that: a
+        configuration is copied to make a variant, and a copy says whatever its original says,
+        so the copy would be protected against the edits a variant exists to be given. Nothing
+        has to be told twice and nothing can be copied into being wrong.
+
         Returns:
-            bool: True for the configuration named by `DEFAULT_GAME`.
+            bool: True for the configuration the root this one was loaded from names as its
+            default, and False for a copy of it — and for a configuration that has not been
+            loaded from a root at all, since it belongs to none.
         """
-        return self.name == DEFAULT_GAME
+        root = os.path.dirname(self.path) if self.path else ""
+        return bool(root) and default_configuration_name(root) == self.name
 
     def new_board(self) -> Board:
         """Build a fresh board for a new game of this configuration.
@@ -585,14 +596,16 @@ def copy_configuration(source: str, name: str, root: Optional[str] = None) -> Co
         Configuration: The loaded copy, which is a variant in its own right.
 
     Raises:
-        ValueError: If `name` is not a usable configuration name.
+        ValueError: If `name` is not a usable configuration name, or names the configuration
+            the root declares as its default.
         FileNotFoundError: If there is no configuration named `source`.
         FileExistsError: If `name` already exists, so nothing is overwritten.
     """
     _validate_name(name)
-    if name == DEFAULT_GAME:
-        raise ValueError(f"{DEFAULT_GAME} is the default configuration and already exists")
     allowed = os.path.abspath(root or games_root())
+    declared = default_configuration_name(allowed)
+    if name == declared:
+        raise ValueError(f"{name} is the default configuration and already exists")
     origin = os.path.join(allowed, source)
     if not os.path.isdir(origin):
         raise FileNotFoundError(f"no configuration directory named {source!r} in {allowed}")
@@ -615,22 +628,26 @@ def rename_configuration(name: str, new_name: str, root: Optional[str] = None) -
         Configuration: The loaded configuration under its new name.
 
     Raises:
-        ValueError: If `new_name` is not usable, or names the configuration being renamed.
+        ValueError: If `new_name` is not usable, names the configuration being renamed, or
+            names the configuration the root declares as its default — the one that may not
+            lose its name to a variant either.
         FileNotFoundError: If there is no configuration named `name`.
+        PermissionError: If asked to rename the configuration the root declares as its default.
         FileExistsError: If `new_name` is already taken.
     """
     # Both names become path segments. Validating only the new one left `name` free to be "..",
     # which renamed the directory *containing* `games/` out from under the caller.
     _validate_name(name)
     _validate_name(new_name)
-    if new_name == DEFAULT_GAME:
-        raise ValueError(f"{DEFAULT_GAME} is the default configuration and cannot take a name")
     allowed = os.path.abspath(root or games_root())
+    declared = default_configuration_name(allowed)
+    if new_name == declared:
+        raise ValueError(f"{declared} is the default configuration and cannot take a name")
     origin = os.path.join(allowed, name)
     if not os.path.isdir(origin):
         raise FileNotFoundError(f"no configuration directory named {name!r} in {allowed}")
-    if name == DEFAULT_GAME:
-        raise PermissionError(f"{DEFAULT_GAME} is the default configuration and cannot be renamed")
+    if name == declared:
+        raise PermissionError(f"{declared} is the default configuration and cannot be renamed")
     if new_name == name:
         return load_configuration(name, root=allowed)
     target = os.path.join(allowed, new_name)
@@ -651,7 +668,8 @@ def delete_configuration(name: str, root: Optional[str] = None) -> None:
         None
 
     Raises:
-        PermissionError: If asked to delete the default configuration.
+        PermissionError: If asked to delete the configuration the root declares as its
+            default.
         FileNotFoundError: If there is no configuration named `name`.
     """
     allowed = os.path.abspath(root or games_root())
@@ -659,8 +677,9 @@ def delete_configuration(name: str, root: Optional[str] = None) -> None:
     # `shutil.rmtree` removed everything above it: the function was handed a name and used
     # it as a path without ever asking whether it was one path segment.
     _validate_name(name)
-    if name == DEFAULT_GAME:
-        raise PermissionError(f"{DEFAULT_GAME} is the default configuration and cannot be deleted")
+    declared = default_configuration_name(allowed)
+    if name == declared:
+        raise PermissionError(f"{declared} is the default configuration and cannot be deleted")
     target = os.path.join(allowed, name)
     if not os.path.isdir(target):
         raise FileNotFoundError(f"no configuration directory named {name!r} in {allowed}")
@@ -804,6 +823,12 @@ def load_configuration(name: str, root: Optional[str] = None) -> Configuration:
 def load_default_configuration(root: Optional[str] = None) -> Configuration:
     """Load the configuration a game runs when the player selects nothing.
 
+    The name comes from the root's declaration, which is a fact about what is shipped rather
+    than about any one configuration — see `Configuration.is_default` for why a configuration
+    cannot say it about itself. **A root that declares nothing still has to answer**: a manager
+    built with no configuration must play something, so the first configuration the root ships
+    is used, and nothing is protected against edits, because nothing said which one to protect.
+
     Args:
         root: The directory configurations must live under. Defaults to the shipped
             `games/` directory.
@@ -814,7 +839,11 @@ def load_default_configuration(root: Optional[str] = None) -> Configuration:
     Raises:
         FileNotFoundError: If no configuration is shipped at all.
     """
-    shipped = available_games()
-    if not shipped:
-        raise FileNotFoundError(f"no configurations are shipped in {root or games_root()}")
-    return load_configuration(shipped[0], root=root)
+    allowed = root or games_root()
+    declared = default_configuration_name(allowed)
+    if declared is None:
+        shipped = available_games(allowed)
+        if not shipped:
+            raise FileNotFoundError(f"no configurations are shipped in {allowed}")
+        declared = shipped[0]
+    return load_configuration(declared, root=allowed)

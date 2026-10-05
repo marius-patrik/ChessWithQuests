@@ -1,4 +1,4 @@
-"""Base piece module defining the foundational Piece abstraction for chess."""
+"""Base piece module defining the foundational `Piece` abstraction."""
 
 import re
 from typing import Any, Dict, List, Optional, Tuple
@@ -56,7 +56,7 @@ def _vectors_as_text(vectors: Optional[List[Tuple[int, int]]]) -> str:
 
 
 class Piece:
-    """Base class for all chess pieces.
+    """Base class for every piece any configuration offers.
 
     Every piece is described by data: where it may go, where it may take, how far one step
     travels, and whether it may leap. Nothing about a piece is special-cased by the engine,

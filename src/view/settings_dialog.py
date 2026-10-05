@@ -27,10 +27,11 @@ from model.game.configuration import (
     copy_configuration,
     delete_configuration,
     load_configuration,
+    load_default_configuration,
     rename_configuration,
 )
 from model.game.field import Field
-from model.game.games import DEFAULT_GAME, available_games
+from model.game.games import available_games
 from view.code_editor import CodeEditor, editable_sources
 
 #: The sections, in the order FR-31 lists them.
@@ -142,12 +143,11 @@ class SettingsDialog:
         """Return the configurations the selector offers.
 
         Returns:
-            List[str]: Every configuration directory name under `root`, default first.
+            List[str]: Every configuration directory name under `root`, with the one the root
+            declares as its default first. `available_games` answers that for any root, so the
+            form has no order of its own to keep in step with it.
         """
-        names = available_games() if self.root is None else _names_in(self.root)
-        if DEFAULT_GAME in names:
-            return [DEFAULT_GAME, *[name for name in names if name != DEFAULT_GAME]]
-        return names
+        return available_games(self.root)
 
     def _selected(self, _event: Optional[tk.Event] = None) -> Optional[Configuration]:
         """Load the configuration the player chose and rebuild the form over it.
@@ -232,9 +232,12 @@ class SettingsDialog:
         except (OSError, ValueError, PermissionError) as error:
             self.message.set(str(error))
             return None
-        self.configuration = load_configuration(DEFAULT_GAME, root=self.root)
+        # Back to the default rather than to a name this module carries: deleting the last
+        # variant leaves nothing else to show, and the configuration a game starts in is the
+        # one the root names.
+        self.configuration = load_default_configuration(root=self.root)
         self.selector.configure(values=self.configuration_names())
-        self.choice.set(DEFAULT_GAME)
+        self.choice.set(self.configuration.name)
         self.message.set(f"{name} deleted.")
         self._rebuild()
         return name
@@ -921,25 +924,6 @@ def _probe(piece_class: type) -> Any:
         except Exception:  # noqa: BLE001 - any failure means there is no instance to describe
             continue
     return None
-
-
-def _names_in(root: str) -> List[str]:
-    """Return the configuration directory names under a root.
-
-    Args:
-        root: The directory holding the configurations.
-
-    Returns:
-        List[str]: Sorted directory names, excluding private ones. An empty list when the
-        directory is not there, which is a root with nothing in it rather than an error.
-    """
-    if not os.path.isdir(root):
-        return []
-    return sorted(
-        name
-        for name in os.listdir(root)
-        if os.path.isdir(os.path.join(root, name)) and not name.startswith(("_", "."))
-    )
 
 
 def _unused_name(source: str, taken: List[str]) -> str:

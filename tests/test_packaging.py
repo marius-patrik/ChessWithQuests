@@ -5,12 +5,19 @@ import sys
 import pytest
 
 import chesswithquests
+from games.chess import CONFIGURATION_NAME
 from model.game.games import (
-    DEFAULT_GAME,
     available_games,
     configuration_path,
+    default_configuration_name,
     games_root,
 )
+
+#: The shipped default, named by the configuration that is it rather than by the engine that
+#: used to hold the string. The engine holds no configuration name at all — that is what
+#: `tests/test_engine_holds_no_chess.py` now walks the tree to prove — so a test that needs the
+#: name asks the product rather than the engine.
+DEFAULT_GAME = CONFIGURATION_NAME
 
 repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 python = sys.executable
@@ -31,6 +38,22 @@ def test_default_configuration_is_offered_first():
 
     assert DEFAULT_GAME in games
     assert games == [DEFAULT_GAME, *sorted(name for name in games if name != DEFAULT_GAME)]
+
+
+def test_the_default_configuration_is_declared_beside_the_configurations():
+    """A `pip install` must not ship a `games/` directory with nothing protected in it.
+
+    The declaration is one data file in the configurations root, and everything else in a
+    configuration is a package — so this is the one thing that could be lost by an install and
+    lose the default with it, silently, while the same installation looked complete.
+
+    Returns:
+        None
+    """
+    declaration = os.path.join(games_root(), "default.json")
+
+    assert os.path.isfile(declaration), f"{declaration} must ship"
+    assert default_configuration_name(games_root()) == DEFAULT_GAME
 
 
 def test_configuration_path_resolves_and_refuses_an_unknown_name():

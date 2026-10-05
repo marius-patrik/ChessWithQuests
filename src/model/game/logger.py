@@ -5,7 +5,7 @@ from typing import Optional, List, Any
 
 
 class GameLogger:
-    """Logs chess moves to memory and optionally writes them to a persistent file."""
+    """Records the moves of a game in memory and, optionally, in a file."""
 
     def __init__(self, filename: Optional[str] = None):
         """Initialize a GameLogger instance.
@@ -28,8 +28,13 @@ class GameLogger:
         dirname = os.path.dirname(filename)
         if dirname:
             os.makedirs(dirname, exist_ok=True)
+        # A header for the file, in the same words for every game: the logger is handed a
+        # filename and a move and knows nothing else about the game it is recording, so naming
+        # one here would be a claim it has no way to keep true. `SCRATCHPAD.md` §8 item 14 is
+        # that the engine names no game, and this line was the engine naming one in every log
+        # file the product has ever written.
         with open(filename, "w", encoding="utf-8") as f:
-            f.write("# Chess Game Log\n")
+            f.write("# Game log\n")
 
     def log_move(self, move: Any) -> None:
         """Record a played move in memory and append to file if configured.

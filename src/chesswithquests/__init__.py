@@ -9,7 +9,12 @@ import argparse
 import sys
 from typing import Any, List, Optional
 
-from model.game.games import DEFAULT_GAME, available_games, configuration_path, games_root
+from model.game.games import (
+    available_games,
+    configuration_path,
+    default_configuration_name,
+    games_root,
+)
 
 __all__ = ["main", "build_window", "offered_formats", "report_installation"]
 
@@ -35,8 +40,11 @@ def build_arguments(argv: Optional[List[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--game",
-        default=DEFAULT_GAME,
-        help="name of the configuration to play (default: %(default)s)",
+        default=None,
+        help=(
+            "name of the configuration to play (default: the one the installed games "
+            "directory declares, which is not known until it is read)"
+        ),
     )
     parser.add_argument(
         "--check",
@@ -113,12 +121,13 @@ def _version() -> str:
         return "unknown"
 
 
-def build_window(root: Any, game: str = DEFAULT_GAME):
+def build_window(root: Any, game: Optional[str] = None):
     """Populate a Tk root with the application window.
 
     Args:
         root: The `tkinter.Tk` instance to build into.
-        game: Name of the configuration to start.
+        game: Name of the configuration to start. Defaults to None, which starts the one the
+            installed `games/` declares as its default.
 
     Returns:
         tkinter.Toplevel or the root: The window the game is shown in.
@@ -147,8 +156,17 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(report_installation())
         return 0
 
+    # Resolved before anything is built: the window's default argument is the declared name,
+    # and an unknown `--game` must be refused without opening a window to refuse it in.
+    game = args.game or default_configuration_name()
+    if game is None:
+        game = available_games()[0] if available_games() else None
+    if game is None:
+        print(f"no game configuration was found in {games_root()}", file=sys.stderr)
+        return 4
+
     try:
-        configuration_path(args.game)
+        configuration_path(game)
     except FileNotFoundError as error:
         print(str(error), file=sys.stderr)
         return 4
@@ -166,10 +184,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 3
 
     try:
-        window = build_window(root, args.game)
+        window = build_window(root, game)
     except Exception as error:
         root.destroy()
-        print(f"cannot start {args.game!r}: {error}", file=sys.stderr)
+        print(f"cannot start {game!r}: {error}", file=sys.stderr)
         return 4
 
     window.mainloop()

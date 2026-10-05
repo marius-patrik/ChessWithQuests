@@ -1245,49 +1245,62 @@ earlier section registered.
 
 ---
 
-### 28. The Engine Names the Default Configuration, and That Is Configuration
+### 28. The Default Configuration Is Declared by the Root, and the Engine Names No Game
 
-- **Date**: 2026-10-05
+- **Date**: 2026-10-05. **Revised 2026-10-05**: the reading below was weighed, found defensible
+  and **declined** — "a default configuration name is product configuration, not chess
+  knowledge" is not what the maintainer ruled — so the string is gone and this section records
+  what replaced it and why the alternative was worse.
 - **Context**: `SCRATCHPAD.md` constraint 1.4 is that the engine holds no chess, and
   `SCRATCHPAD.md` §8 item 14 is its one-line form: *"Nothing in the engine mentions a king, a
-  pawn, a check or a mate."* `model/game/games.py:12` reads `DEFAULT_GAME = "chess"`. It is
-  the one chess string in the engine, and nothing recorded it.
-- **Why the gate does not catch it, which is not an oversight.** `tests/test_engine_holds_no_chess.py`
-  reads its vocabulary at run time rather than keeping it beside the code it guards — from
-  `build_pieces()` for piece kinds (`bishop`, `horse`, `king`, `pawn`, `queen`, `rook`), from
-  the `ExportWriter` subclasses `games/chess/export/` declares, and from the notations
-  `load_configuration("chess").exporters` offers (`algebraic`, `fen`, `field-field-extra`,
-  `pgn`, `stenographic`). A configuration's own **name** is in none of those three sets, and
-  the string `chess` is not in any of them.
-- **Deviation, and the reasoning that defends it**: `DEFAULT_GAME` is a **product
-  configuration value, not chess knowledge.** The engine must be able to answer "which
-  configuration does a game start in when the player selects nothing", and that question has
-  an answer whatever game the distribution ships. `Configuration.is_default`
-  (`model/game/configuration.py:164`) is the same fact read from the other side, and it is a
-  real concept with tests — `tests/test_view.py:455` asserts the start modal's configuration
-  *is* the default, and `tests/test_settings_surface.py:338` asserts a copy is not. FR-27 and
-  FR-28 — the default cannot be renamed or deleted — cannot be enforced at all without
-  naming it. Removing the string would not make the engine configuration-agnostic; it would
-  move the same name to `chesswithquests/__init__.py`, where `build_application`'s default
-  argument lives and where a gate walking only `model/` would no longer see it, which is
-  hiding the coupling rather than removing it.
-- **Why the engine-leak vocabulary must not grow to cover it.** The gate's three sets are all
-  *vocabulary a game teaches the engine*: piece kinds it must not special-case, writer classes
-  it must not hold, and notation names it must not know. A configuration name is none of
-  those — it is the product's answer to "which one is the default", and a distribution whose
-  default were `go` would change this string and nothing else. **Adding configuration names
-  to that vocabulary would make the gate fail on every shipped product and pass on none of
-  them**: it would forbid the string the product requires while never catching a piece kind, a
-  writer or a notation, which is the only thing the gate is for. The honest form of the
-  invariant is therefore the one `SCRATCHPAD.md` §8 item 14 already gives — nothing in the
-  engine names *what a piece is* — and `chess` names no piece, no rule and no notation.
-- **Approval**: **not approved.** Recorded 2026-10-05 as the one place the engine names a
-  game, with the reasoning above, so that a reader who finds it knows it was weighed rather
-  than missed. **No code changed**: the alternative reading — that the default belongs to the
-  configuration layer alone — was considered and not adopted, because §20's `is_default` and
-  FR-27 and FR-28 already make the engine the place that knows the answer.
-
----
+  pawn, a check or a mate."* `model/game/games.py:12` read `DEFAULT_GAME = "chess"`, consumed at
+  ten sites in `model/game/configuration.py` for the edit, rename and delete guards. It was the
+  one chess string in the engine.
+- **Why the gate did not catch it.** `tests/test_engine_holds_no_chess.py` read its vocabulary at
+  run time — from `build_pieces()` for piece kinds, from the `ExportWriter` subclasses
+  `games/chess/export/` declares, and from the notations `load_configuration("chess")` offers.
+  A configuration's own **name** is none of those, and `chess` is not in any of them. §28's first
+  form argued the vocabulary must not grow to cover it, on the ground that a gate naming
+  configuration names would fail on every shipped product. That argument has a better answer
+  available than it gave itself: the vocabulary is read from the installed `games/`, so it holds
+  exactly the names the product ships, and the engine's answer is to hold no name at all rather
+  than a different one.
+- **What makes a configuration the default, and why not the configuration.** The configurations
+  root declares it, in `games/default.json`: `{"configuration": "chess"}`. `default_configuration_name`
+  reads that; `Configuration.is_default` is true when the root this configuration was loaded from
+  names it; `copy_configuration`, `rename_configuration` and `delete_configuration` refuse that
+  name, and `load_default_configuration` loads it, falling back to the first configuration
+  shipped when a root declares none.
+  **A declaration inside a configuration cannot answer the question, and this is the whole
+  reasoning.** A configuration is copied to make a variant — `SCRATCHPAD.md` §2 makes `cp -r` the
+  extension mechanism — and a copy is byte-identical to its original. Whatever a configuration
+  declared about itself, its copy declares identically, so `Configuration(default=True)` set by
+  `games/chess/__init__.py` is also set by every copy of it: `house` would inherit the protection
+  every variant exists to escape, and the tests that hold a variant editable would have had to be
+  weakened to keep it. `Configuration.is_default` had to stop being a name comparison for the
+  guards to keep working at all.
+  **Reading the declaration as a file rather than by loading anything** is the second half of it.
+  The guards must never fail for want of their own answer: a variant whose rule does not import
+  cannot be loaded, and a guard that had to load a configuration to ask whether it was the
+  default would make deleting the thing you broke the one operation that fails.
+  `tests/test_settings_surface.py` holds both — a copy is writable, renamable and deletable, and a
+  configuration that cannot be imported is still deletable.
+- **Where the name went, and what that costs.** `games/chess/__init__.py` declares
+  `CONFIGURATION_NAME = "chess"` for its own directory name, which is a configuration's business;
+  `view/app.py`, `view/settings_dialog.py` and `chesswithquests/__init__.py` resolve the default by
+  loading it rather than by naming it, so `build_application(game=None)` and `--game` with no
+  value are what they are now. The start modal's default and the settings selector's order come
+  from `available_games`, which reads the declaration — so a distribution whose default were `go`
+  is one JSON file changed and nothing else.
+- **What the widened gate found that nothing had.** The declaration's vocabulary is the shipped
+  configuration directories, read from `games/`, matched case-insensitively and word-bounded over
+  the same docstring-stripped walk. With `DEFAULT_GAME` gone it reported one more offender on its
+  first run: `model/game/logger.py` wrote `# Chess Game Log` as the first line of every log file
+  the product has ever produced. That is a chess name in the engine in a form no source-reading
+  gate for *constants* would ever have caught, and it is now `# Game log`.
+- **Approval**: recorded 2026-10-05 as the one place the engine named a game, **not approved**, and
+  the maintainer ruled 2026-10-05 that nothing is to be left: a deviation recorded for a reason
+  that still holds is work to do, not a note to keep. This section is the record of the work.
 
 ### 29. The Code Editor Reaches Rules and Quests, and the Other Three Sections Are Hand-Written by Design
 

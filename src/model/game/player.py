@@ -4,7 +4,7 @@ from typing import Optional, Any
 
 
 class Player:
-    """Represents a chess participant associated with a side and an optional user profile."""
+    """Represents a participant associated with a side and an optional user profile."""
 
     def __init__(self, color: int, user: Optional[Any] = None):
         """Initialize a Player.

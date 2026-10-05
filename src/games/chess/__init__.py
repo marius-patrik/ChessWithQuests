@@ -23,7 +23,6 @@ reason: the rules a copy composes, and the pieces its promotions produce, are th
 from typing import Any, Iterable, List, Optional
 
 from model.game.configuration import Configuration
-from model.game.games import DEFAULT_GAME
 from model.game.quest import Quest
 
 from . import clocks as clock_files
@@ -34,6 +33,13 @@ from . import rules as rule_files
 from .board import build_board
 from .export.algebraic import AlgebraicNotation
 from .export.metadata import ExportMetadata
+
+#: This configuration's directory name. A configuration knows what it is called — it is the
+#: directory it lives in — and nothing else has to repeat it: the engine names no configuration,
+#: and which configuration a game starts in is declared by the configurations root beside them
+#: rather than by the configuration itself, because a copy of this directory says exactly what
+#: this one says.
+CONFIGURATION_NAME = "chess"
 
 
 def build_metadata(exporters: Iterable[Any]) -> Optional[ExportMetadata]:
@@ -59,7 +65,7 @@ def build_metadata(exporters: Iterable[Any]) -> Optional[ExportMetadata]:
     """
     for writer in exporters:
         if isinstance(writer, ExportMetadata):
-            writer.set_header("Event", DEFAULT_GAME)
+            writer.set_header("Event", CONFIGURATION_NAME)
             return writer
     return None
 
@@ -86,7 +92,7 @@ def build_configuration() -> Configuration:
     uncomposed: List[str] = []
     exporters = export_files.build_exporters(uncomposed)
     return Configuration(
-        name=DEFAULT_GAME,
+        name=CONFIGURATION_NAME,
         path="",
         board=build_board(),
         pieces=piece_files.build_pieces(uncomposed),

@@ -24,5 +24,8 @@ def test_logger_with_file(tmp_path):
 
     with open(log_file) as f:
         content = f.read()
-    assert "# Chess Game Log" in content
+    # The header names no game. This line wrote "Chess Game Log" into every log file the
+    # product has ever produced, and it is the one leak in the tree that was not a constant:
+    # a gate reading module source for a configuration's name found it here.
+    assert "# Game log" in content
     assert "(1, 0) -> (3, 0)" in content

@@ -62,6 +62,13 @@ packages = [
 ]
 include-package-data = true
 
+[tool.setuptools.package-data]
+# `games/` holds one file that is not Python: the declaration naming the configuration a game
+# starts in. Everything else in a configuration is a package, so this is the one line that
+# keeps a `pip install` from shipping a `games/` directory in which nothing is protected and
+# nothing leads — a default only an installed distribution would have lost.
+games = ["default.json"]
+
 [tool.pytest.ini_options]
 minversion = "7.0"
 testpaths = ["tests"]

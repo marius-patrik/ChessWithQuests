@@ -1,4 +1,4 @@
-"""Move validation engine enforcing chess rules, checks, pins, and terminal conditions."""
+"""Move validation: rules in force, pins, checks, and terminal conditions."""
 
 from typing import Any, Iterable, List, Optional, Tuple
 
