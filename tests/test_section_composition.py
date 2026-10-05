@@ -25,15 +25,18 @@ copy's-own property for the board, the pieces and the rules; the third test here
 a rule the copy's own player wrote.
 """
 
+import importlib.util
 import os
 import pathlib
 import shutil
+import sys
 
 import pytest
 
 from model.game.configuration import (
     CONFIGURATION_SECTIONS,
     ConfigurationSourceError,
+    compose_section,
     load_configuration,
 )
 from model.game.games import games_root
@@ -332,25 +335,21 @@ def test_the_declared_sections_say_what_each_one_composes():
 def test_composing_something_that_is_not_a_section_is_refused(tmp_path):
     """Nothing is composed by accident: the section name is checked against the declaration.
 
+    A package called `widgets` is a perfectly good Python package and not a section of any
+    configuration, so asking the composer to compose it is a mistake in the caller and is said
+    to be one rather than returning nothing.
+
     Args:
         tmp_path: Pytest's temporary directory.
 
     Returns:
         None
     """
-    from model.game.configuration import compose_section
-
-    games = _variant(tmp_path)
-    variant = load_configuration("house", root=games)
-    wrong_section = pathlib.Path(variant.path) / "clocks"
-    wrong_section.mkdir(exist_ok=True)
-    package = wrong_section / "__init__.py"
-    package.write_text('"""Not a section that is composed."""\n', encoding="utf-8")
-    import importlib.util
-    import sys
-
+    section = tmp_path / "widgets"
+    section.mkdir()
+    (section / "__init__.py").write_text('"""Not a section."""\n', encoding="utf-8")
     spec = importlib.util.spec_from_file_location(
-        "not_a_section", package, submodule_search_locations=[str(wrong_section)]
+        "not_a_section", section / "__init__.py", submodule_search_locations=[str(section)]
     )
     module = importlib.util.module_from_spec(spec)
     sys.modules["not_a_section"] = module
