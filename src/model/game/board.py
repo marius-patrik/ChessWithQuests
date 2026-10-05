@@ -5,6 +5,7 @@ starts where, or how big the game is — a configuration supplies all three, whi
 nothing here imports a piece subclass.
 """
 
+import copy
 from typing import Iterable, List, Optional, Tuple
 
 from model.game.field import Field
@@ -223,6 +224,27 @@ class Board:
         self.captured_black.clear()
         for position, piece in placement:
             self.set_piece_at(position, piece)
+
+    def snapshot(self) -> "Board":
+        """Return an independent copy of the position as it stands.
+
+        A position that is *remembered* is not the same object as the one being played on, and
+        the difference is not academic: a rule finds a piece by walking the board and comparing
+        identity, so a snapshot that shared its pieces would answer questions about the game in
+        progress. The pieces are therefore copied along with the squares they stand on, and
+        each copy carries its own moved flag.
+
+        What this is for is holding a position that has stopped being the case — the one a game
+        began in, which a notation written later has to be read against. What it is not for is
+        a second game: two boards dealt from the same configuration each hold their own pieces,
+        which is the property this depends on.
+
+        Returns:
+            Board: A board of the same class and the same placement, whose pieces are copies
+            rather than the ones on this board. Moving a piece here moves nothing there, and a
+            subclass is preserved, so a board that names its own files keeps naming them.
+        """
+        return copy.deepcopy(self)
 
 
 #: Czech alias for `Board`, as `PRD.md` section 5 and `HerníPlocha` in the diagram require.

@@ -19,6 +19,7 @@ import pytest
 from model.game.board import Board
 from model.game.configuration import Configuration
 from model.game.manager import GameManager, UnsupportedExportFormat
+from model.pieces.piece import Piece
 
 
 class OnlyOneNotation:
@@ -56,12 +57,43 @@ class OnlyOneNotation:
         return f"{self.name}:{format_type}"
 
 
-def _configuration(exporters=None, quests=None):
+class RecordingWriter(OnlyOneNotation):
+    """A writer that keeps what it was handed, so a test can look at the whole call."""
+
+    def __init__(self, name, formats):
+        """Record the name and the formats, and start with nothing handed over.
+
+        Args:
+            name: The label the transcript carries back.
+            formats: The format names this writer declares.
+        """
+        super().__init__(name, formats)
+        self.handed = []
+
+    def export(self, format_type, **kwargs):
+        """Write the game and remember what this call was given.
+
+        Args:
+            format_type: The format asked for.
+            **kwargs: The game data.
+
+        Returns:
+            str: The writer's name and the format.
+        """
+        self.handed.append(kwargs)
+        return super().export(format_type, **kwargs)
+
+
+def _configuration(exporters=None, quests=None, board=None, board_factory=None):
     """Build a configuration that declares whatever the test needs it to.
 
     Args:
         exporters: The writers the configuration offers.
         quests: The quests the configuration declares.
+        board: The board the configuration holds. Defaults to an empty four by four.
+        board_factory: How the configuration deals a fresh board. Defaults to None, which is
+            a configuration that declared no factory at all — it hands back the board it
+            already holds, which is the case several tests here depend on.
 
     Returns:
         Configuration: A four by four configuration with no rules, so nothing here is
@@ -70,11 +102,12 @@ def _configuration(exporters=None, quests=None):
     return Configuration(
         name="probe",
         path="",
-        board=Board((4, 4), setup_pieces=False),
+        board=board if board is not None else Board((4, 4), setup_pieces=False),
         rules=[],
         quests=quests or [],
         clocks=[],
         exporters=exporters or [],
+        board_factory=board_factory,
     )
 
 
@@ -217,3 +250,68 @@ def test_the_manager_module_names_no_notation_and_no_piece():
     assert "build_quests" not in source
     assert "PGN" not in source
     assert "games.chess" not in source
+
+
+# --- the position a game began in is handed to the writer
+
+
+def test_a_writer_is_handed_the_position_the_game_began_in():
+    """A notation read from a position cannot work the position out from the board.
+
+    The board the manager hands over is the position the game is *in* — after every move that
+    has been played — so a writer that was given nothing else has no way to know where the
+    first move was made. The opening position is that missing fact, and it travels with the
+    rest of the game rather than being something a caller has to remember to supply.
+
+    Returns:
+        None
+    """
+    writer = RecordingWriter("probe", ("Ledger",))
+    game = GameManager(configuration=_configuration(exporters=[writer]))
+    game.board.set_piece_at((0, 0), Piece(1, "strider"))
+
+    game.transcript("Ledger")
+    handed = writer.handed[-1]["opening_position"]
+
+    assert handed is not game.board
+    assert handed.rows == 4
+    assert handed.get_piece_at((0, 0)) is None, "the position must be as it was dealt"
+
+
+def test_the_opening_position_is_not_the_board_a_configuration_declared():
+    """The recorded trap: `new_board()` returns the *live* board when no factory was declared.
+
+    A configuration that declared no factory hands back the board it already holds, and the
+    board it already holds is the one the game is being played on. So a manager that asked its
+    configuration for the position a game began in, during a game, would be handed the position
+    it is in the middle of — and the notation would describe a game that was never played. The
+    opening position is therefore snapshotted from the board that was dealt, which is the only
+    reading of "where the game began" that a mutation of the live board cannot change.
+
+    Returns:
+        None
+    """
+    configuration = _configuration()
+    game = GameManager(configuration=configuration)
+    game.board.set_piece_at((0, 0), Piece(1, "strider"))
+
+    assert configuration.new_board() is game.board, "the trap this test stands on has gone"
+    assert game.opening_position is not game.board
+    assert game.opening_position.get_piece_at((0, 0)) is None
+
+
+def test_a_new_game_is_dealt_its_own_opening_position():
+    """Starting again deals a fresh board, and the position that game began in is that one.
+
+    Returns:
+        None
+    """
+    configuration = _configuration(board_factory=lambda: Board((4, 4), setup_pieces=False))
+    game = GameManager(configuration=configuration)
+    game.board.set_piece_at((0, 0), Piece(1, "strider"))
+
+    game.new_game()
+
+    assert game.board.get_piece_at((0, 0)) is None
+    assert game.opening_position is not game.board
+    assert game.opening_position.get_piece_at((0, 0)) is None

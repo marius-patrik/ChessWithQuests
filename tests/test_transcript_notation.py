@@ -502,3 +502,47 @@ def test_the_writer_replays_from_the_configurations_own_starting_position_by_def
 
     assert "1. e4" in text
     assert build_board().rows == 8
+
+
+def test_a_game_that_began_elsewhere_is_written_against_where_it_began():
+    """The whole path, with nobody supplying a position: the manager tells the writer.
+
+    The game is dealt from a board that differs from this configuration's starting position in
+    one piece — the knight that stands on b1 stands on d2 instead — so the first move, `d2f3`,
+    is one two knights can both make. That is the question the notation asks of a position and
+    cannot ask of a `Move`, and the answer here is `Ndf3`: the file of the knight that moved.
+    Read against the configuration's own opening instead, where d2 holds a pawn and no knight
+    stands there at all, the same move would be written as a bare `f3` — a well-formed move of
+    a game that was never played.
+
+    Returns:
+        None
+    """
+    board = build_board()
+    board.move_piece(algebraic_to_pos("b1"), algebraic_to_pos("d2"))
+    game = GameManager(board=board)
+    move = game.move_validator.find_move(algebraic_to_pos("d2"), algebraic_to_pos("f3"), game.board)
+
+    assert game.make_move(move) is True
+    movetext = game.transcript("PGN").split("\n\n")[1]
+
+    assert movetext.startswith("1. Ndf3")
+    assert game.opening_position.get_piece_at(algebraic_to_pos("d2")) is not None
+    assert game.board.get_piece_at(algebraic_to_pos("d2")) is None
+
+
+def test_writing_one_game_twice_writes_that_game_twice():
+    """The second transcript must not begin where the first one ended.
+
+    A writer that reads a position replays the game on it, so the position it is handed is
+    consumed by being written — the board is left as the replay ended. The manager keeps its own
+    record of where the game began and hands each writer a copy of that, so asking twice asks
+    the same question twice rather than asking what the first answer left behind.
+
+    Returns:
+        None
+    """
+    game = _play(OPERA_SQUARES)
+    game.finish_game()
+
+    assert game.transcript("PGN") == game.transcript("PGN")

@@ -64,11 +64,27 @@ class GameManager:
                 are what the game runs on. When none is given the shipped default
                 configuration is loaded, so a manager with no arguments plays the default
                 game rather than an empty rectangle.
+
+        Attributes:
+            opening_position: An independent copy of the position this game was dealt, which
+                is what a notation read from a position has to be read against. It is a
+                snapshot rather than `self.board`, for the reason `new_game` records and not
+                for this one: a board is the position the game is *in*, and a writer that was
+                handed it would be reading a game's last move to explain its first.
         """
         self.configuration: Optional[Configuration] = configuration or load_default_configuration()
         self.board: Board = (
             board or (self.configuration.board if self.configuration else None) or Board()
         )
+        # Taken here and in `new_game`, and nowhere else: those are the two moments a game is
+        # dealt, and between them the board is the position being played rather than the
+        # position a game began in. `configuration.new_board()` is deliberately not used — it
+        # falls back to returning the board a configuration already holds, which for a
+        # configuration that declared no factory is this very board, so asking it during a game
+        # would hand a writer the position it is trying to write. A snapshot of the dealt
+        # board is the position, and it is taken before a single move is played.
+        self.opening_position: Optional[Board] = self.board.snapshot()
+
         self.players: List[Player] = players or [Player(1), Player(-1)]
         self.active_player: int = 1
         self.current_move: Optional[Move] = None
@@ -142,6 +158,13 @@ class GameManager:
         """
         if self.configuration is not None:
             self.board = self.configuration.new_board()
+        # The position the new game begins in is snapshotted here rather than in `__init__`
+        # alone, because this is the other moment a game is dealt. It is taken immediately,
+        # before anything is played on it: `new_board` returns the configuration's own board
+        # when no factory was declared, and for such a configuration that board is the live
+        # one — so asking for it *during* a game would hand a writer the position it is
+        # trying to write, and the notation would describe a game that was never played.
+        self.opening_position = self.board.snapshot()
         self.active_player = 1
         self.current_move = None
         self.result = None
@@ -431,10 +454,13 @@ class GameManager:
         A configuration whose second writer writes a format its first does not now reaches
         that writer.
 
-        Every writer is handed the same things: the moves, the board, the configuration's
-        metadata record if it declared one, both players, the result and the date the game
-        began. Which of those a notation needs, and what it calls them, is the writer's
-        answer — the engine passes the game and names no tag.
+        Every writer is handed the same things: the moves, the board, the position the game
+        began in, the configuration's metadata record if it declared one, both players, the
+        result and the date the game began. Which of those a notation needs, and what it calls
+        them, is the writer's answer — the engine passes the game and names no tag. The opening
+        position is among them because a notation cannot work it out from the board: a question
+        about the position the moves were played in needs that position, and the board handed
+        over is the one the game ended in.
 
         Args:
             fmt: The notation wanted, matched without regard to case. Defaults to the first
@@ -479,7 +505,15 @@ class GameManager:
         # exist, what they are called and what they are set to is a writer's business, and
         # the manager's is to hand over what actually happened rather than to write it down.
         # Whose turn it is is handed over for the same reason: a record of a position says
-        # who is to move, and the writer cannot know it from the board.
+        # who is to move, and the writer cannot know it from the board. So is the position the
+        # game began in, for the same reason and one step further: a notation read from a
+        # position is read against that position, and the board is where the game ended.
+        #
+        # A copy, every time, because a writer that reads a position replays the game on it:
+        # that is how a question about the position a move was played in is answered at all.
+        # The manager's own snapshot is the record of where the game began and is never played
+        # on, so a second transcript does not begin where the first one ended — which is what
+        # handing the same snapshot to every writer would have made it do.
         return writer.export(
             wanted,
             moves=moves,
@@ -489,6 +523,9 @@ class GameManager:
             result=self.result,
             date=self.started_at,
             active_color=self.active_player,
+            opening_position=(
+                self.opening_position.snapshot() if self.opening_position is not None else None
+            ),
         )
 
     def save_log(self, path: Optional[str] = None) -> str:

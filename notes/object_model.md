@@ -1165,11 +1165,29 @@ earlier section registered.
      repetition has seen — and replaying through them would leave a finished game whose rules
      had forgotten it. It is a chess-configuration concern and it lives in
      `games/chess/export/`, which is where §7 places every other notation concern.
-  2. **`ExportPGN.to_pgn` takes the position the moves were played from.** It defaults to this
-     configuration's own starting position, which is what a game in this configuration starts
-     from. The parameter is what lets the notation be tested on positions a game cannot reach —
-     three queens, a promotion that gives check — and it is how a caller whose game did not
-     start here is not given notation read against a game that is not the one being written.
+  2. **A writer is handed the position the game began in.** `GameManager.opening_position` is
+     an independent snapshot of the position a game was dealt, taken in `__init__` and again in
+     `new_game` — the two moments a game is dealt, and the only two at which the board is a
+     position a game began in rather than the position a game is in. `transcript` hands it to
+     every writer beside `board` and `active_color`, and hands a **copy** each time, because a
+     writer that reads a position replays the game on it and the manager's snapshot is the
+     record of where the game began: one snapshot shared by every write would make the second
+     transcript begin where the first one ended.
+     **Why the snapshot is taken from the board that was dealt and not from
+     `configuration.new_board()`**: `new_board` falls back to returning the board the
+     configuration already holds when no factory was declared, and for such a configuration that
+     board is the live one — so asking it during a game hands a writer the position it is
+     trying to write, and the notation describes a game that was never played. That fallback is
+     what `Configuration.new_board`'s own docstring records, and `tests/test_manager_exporters.py`
+     holds the case standing: the test asserts that `new_board()` *is* the live board before it
+     asserts that the opening position is not it.
+     `ExportPGN.to_pgn` still takes a position for a caller that holds one — the tests need
+     positions a game cannot reach, three queens and a promotion that gives check — and it
+     defaults to this configuration's own starting position, which is a fact this configuration
+     knows rather than something the writer makes up. A caller that passes nothing gets that
+     opening and a replay that stops at the first move that does not belong to it, so a move
+     list played from somewhere else is written from what the moves themselves carry and claims
+     no hint and no suffix it did not read.
   3. **`ExportFEN` gained four public methods** — `castling_rights`, `en_passant_target`,
      `halfmove_clock` and `fullmove_number` — one per field it computes. The diagram's
      `ChessNotationWriter` box draws a format list and `item`, and §23 records that no `item`
@@ -1187,10 +1205,13 @@ earlier section registered.
      was a default of `1` that nothing passed, so every position with the second colour to move
      was written `w`. This is §19's kind of departure — the manager hands over rather than
      knowing — and not a diagram deviation.
-- **No engine change was needed for any of it.** `Replay` and the FEN methods are chess's; the
-  one engine change is a kwarg the manager already passes to every writer, and it names no
-  game. `tests/test_engine_holds_no_chess.py` walks `model/` with the writer and format names
-  read from the configuration and is unchanged.
+- **Two engine changes were needed, and neither names a game.** `Replay` and the FEN methods are
+  chess's. What the engine gained is `Board.snapshot()` — an independent copy of a position, the
+  one thing a board is for that nothing else could do — and the manager handing it to writers as
+  `opening_position`. `active_color` was the same kind of kwarg and predates this.
+  `tests/test_engine_holds_no_chess.py` walks `model/` with the writer and format names read from
+  the configuration and is unchanged; `opening_position` is not a writer name and not a format
+  name, and the gate covers both.
 - **Approval**: this is the change `PRD.md` §7.7's four records were amended for, and the
   maintainer's standing rule that the diagram is the whole specification is what §12's
   withdrawal rests on. Recorded 2026-10-05.
