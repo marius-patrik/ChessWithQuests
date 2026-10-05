@@ -62,6 +62,12 @@ class Piece:
     travels, and whether it may leap. Nothing about a piece is special-cased by the engine,
     which is what lets a configuration declare a piece the engine has never heard of.
 
+    A piece also declares where it takes part in a game that is not about moving it: the
+    character it is written as in a position record (`getFen`), and whether another piece may
+    become this one (`promotion_target`). Both are read by a configuration's own rules and
+    writers, and neither is read by the engine — the engine moves pieces and knows nothing
+    about promotion.
+
     Attributes:
         _type: The piece type descriptor the configuration chose.
         _vectors: Offsets along which the piece may move (and, when they are not also
@@ -77,6 +83,13 @@ class Piece:
         has_moved: Whether the piece has ever moved. Cleared on placement, set by the board
             on the first move.
     """
+
+    #: Whether another piece may become this one. Declared on the piece rather than listed in
+    #: a rule, so a piece written into a configuration's `pieces/` is a promotion target the
+    #: moment it is in that configuration's catalogue — which is the whole of what it takes to
+    #: promote to a piece of your own. A piece that is what promotes rather than what a
+    #: promoting piece becomes declares this False, and so does a piece whose kind ends a game.
+    promotion_target: bool = True
 
     def __init__(
         self,

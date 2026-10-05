@@ -287,9 +287,14 @@ def test_a_promotion_in_a_copied_configuration_yields_the_copies_piece(copied_ch
 
     `games/chess/rules/promotion.py` used to build the promoted piece out of
     `games.chess.pieces.…`, so a promotion in a copy produced a piece class belonging to a
-    configuration that was not being played. The module a class came from is the proof,
+    configuration that was not being played. It resolves the replacement out of the catalogue
+    it composes now, which is the copy's own. The module a class came from is the proof,
     exactly as it is for the board's pieces: a class loaded through `games.chess` says so,
     and one loaded through the copy says `_configuration_…` instead.
+
+    The rule is asked rather than its helper: `_make_promotion` was a module-level function
+    this test reached into, and what a configuration is responsible for is which pieces it
+    offers a promotion to — so the assertion is on the moves the rule offers.
 
     Args:
         copied_chess: The throwaway `games/` root holding the copy.
@@ -297,18 +302,23 @@ def test_a_promotion_in_a_copied_configuration_yields_the_copies_piece(copied_ch
     Returns:
         None
     """
-    import sys
-
     from games.chess.pieces.pawn import Pawn
 
     configuration = load_configuration("house", root=copied_chess)
     rule = next(rule for rule in configuration.rules if type(rule).__name__ == "PromotionRule")
-    copy_module = sys.modules[type(rule).__module__]
+    board = configuration.new_board()
+    pawn = Pawn(1)
+    board.set_piece_at((board.rows - 2, 4), pawn)
 
-    promoted = copy_module._make_promotion(Pawn(1), "queen")
+    promoted = [move.promotion_piece for move in rule.available_moves(board, pawn)]
 
-    assert type(promoted).__module__.startswith("_configuration_")
-    assert type(promoted).__module__.endswith("house.pieces.queen")
+    assert {piece.getType() for piece in promoted} == {"queen", "rook", "bishop", "horse"}
+    for piece in promoted:
+        # The package a configuration is loaded under is its directory with the separators
+        # replaced, so the copy's pieces say `_configuration_…house.pieces.…` and never
+        # `games.chess.pieces.…`.
+        assert type(piece).__module__.startswith("_configuration_")
+        assert ".pieces." in type(piece).__module__
 
 
 def test_a_board_a_configuration_declares_is_not_the_engine_default():

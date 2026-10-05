@@ -460,6 +460,67 @@ def _legal_targets(configuration, piece, square):
     return set(validator.get_valid_moves(square, board))
 
 
+def test_a_piece_written_into_a_copy_can_be_promoted_to(tmp_path):
+    """The defect the promotion rule carried beside the composition: a piece a copy wrote could
+    not be promoted to.
+
+    `games/chess/rules/promotion.py` held `PROMOTION_PIECES`, a second hand-written catalogue
+    beside the composed one, so the camel was in the copy's catalogue and in no promotion's
+    reach. The rule now asks the catalogue, and a kind is not a promotion target only if the
+    piece itself declares it is not — which the camel does not, so it is offered with no list
+    edited anywhere. What is asserted is the move the copy's own rule produces, so this holds
+    whichever class answers.
+
+    Args:
+        tmp_path: Pytest's temporary directory.
+
+    Returns:
+        None
+    """
+    from games.chess.pieces.pawn import Pawn
+
+    games = _variant(tmp_path)
+    variant = load_configuration("house", root=games)
+    _write(variant.path, "pieces", "zz_camel.py", WRITTEN_PIECE)
+
+    def _promotion_rule(configuration):
+        """Return the copy's promotion rule.
+
+        Args:
+            configuration: The loaded configuration.
+
+        Returns:
+            Rule: The rule that promotes, named by its class rather than imported, because a
+            copy's rule is a different class from the original's.
+        """
+        return next(rule for rule in configuration.rules if type(rule).__name__ == "PromotionRule")
+
+    def _offered(configuration, pawn):
+        """Return the kinds a configuration offers a pawn one step from the far rank.
+
+        Args:
+            configuration: The loaded configuration.
+            pawn: The pawn to place, one row short of promotion.
+
+        Returns:
+            set: The kinds the configuration's own promotion rule offers.
+        """
+        board = configuration.new_board()
+        board.set_piece_at((board.rows - 2, 4), pawn)
+        return {
+            move.promotion_piece.getType()
+            for move in _promotion_rule(configuration).available_moves(board, pawn)
+        }
+
+    reloaded = load_configuration("house", root=games)
+
+    assert "camel" in _offered(reloaded, Pawn(1))
+    assert "camel" not in _offered(load_configuration("chess"), Pawn(1))
+    assert any(
+        cls.__module__.endswith("house.pieces.zz_camel") for cls in reloaded.pieces
+    ), "the camel is in the copy's catalogue and nowhere else"
+
+
 def test_a_clock_written_into_a_clocks_directory_is_offered_by_the_copy(tmp_path):
     """A clock is composed out of `clocks/` now, against the parent the section declares.
 

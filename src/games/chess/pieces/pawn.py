@@ -13,6 +13,11 @@ from model.pieces.piece import Piece
 class Pawn(Piece):
     """Advances straight, takes diagonally, and may make one long first advance."""
 
+    #: A pawn is what a promoting piece becomes *from*, not what one becomes, so it is not a
+    #: promotion target. Declared here rather than in a rule's list of choices, which is what
+    #: lets a piece written into `pieces/` be promoted to without a list to edit.
+    promotion_target = False
+
     def __init__(self, color: Any, piece_type: str = "pawn"):
         """Initialize a Pawn piece.
 

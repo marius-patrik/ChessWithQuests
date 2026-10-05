@@ -1135,12 +1135,29 @@ earlier section registered.
   path: `build_configuration()` hands the same list to all five compositions, so a file that
   declares nothing is reported whichever section it was written into. The refusal for a file
   that cannot be imported is §25's, unchanged.
-- **Out of scope, recorded not fixed**: `games/chess/rules/promotion.py` holds
-  `PROMOTION_PIECES`, a second hand-written piece list — a kind a copy writes into `pieces/`
-  joins the catalogue but cannot be promoted to, which is a different question from the
-  catalogue and belongs to the rule. `view/settings_dialog.py` offers the code editor on the
-  Rules and Quests tabs only and `model/game/source_validation.py` validates `"rule"` and
-  `"quest"` only, so a piece, a clock or a writer is still written by hand.
+- **`PromotionRule` reads the catalogue, not a list of its own.** `games/chess/rules/promotion.py`
+  held `PROMOTION_PIECES` — a second hand-written catalogue beside the composed one — so a kind a
+  copy wrote into `pieces/` joined the catalogue and could not be promoted to. The rule now
+  composes `../pieces` itself, relatively, when it is composed, and resolves every kind it is
+  asked for there: the shape `CrowningRule` already has, where `rules/geometric.py:crown` resolves
+  what a man becomes out of its own configuration's package rather than out of a list beside it.
+  Two declarations decide the rest. **A declaration wins**: a configuration that names its
+  `promotion_kinds` gets exactly those, and a kind the catalogue has no piece for is refused by
+  name rather than dropped — which is why the field is now text rather than a fixed set of
+  choices, so a kind a player's own piece introduces can be named without a code edit. **A blank
+  declaration asks the catalogue**, and what the catalogue may be promoted *to* is declared by the
+  pieces themselves: `Piece.promotion_target`, `False` on the two kinds chess excludes — a pawn,
+  which is what promotes rather than what one becomes, and a king, which is what ends a game
+  rather than what a promotion produces. That is the answer to "how does the rule know the
+  difference": not by a name written into `promotion.py`, and not by asking the rule set whether
+  a kind is royal, which is a question whose answer only exists once the rules are wired. The
+  knight's two spellings are no longer bridged *here* — the catalogue is the authority and it
+  reports one descriptor per piece, so a configuration wanting the other spelling declares it as
+  that piece's `piece_type`, which is data it persists. `draws.py`'s `_KIND_ALIASES` is unchanged
+  for the rules that compare a *configured* kind against a piece.
+- **Still out of scope, recorded not fixed**: `view/settings_dialog.py` offers the code editor on
+  the Rules and Quests tabs only and `model/game/source_validation.py` validates `"rule"` and
+  `"quest"` only, so a piece, a clock or a writer is still written by hand — §29.
 - **Approval**: directed by the user, 2026-10-05, to compose `pieces`, `clocks` and `export`
   from their own directories "using the same mechanism and the same policy", with the two
   judgement calls named as questions to be answered rather than inherited.

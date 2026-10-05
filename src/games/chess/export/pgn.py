@@ -372,9 +372,6 @@ class ExportPGN(ExportWriter):
         The imports are inside the constructor for the same reason `Replay`'s are: this module
         is what started the composition of `export/`, and `export/` is composed before `rules/`
         is.
-
-        Returns:
-            None
         """
         from ..rules import build_rules
 

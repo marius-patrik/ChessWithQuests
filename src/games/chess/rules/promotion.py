@@ -3,11 +3,14 @@
 The far rank is derived from the piece's own declared forward vector rather than from the
 number eight, so the rule works on a board of any size.
 
-The replacement pieces are imported relatively, at module level. They used to be imported by
-absolute path inside `_make_promotion`, which meant a promoted pawn became a piece class
-belonging to the original `games/chess` even when the game being played was a copied
-configuration that had declared pieces of its own. Importing them here keeps the promotion
-inside the configuration that is being played.
+**What a pawn may become is this configuration's catalogue's answer.** The rule composes
+`../pieces` once, when it is itself composed, and resolves every kind it is asked for there —
+the same question `CrowningRule` asks in draughts, where `rules/geometric.py:crown` resolves what
+a man becomes out of this configuration's own package rather than out of a list beside it. The
+list that used to stand here, `PROMOTION_PIECES`, was a second hand-written catalogue: a piece
+written into a copy's `pieces/` directory joined the catalogue and could not be promoted to,
+because the rule never asked. Composition is relative, as everywhere else in a configuration, so
+a copy promotes to the copy's own pieces.
 """
 
 from typing import Any, Dict, List, Optional, Type
@@ -16,35 +19,46 @@ from model.game.field import Field
 from model.game.move import Move
 from model.game.rule import Rule
 
-from ..pieces.bishop import Bishop
-from ..pieces.knight import Knight
-from ..pieces.queen import Queen
-from ..pieces.rook import Rook
-
-#: The kinds a pawn may be promoted to, and the class each becomes. Both spellings of the
-#: knight's kind are accepted: the piece declares `horse`, and a configuration may write
-#: `knight` instead.
-PROMOTION_PIECES: Dict[str, Type[Any]] = {
-    "queen": Queen,
-    "rook": Rook,
-    "bishop": Bishop,
-    "knight": Knight,
-    "horse": Knight,
-}
-
 
 class PromotionRule(Rule):
-    """Offer every choice of replacement piece, and insist on one."""
+    """Offer every choice of replacement piece, and insist on one.
+
+    Attributes:
+        catalogue: The piece kinds this configuration offers and the class behind each, composed
+            out of `pieces/` when this rule is composed. A kind this configuration has no piece
+            for cannot be promoted to, and saying so names the kinds it does offer.
+    """
 
     default_name = "Promotion"
+
+    def __init__(self, enabled: bool = True, **values: Any):
+        """Assemble the rule, and take hold of the catalogue it promotes within.
+
+        Args:
+            enabled: Whether the rule is in force at all.
+            **values: Configured values, one per declared field. Anything not supplied takes
+                the field's default.
+
+        Raises:
+            ValueError: If a catalogue entry cannot be asked what kind it is. Every piece in
+                this configuration's catalogue can be built with a colour — that is what a
+                board does to place one — so one that refuses is a catalogue that cannot be
+                used, and saying so beats silently promoting to a subset of it.
+        """
+        from ..pieces import build_pieces
+
+        super().__init__(enabled=enabled, **values)
+        self.catalogue: Dict[str, Type[Any]] = _catalogue_of(build_pieces())
 
     def value_fields(self) -> List[Field]:
         """Declare the configured values this rule is configured with.
 
         Returns:
-            List[Field]: The piece kinds a promotion may choose from, in the order the form
-            should offer them. Orthodox chess allows all four, and underpromotion is a real
-            answer rather than a curiosity, so the default offers all four.
+            List[Field]: Which kinds promote, and which kinds a promotion may choose from. The
+            second is text rather than a fixed set of choices on purpose: the kinds this
+            configuration offers are composed out of `pieces/`, so a kind a player's own piece
+            introduces has to be nameable here without a code edit — and blank means the
+            catalogue's own answer rather than one choice of it.
         """
         return [
             Field(
@@ -55,10 +69,13 @@ class PromotionRule(Rule):
             ),
             Field(
                 "promotion_kinds",
-                "choice",
+                "text",
                 "Promote to",
-                ("queen", "rook", "bishop", "horse"),
-                choices=("queen", "rook", "bishop", "horse"),
+                "",
+                help=(
+                    "Comma separated. Blank means every kind this configuration's catalogue "
+                    "offers that declares itself a promotion target."
+                ),
             ),
         ]
 
@@ -148,7 +165,7 @@ class PromotionRule(Rule):
                         end_pos=destination,
                         piece=piece,
                         move_type="promotion",
-                        promotion_piece=_make_promotion(piece, kind),
+                        promotion_piece=self._make_promotion(piece, kind),
                     )
                 )
         return offered
@@ -173,17 +190,92 @@ class PromotionRule(Rule):
         return bool(self._kinds()) and move.move_type == "promotion"
 
     def _kinds(self) -> List[str]:
-        """Return the kinds this rule may promote to.
+        """Return the kinds this rule may promote to, and where that answer comes from.
+
+        **A declaration wins.** A configuration that names its choices gets exactly those, in
+        the order it named them, and a name the catalogue has no piece for is refused by
+        `promotion_piece` rather than quietly dropped — a declaration and a catalogue that
+        disagree is a configuration whose author should hear about it.
+
+        **A blank declaration asks the catalogue.** Every kind the catalogue offers that
+        declares itself a promotion target is offered, which for this configuration is the four
+        the rulebook allows and for a copy with a piece of its own is that piece as well. That
+        is the whole of the difference from what this file used to hold: the kinds came from a
+        dict written out here, so a piece written into `pieces/` joined the catalogue and could
+        not be promoted to. **Whether a kind may be promoted to is declared by the piece** —
+        `Piece.promotion_target`, False on the two kinds this configuration excludes, a pawn
+        and a king — so the exclusion is a declaration rather than a name written into a rule.
 
         Returns:
-            List[str]: The configured choices, defaulting to a single queen.
+            List[str]: The kinds offered, in the order they are offered. Empty only when the
+            catalogue offers nothing that is a promotion target, which is a configuration with
+            no promotion in it rather than a failure.
         """
-        configured = self.value.get("promotion_kinds")
-        if isinstance(configured, str):
-            return [configured]
-        if configured:
-            return list(configured)
-        return ["queen"]
+        declared = _split(self.value.get("promotion_kinds"))
+        if declared:
+            return declared
+        return [
+            kind
+            for kind, piece_class in self.catalogue.items()
+            if getattr(piece_class, "promotion_target", True)
+        ]
+
+    def _make_promotion(self, piece: Any, kind: str) -> Any:
+        """Build the replacement piece for a promotion, out of this configuration's catalogue.
+
+        Args:
+            piece: The piece promoting, whose colour the replacement takes.
+            kind: The kind to promote to, as the declaration or the catalogue spells it.
+
+        Returns:
+            Any: A piece of that kind and colour, built from the catalogue so it belongs to the
+            configuration being played.
+
+        Raises:
+            ValueError: If this configuration's catalogue has no piece of that kind. A
+                promotion has to produce a piece, and guessing which would silently promote a
+                pawn into something the configuration never offered.
+        """
+        piece_class = self.catalogue.get(kind)
+        if piece_class is None:
+            offered = ", ".join(sorted(self.catalogue)) or "nothing at all"
+            raise ValueError(
+                f"{kind!r} is not a piece kind this configuration offers; its catalogue "
+                f"holds {offered}"
+            )
+        return piece_class(piece.getColor())
+
+
+def _catalogue_of(catalogue: List[Type[Any]]) -> Dict[str, Type[Any]]:
+    """Return the kinds a catalogue offers and the class behind each.
+
+    A kind is read the way a board reads it — by building a piece and asking — because a piece
+    declares its descriptor as data and a class attribute is not where it lives. Two classes
+    reporting one kind is a configuration that cannot say which piece it means, so the first
+    composed wins and the catalogue order is the order the section composed in.
+
+    Args:
+        catalogue: The piece classes a configuration offers.
+
+    Returns:
+        Dict[str, Type[Any]]: Kind descriptor to the class providing it, in catalogue order.
+
+    Raises:
+        ValueError: If a class cannot be built with a colour, so cannot be asked what kind it
+            is.
+    """
+    kinds: Dict[str, Type[Any]] = {}
+    for piece_class in catalogue:
+        try:
+            kind = piece_class(1).getType()
+        except Exception as error:  # noqa: BLE001 - any failure here is the player's code
+            raise ValueError(
+                f"{piece_class.__name__} could not be asked what kind it is, so this "
+                f"configuration cannot be promoted within: {type(error).__name__}: {error}"
+            ) from error
+        if kind is not None and str(kind) not in kinds:
+            kinds[str(kind)] = piece_class
+    return kinds
 
 
 def _split(value: Any) -> List[str]:
@@ -200,27 +292,6 @@ def _split(value: Any) -> List[str]:
     if value:
         return [str(item) for item in value]
     return []
-
-
-def _make_promotion(piece: Any, kind: str) -> Any:
-    """Build the replacement piece for a promotion.
-
-    Args:
-        piece: The piece promoting, whose colour the replacement takes.
-        kind: The piece type descriptor to promote to.
-
-    Returns:
-        Any: A piece of that kind and colour, or None when the kind is unknown.
-
-    Raises:
-        ValueError: If `kind` is not one of `PROMOTION_PIECES`. A promotion has to produce a
-            piece, and guessing which would silently promote a pawn into something the
-            configuration never offered.
-    """
-    factory = PROMOTION_PIECES.get(kind)
-    if factory is None:
-        raise ValueError(f"{kind!r} is not a piece kind a pawn can promote to")
-    return factory(piece.getColor())
 
 
 def _origin(position: Any, piece: Any) -> Optional[tuple]:

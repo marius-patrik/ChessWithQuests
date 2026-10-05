@@ -4,6 +4,8 @@ Every case here sets up a position and asks a rule a question. Nothing reaches i
 internals, because the point of the rule layer is that a rule is asked rather than inspected.
 """
 
+import pytest
+
 from games.chess.board import build_board
 from model.game.board import Board
 from model.game.move import Move
@@ -311,6 +313,76 @@ def test_promotion_is_offered_to_the_four_choices():
         "Bishop",
         "Knight",
     }
+
+
+def test_the_rule_holds_no_piece_list_of_its_own():
+    """`PROMOTION_PIECES` was a second hand-written catalogue beside the composed one.
+
+    A piece written into a copy's `pieces/` directory joined the catalogue and could not be
+    promoted to, because the rule read a dict written out in `promotion.py` instead of asking.
+    The check is on the module's own attribute rather than on what it produces, so a list that
+    came back beside a working catalogue would fail without anyone naming it.
+
+    Returns:
+        None
+    """
+    import games.chess.rules.promotion as promotion
+
+    assert not hasattr(promotion, "PROMOTION_PIECES")
+
+
+def test_a_rule_that_declares_no_choices_offers_what_the_catalogue_declares():
+    """With no `promotion_kinds` declared, the catalogue answers — and the answer is not a name.
+
+    Two kinds here must not be offered and the rule knows it because the *pieces* say so: a
+    pawn is what promotes rather than what a pawn becomes, and a king is the piece a game ends
+    with rather than one a promotion produces. Both declare `promotion_target = False`, so the
+    rule holds no list of kinds to exclude and a piece written into `pieces/` is offered with no
+    edit at all — which is what a fixed list could never do.
+
+    Returns:
+        None
+    """
+    board = empty_board()
+    pawn = Pawn(1)
+    board.set_piece_at((6, 4), pawn)
+
+    rule = PromotionRule(promotion_kinds="")
+    offered = {move.promotion_piece.getType() for move in rule.available_moves(board, pawn)}
+
+    assert offered == {"queen", "rook", "bishop", "horse"}
+
+
+def test_a_kind_the_catalogue_does_not_offer_is_refused_and_says_what_is_offered():
+    """A declaration and a catalogue that disagree is a configuration whose author should hear
+    about it, not one that silently promotes to something else.
+
+    Returns:
+        None
+    """
+    board = empty_board()
+    pawn = Pawn(1)
+    board.set_piece_at((6, 4), pawn)
+    rule = PromotionRule(promotion_kinds="dromedary")
+
+    with pytest.raises(ValueError, match="is not a piece kind this configuration offers"):
+        rule.available_moves(board, pawn)
+
+
+def test_a_declared_choice_is_honoured_over_the_catalogue():
+    """A configuration may still narrow the offer, and the piece it names has to exist.
+
+    Returns:
+        None
+    """
+    board = empty_board()
+    pawn = Pawn(1)
+    board.set_piece_at((6, 4), pawn)
+
+    rule = PromotionRule(promotion_kinds="rook, bishop")
+    offered = {move.promotion_piece.getType() for move in rule.available_moves(board, pawn)}
+
+    assert offered == {"rook", "bishop"}
 
 
 # --- bishop colour, which `notes/chess_rules.md` section 2 states as a rule of the game

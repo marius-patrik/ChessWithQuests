@@ -23,6 +23,12 @@ DIRECTIONS = [
 class King(Piece):
     """Moves exactly one square in any of the eight directions."""
 
+    #: A pawn does not become the piece that ends the game. Whether this kind is *royal* is a
+    #: rule — `royal_kind` is declared by a rule in this configuration's set, not by this file —
+    #: but a piece that ends the game is not something a promotion produces, and that is this
+    #: piece's own declaration to make.
+    promotion_target = False
+
     def __init__(self, color: Any, piece_type: str = "king"):
         """Initialize a King piece.
 
