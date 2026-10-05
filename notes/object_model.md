@@ -785,7 +785,9 @@ Recorded because the question is fair and the answer is not obvious.
     number, `max_steps`, in one piece.
   - **Approval**: recorded 2026-10-04 as a measured discrepancy between `PRD.md`
     FR-54 and `games/checkers/`, and closed the same day against FR-54 as written.
-    The maintainer has not approved the gap-closing itself; that is PR #161's to carry.
+    **approved by the maintainer on 2026-10-04**. The ruling covered all five gaps, the
+    one divergence kept on purpose (1.32.1 proposed rather than claimed), and leaving
+    `LimitedKingsRule` and `CaptureRule` declared and inert.
 
   ---
 
