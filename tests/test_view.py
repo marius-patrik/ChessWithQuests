@@ -464,12 +464,26 @@ def test_the_default_configuration_cannot_be_edited_through_the_form(tk_root):
     tk_root.update()
 
 
-def test_the_editor_refuses_to_save_when_it_is_told_why(tk_root):
-    """The guard does not depend on which door opened the editor."""
+def test_the_editor_refuses_to_save_when_it_is_told_why(tk_root, tmp_path):
+    """The guard does not depend on which door opened the editor.
+
+    The file the editor is handed is built under pytest's temporary directory rather than
+    wherever the suite was started from. It used to be `os.path.join(str(tk_root), ...)`, and
+    `str()` of a Tk root is `'.'`, so the editor was pointed at `./some_rule.py` and the test
+    created it: run from the repository root — which `pyproject.toml` configures — it wrote
+    into the repository, and the zero-byte file it left was committed rather than noticed.
+
+    Args:
+        tk_root: The session's Tk root.
+        tmp_path: Pytest's temporary directory, the only place this test writes.
+
+    Returns:
+        None
+    """
     from view.code_editor import CodeEditor
 
     build_for(tk_root)
-    target = os.path.join(str(tk_root), "some_rule.py")
+    target = str(tmp_path / "some_rule.py")
     with open(target, "w", encoding="utf-8") as handle:
         handle.write("")
 

@@ -550,6 +550,22 @@ names no draughts writer and no draughts notation (the chess leak gate's shape p
 game), and proves a copied configuration writes with its own writers, its own naming and its
 own board.
 
+**One test was writing into the directory it was run from, 2026-10-05.**
+`tests/test_view.py::test_the_editor_refuses_to_save_when_it_is_told_why` built its scratch
+file as `os.path.join(str(tk_root), "some_rule.py")`, and `str()` of a `tk.Tk()` root is
+`'.'`, so the path was `./some_rule.py` — the **current working directory**, not a
+directory at all. Run from the repository root, which `pyproject.toml` configures, it created
+`some_rule.py` there; the zero-byte file it left was **committed** in `2d9e3cb` alongside the
+test that made it. The test now writes under `tmp_path`, and the tracked artefact is deleted.
+
+A sweep of every filesystem write in `tests/` for the same habit — `write_text`, `open(...,
+"w")`, `mkdir`, `copytree`, `save_log` — found **one** such test, this one. Everything else
+roots its paths in a `tmp_path`-derived directory; `tests/test_checkers_export.py:530` is the
+one place a *relative* path is exercised at all, and it `monkeypatch.chdir(tmp_path)` first.
+That the habit was invisible is the point: nothing failed, because a file appearing in the
+working directory is not an assertion. Running the suite from an empty directory is what makes
+it visible — `ls -A` afterwards is the check, and it is empty.
+
 ---
 
 ## 6. Phase 1 — quick wins

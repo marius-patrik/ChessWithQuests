@@ -121,3 +121,8 @@ python -m properdocs build --strict
 
 `tkinter` needs a display. Tests stay within `tkinter.Tcl()` and `ttk.Style()`,
 which work without one, or run under `xvfb-run`.
+
+No test writes outside pytest's `tmp_path`, so the directory a suite is run from
+is left as it was found. `tests/test_view.py` used to build its scratch file from
+`str(tk_root)` — which is `'.'` — and left a zero-byte `some_rule.py` in whatever
+directory it was invoked from, the repository included.
