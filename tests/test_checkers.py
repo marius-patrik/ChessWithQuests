@@ -958,6 +958,9 @@ def test_nothing_in_this_game_can_be_in_check():
 #: The shipped king's file with its step length changed, so a copied configuration plays a
 #: different game from the original. The shipped king steps one square, which is WCDF English
 #: draughts; the copy below slides, which is the international king.
+#: Resolved through `games_root()` rather than as a relative path from the working directory,
+#: because this module is read at import time: a bare `games/...` path made the whole file
+#: uncollectable from anywhere but the repository root.
 FLYING_KING = (
     (pathlib.Path(games_root()) / "checkers" / "pieces" / "king.py")
     .read_text(encoding="utf-8")
