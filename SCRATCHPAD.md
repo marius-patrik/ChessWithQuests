@@ -497,8 +497,34 @@ written and is now stale; the correction lives in the code, not in this file.
 
 ## 5. Test strategy
 
-Current: every test in the suite is behavioural **except one**, named below.
-Target: behaviour-only, and the suite is one test short of it.
+Current: **every test in the suite is behavioural.** There is no exception and no name to
+give, because the one this sentence used to point at is gone — see "The survivor, now
+gone" below, which is that test's own entry in this section.
+Target: the same thing, and it is met.
+
+An earlier revision of these two lines read "every test in the suite is behavioural
+**except one**, named below" / "the suite is one test short of it", and named nothing
+anywhere in the section. It named
+`tests/test_docs_and_docstrings.py::test_generated_docs_directory_is_not_tracked` in an
+earlier revision still, and the paragraph recording its deletion has been in this section
+ever since — so the opening sentence was pointing at a test that the section itself
+recorded as removed. **Checked against the code rather than against the sentence:**
+`grep -rn 'AGENTS.md\|README.md\|\.github/workflows\|check-ignore'` over `tests/` returns
+nothing, and the two tests in `tests/test_docs_and_docstrings.py` that mention `notes/`
+assert against fixtures they own under `tmp_path`, not against this repository's files.
+`PRD.md` §3.2's two categories are both empty.
+
+**One judgement call, stated rather than assumed.** `tests/test_docs_and_docstrings.py`
+reads the project's own source and asserts that every module, class and public method has a
+docstring, and it loads `.github/scripts/docs_hooks.py` to assert what the documentation
+build emits. §3.2 forbids asserting on "rules, rule text, workflow YAML, notes content,
+README content or any other repository metadata", and none of those four is what these
+assert: a missing docstring is a property of the shipped source, and a navigation entry
+pointing at a deleted module is a build that `--strict` would fail. That file is the
+executable form of `AGENTS.md` rule 2, which is a requirement on the code. **If a
+reviewer disagrees, the four tests at \`test_docs_and_docstrings.py:46,75,91\` and
+\`:120` are the whole argument**, and deleting them would leave rule 2 policed by reading
+rather than by running.
 
 **The metadata assertions are gone, and PR 3 removed fifty-one of them.** At
 commit `4e7f270` collection went from **137 to 86**, so 51 collected tests were
@@ -531,7 +557,8 @@ Two consequences for anyone reading this section:
   of this file said the notes test "has been rewritten, not deleted" as though it
   were the only one; three others went with the files.
 
-**The survivor, now gone.** `tests/test_docs_and_docstrings.py::test_generated_docs_directory_is_not_tracked`
+**The survivor, and the one this section's opening sentence used to name — now gone.**
+`tests/test_docs_and_docstrings.py::test_generated_docs_directory_is_not_tracked`
 ran `git check-ignore --quiet .docs/index.md` and asserted the exit code is zero.
 It asserted that `.gitignore` ignores the generated docs directory — a property of
 the repository, not of the product — so by `PRD.md` §3.2's own definition it
