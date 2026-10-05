@@ -844,6 +844,7 @@ Recorded because the question is fair and the answer is not obvious.
     17 ask for *letter* and the metadata header; neither exists. This is a
     requirement not yet met rather than a departure from the diagram, and it is
     recorded here so it is not mistaken for a writer that exists and is wrong.
+    **Superseded by the paragraph below, 2026-10-05: there are two.**
   - **Mitigation**: none of this touches the engine or the diagram's classes. Each
     departure was a rule's configured value, a piece's declared step length, or an
     absent rule inside one configuration directory, which is exactly where
@@ -852,35 +853,30 @@ Recorded because the question is fair and the answer is not obvious.
     the abstraction holds. A variant that wants the international king changes one
     number, `max_steps`, in one piece.
   - **Approval**: recorded 2026-10-04 as a measured discrepancy between `PRD.md`
-FR-54 and `games/checkers/`, closed the same day against FR-54 as written, and
-      **approved by the maintainer on 2026-10-04**. The ruling covered all five gaps, the
-      one divergence kept on purpose (1.32.1 proposed rather than claimed), and leaving
-      `LimitedKingsRule` and `CaptureRule` declared and inert.
+    FR-54 and `games/checkers/`, closed the same day against FR-54 as written, and
+    **approved by the maintainer on 2026-10-04**. The ruling covered all five gaps,
+    the one divergence kept on purpose (1.32.1 proposed rather than claimed), and
+    leaving `LimitedKingsRule` and `CaptureRule` declared and inert.
 - **The exporters this section recorded as absent now exist.** As of 2026-10-05
   `games/checkers` declares **two**: `ExportLetter` (declared `Letter`, written
   in the square numbers one to thirty-two as `18-22` or `18x25`) and its own
   `ExportMetadata` (declared `Field-Field-Extra`), assembled by
-  `build_exporters()` in `games/checkers/__init__.py`. **What is still absent,
-  and still not a departure, is a position record**: English draughts has no FEN,
-  `ExportLetter` refuses `FEN` by name, and `games/checkers/export/__init__.py`
-  argues why from the absence of a halfmove clock and a castling right in this
-  game. No engine file changed to add either writer, which is FR-55 and the
-  acceptance criterion of issue #164 both at once.
-- **Mitigation**: none of this touches the engine or the diagram's classes. Each
-  departure is a rule's configured value or an absent rule inside one
-  configuration directory, which is exactly where `SCRATCHPAD.md` §2 says the
-  variation between games lives. Closing them is a change to
-  `games/checkers/` and to nothing else — which is the strongest evidence yet that
-  the abstraction holds.
-- **Approval**: recorded 2026-10-04 as a measured discrepancy between `PRD.md`
-    FR-54 and `games/checkers/`, closed the same day against FR-54 as written, and
-    **approved by the maintainer on 2026-10-04**. The ruling covered all five gaps, the
-    one divergence kept on purpose (1.32.1 proposed rather than claimed), and leaving
-    `LimitedKingsRule` and `CaptureRule` declared and inert.
+  `build_exporters()` in `games/checkers/__init__.py`. `python -m
+  chesswithquests --check` prints both. **What is still absent, and still not a
+  departure, is a position record**: English draughts has no FEN, `ExportLetter`
+  refuses `FEN` by name, and `games/checkers/export/__init__.py` argues why from
+  the absence of a halfmove clock and a castling right in this game. No engine file
+  changed to add either writer, which is FR-55 and the acceptance criterion of
+  issue #164 both at once. **This paragraph and the two above it were the same
+  fact recorded three times with three different answers**, and `SCRATCHPAD.md` §8
+  item 20 said "zero formats" while its item 25 said two — one commit, one
+  contradiction, five places in two files. The duplicates are kept here rather than
+  merged so the sequence is visible; only the numbers that were true are stated as
+  true.
 
-  ---
+---
 
-  ### 22. A Configuration Composes Its Quests Instead of Declaring Quest Files
+### 22. A Configuration Composes Its Quests Instead of Declaring Quest Files
 
 - **Date**: 2026-10-04
 - **Context**: `PRD.md` §6 states, as a fact about the layout, that
@@ -904,6 +900,15 @@ FR-54 and `games/checkers/`, closed the same day against FR-54 as written, and
   assignment specification.
 - **Approval**: **not approved.** Recorded 2026-10-04 as the correction of a claim
   that had no record behind it.
+- **This section was here all along, and read as if it were not.** §21's body is a
+  list, its whole block indented by two spaces, and this heading was indented with
+  it — so in the generated page it rendered as a paragraph *inside §21's list*, not as
+  a heading, and the numbering a reader saw went 21 → 23. `PRD.md` §6 and
+  `SCRATCHPAD.md` §2 both cite "§22" for this deviation, and the reference resolved to
+  nothing they could navigate to. **The content is unchanged and the number is not
+  renumbered** — `AGENTS.md` rule 13 was tombstoned rather than renumbered for exactly
+  this reason, since a silently repointed reference is worse than a gap. What changed
+  is the indentation, and with it the fact that the section is a section.
 
 ---
 
