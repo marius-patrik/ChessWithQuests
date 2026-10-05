@@ -546,3 +546,65 @@ def test_writing_one_game_twice_writes_that_game_twice():
     game.finish_game()
 
     assert game.transcript("PGN") == game.transcript("PGN")
+
+
+def test_a_writer_composes_its_rules_once_and_not_once_per_game(monkeypatch):
+    """Writing a game in a loop must not compose a rule set every time.
+
+    A rule set has to be the writer's own rather than the game's — the rules in force hold the
+    history of the game being played — so what cannot be shared is its *state*. Composing it per
+    call meant every game written paid for thirteen rules to answer questions a set it already
+    holds answers the same way; `Rule.reset` is what makes borrowing one safe, and this asserts
+    that the composition really is the configuration load's cost rather than the write's.
+
+    Returns:
+        None
+    """
+    from games.chess.rules import build_rules
+
+    composed = []
+    real = build_rules
+
+    def counting(notes=None):
+        """Compose the rules as usual, and remember that it happened.
+
+        Args:
+            notes: Ignored, and named so the caller's signature is honoured.
+
+        Returns:
+            list: Whatever the real composition returns.
+        """
+        composed.append(True)
+        return real(notes)
+
+    monkeypatch.setattr("games.chess.rules.build_rules", counting)
+    writer = ExportPGN()
+
+    writer.to_pgn([Move(algebraic_to_pos("e2"), algebraic_to_pos("e4"))])
+    writer.to_pgn([Move(algebraic_to_pos("e2"), algebraic_to_pos("e4"))])
+    writer.to_pgn([])
+
+    assert len(composed) == 1, f"the rules were composed {len(composed)} times"
+
+
+def test_the_rules_a_writer_borrows_carry_nothing_over_from_the_last_game():
+    """Borrowing a rule set is only safe if `reset` really does clear it.
+
+    The game written here castles on both sides and ends in a mate, so a set that remembered the
+    first write would refuse the second one's castling rights and answer the check questions
+    from a game that had already ended. Two identical records is the assertion; which rule would
+    have given it away does not matter.
+
+    Returns:
+        None
+    """
+    game = _play(OPERA_SQUARES)
+    moves = [event.move for event in game.move_events]
+
+    writer = ExportPGN()
+    first = writer.to_pgn(moves)
+    second = writer.to_pgn(moves)
+
+    assert writer.rules, "a writer that composes no rule set of its own has nothing to borrow"
+    assert first == second
+    assert "O-O-O" in first and "Rd8#" in first

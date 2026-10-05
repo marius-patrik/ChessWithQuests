@@ -1165,6 +1165,16 @@ earlier section registered.
      repetition has seen — and replaying through them would leave a finished game whose rules
      had forgotten it. It is a chess-configuration concern and it lives in
      `games/chess/export/`, which is where §7 places every other notation concern.
+     **The writer composes that copy once and every replay resets it** (`Rule.reset`, which
+     clears the state before seeding it — the call `GameManager.new_game` makes for the same
+     reason), so what must be fresh per game is the *state* and not the objects. It used to
+     compose per call, which meant every game written paid for thirteen rules to answer
+     questions about castling rights and check that a reset set answers identically; composing
+     them per call was noted as a cost and is no longer one. **The invalidation is the writer
+     itself**: a writer is composed by the configuration that offers it, so it is built once per
+     configuration load and discarded with it, and saving a rule file loads the configuration
+     again — which purges its modules and builds new writers with new rules. A set therefore
+     cannot outlive the files it came from, and no cache of its own is needed to say so.
   2. **A writer is handed the position the game began in.** `GameManager.opening_position` is
      an independent snapshot of the position a game was dealt, taken in `__init__` and again in
      `new_game` — the two moments a game is dealt, and the only two at which the board is a
