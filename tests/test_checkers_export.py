@@ -1,26 +1,39 @@
-"""The draughts letter notation: a game written as the numbers it is played in.
+"""The draughts header: who played, when, and how it ended.
 
-`games/checkers/export/letter.py` holds `ExportLetter`, which writes a move as the departure
-square, the rulebook's mark, and the arrival square — `18-22` for a quiet move and `18x25`
-for a capture (FMJD Annex 1 article 8.2). `NumberedNotation` beside it is the same naming
-offered to the window, so the move history and the transcript are one conversion rather than
-two that agree today.
+`games/checkers/export/metadata.py` holds `ExportMetadata`, which writes the game's own facts
+as `[Name "Value"]` pairs derived at write time — the two names from the users who played, the
+date from the day the game began, the result from the outcome the rules reached.
 
-**The record is not a position.** `ExportLetter` refuses `FEN` by name, and
-`games/checkers/export/__init__.py` argues why: the algebraic squares are chess's, the numbers
-are a coordinate system rather than a position grammar, and a draughts position has no
-halfmove clock or castling right to record. Answering `FEN` would be inventing a notation to
-satisfy a caller.
+**There is no placeholder string here and no `?`**, and that is the one place this header
+differs from chess's. A PGN header *is* the seven-tag roster and obliges a record to carry
+`Event`, `Site` and `Round` whatever the program knows, so `?` is PGN's own way of saying *not
+supplied* — a claim rather than an invention. No published roster obliges an English draughts
+record to carry a tag it has nothing for, so this writer leaves the field out instead. Its
+result is written the way a draughts score sheet writes it, `2-1`, `1-2` or `2-2`, rather than
+chess's `1-0`.
 
-**The numbering is the board's**, and the move history is drawn with it.
+**The naming of a square is the board's**, so every test here that mentions one uses
+`tests/test_draughts_perft.py`'s independent derivation of the same arrangement to say which
+square it means.
 """
+
+from datetime import datetime
+from typing import Any, List, Optional
 
 import pytest
 
 from games.checkers.board import build_board, square_number
 from games.checkers.export.letter import ExportLetter, NumberedNotation, move_text
+from games.checkers.export.metadata import (
+    BLACK_WON,
+    DRAWN,
+    TAG_ROSTER,
+    WHITE_WON,
+    ExportMetadata,
+)
 from model.game.manager import UnsupportedExportFormat
 from model.game.move import Move
+from model.game.rule import Result
 from tests.test_draughts_perft import coordinates, square_of
 
 # --- the numbering, which is the board's and the perft gate's at once
@@ -213,3 +226,165 @@ def test_the_draughts_naming_of_a_move_is_the_move_the_record_writes():
     assert notation.move_label(1, quiet) == "1. 18-22"
     assert notation.move_label(2, capture) == "2. 18x25"
     assert notation.square_name(coordinates(18)) == "18"
+
+
+class _Person:
+    """A stand-in for the `User` a `Player` is linked to."""
+
+    def __init__(self, name="", username=""):
+        """Record the two attributes a name is read from.
+
+        Args:
+            name: The person's name.
+            username: The person's handle.
+        """
+        self.name = name
+        self.username = username
+
+
+class _Side:
+    """A stand-in for the `Player` that owns one side of a game."""
+
+    def __init__(self, color, user=None):
+        """Record which side this is and who played it.
+
+        Args:
+            color: The side, as 1 or -1.
+            user: The person playing it, or None for nobody this program knows.
+        """
+        self.color = color
+        self.user = user
+
+    def getColor(self):
+        """Return the side.
+
+        Returns:
+            int: The side this player holds.
+        """
+        return self.color
+
+    def getUser(self):
+        """Return the person playing this side.
+
+        Returns:
+            _Person: The linked person, or None.
+        """
+        return self.user
+
+
+def _sides(white: Optional[str] = "Ada", black: Optional[str] = "Grace") -> List[Any]:
+    """Return the two sides of a game, with the names asked for.
+
+    Args:
+        white: The first side's name, or None for nobody this program knows.
+        black: The second side's name, or None for nobody this program knows.
+
+    Returns:
+        List[Any]: Two stand-in sides, in the order the manager holds them.
+    """
+    return [
+        _Side(1, _Person(name=white) if white else None),
+        _Side(-1, _Person(name=black) if black else None),
+    ]
+
+
+# --- the metadata header
+
+
+def test_the_header_says_who_played_when_and_how_the_game_ended():
+    """Every field comes from the game, and the order is the roster's.
+
+    Returns:
+        None
+    """
+    began = datetime(2026, 3, 4, 17, 30)
+    won = Result(kind="win", winner=1, reason="immobilised")
+    values = ExportMetadata().header_values(players=_sides(), result=won, date=began)
+
+    assert list(values) == list(TAG_ROSTER)
+    assert values["White"] == "Ada"
+    assert values["Black"] == "Grace"
+    assert values["Date"] == "2026.03.04"
+    assert values["Result"] == WHITE_WON
+
+
+def test_a_draughts_result_is_written_the_way_a_score_sheet_writes_it():
+    """Two points for a win and one each for a draw, which is not chess's `1-0`.
+
+    Returns:
+        None
+    """
+    won = Result(kind="win", winner=1, reason="immobilised")
+    lost = Result(kind="loss", winner=-1, reason="immobilised")
+    drawn = Result(kind="draw", reason="agreement")
+
+    assert ExportMetadata().header_values(result=won)["Result"] == "2-1"
+    assert ExportMetadata().header_values(result=lost)["Result"] == "1-2"
+    assert ExportMetadata().header_values(result=drawn)["Result"] == DRAWN
+    assert (WHITE_WON, BLACK_WON) == ("2-1", "1-2")
+
+
+def test_a_field_the_game_has_nothing_to_say_about_is_left_out():
+    """There is no `?` and no `Player 1`: a field with nothing behind it is not written.
+
+    This is the one place draughts' header differs from chess'. A PGN header is the seven-tag
+    roster and obliges a record to carry `Event`, `Site` and `Round` whatever the program
+    knows, so `?` is PGN's own way of saying *not supplied*. No published roster obliges a
+    draughts record to carry a tag it has nothing for, so this writer leaves it out.
+
+    Returns:
+        None
+    """
+    unfinished = ExportMetadata().header_values(players=_sides(black=None))
+
+    assert "Black" not in unfinished
+    assert "Result" not in unfinished
+    assert "?" not in ExportMetadata().to_field_field_extra()
+
+    for value in ExportMetadata().header_values(players=_sides()).values():
+        assert "Player 1" not in value
+        assert "Player 2" not in value
+        assert "ChessWithQuests" not in value
+
+
+def test_a_handle_is_used_when_a_player_has_no_name():
+    """A user is a person whether or not anybody filled in their name.
+
+    Returns:
+        None
+    """
+    sides = [_Side(1, _Person(username="ada")), _Side(-1, _Person(name="  ", username="grace"))]
+
+    assert ExportMetadata().header_values(players=sides)["Black"] == "grace"
+
+
+def test_a_declared_field_is_the_field_that_is_written():
+    """What a configuration knows about itself before the game is played is declared, and
+    wins over anything derived.
+
+    Returns:
+        None
+    """
+    writer = ExportMetadata({"Event": "Club Championship", "Variant": "flying kings"})
+    tags = writer.to_field_field_extra(players=_sides(), date=datetime(2026, 3, 4)).splitlines()
+    names = [line.split(" ")[0] for line in tags]
+
+    assert writer.get_header("Event") == "Club Championship"
+    assert names == ["[Date", "[White", "[Black", "[Event", "[Variant"]
+    assert tags[-2:] == ['[Event "Club Championship"]', '[Variant "flying kings"]']
+
+
+def test_the_header_writer_declares_the_notation_the_diagram_draws():
+    """*Field - Field - Extra* is the diagram's name for a header, and the declared spelling.
+
+    Returns:
+        None
+    """
+    writer = ExportMetadata()
+
+    assert writer.formats() == ("Field-Field-Extra",)
+    assert writer._writes("field-field-extra") is True
+    assert '[White "Ada"]' in writer.export("field-field-extra", players=_sides())
+
+    with pytest.raises(UnsupportedExportFormat, match="Field-Field-Extra"):
+        writer.export("Letter")
