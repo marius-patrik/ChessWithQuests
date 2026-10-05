@@ -266,6 +266,12 @@ def test_an_algebraic_record_marks_a_capture_a_promotion_and_a_castle():
 def test_a_queenside_castle_is_named_as_one_rather_than_as_a_king_move():
     """Two castlings and one spelling of each, or the record cannot be read back.
 
+    The move types written here are not the ones a rule produces — `castling_kingside` and
+    `castling_queenside` are spelled out rather than composed. That is deliberate, and it is
+    what these assert: the spelling of the move type is the last resort, for a move assembled by
+    hand that carries no rook. `test_a_castle_that_the_engine_itself_offered_tells_which_one_it_is`
+    covers what a played game writes, where the rook's square decides.
+
     Returns:
         None
     """
@@ -275,6 +281,50 @@ def test_a_queenside_castle_is_named_as_one_rather_than_as_a_king_move():
     ]
 
     assert ExportAlgebraic().to_algebraic(moves) == "1. O-O-O O-O"
+
+
+def test_a_castle_that_the_engine_itself_offered_tells_which_one_it_is():
+    """FR-44: `O-O` and `O-O-O`, told apart by the rook, in a game that plays both.
+
+    Both castles are the ones the rules in force offered, looked up through the validator
+    rather than built from two squares, so the moves here carry exactly what a played castle
+    carries. That is the whole point: `Move.move_type` is the single word `castling` for either
+    side, so a writer that read the name wrote `O-O` twice and the record could not be read back.
+    Asserting the two tokens differ is what stops that from being written again.
+
+    Returns:
+        None
+    """
+    from games.chess.pieces.king import King
+    from games.chess.pieces.rook import Rook
+    from games.chess.rules import build_rules
+    from model.game.validator import MoveValidator
+
+    board = Board((8, 8), setup_pieces=False)
+    for name, piece in (
+        ("e1", King(1)),
+        ("a1", Rook(1)),
+        ("h1", Rook(1)),
+        ("e8", King(-1)),
+        ("a8", Rook(-1)),
+        ("h8", Rook(-1)),
+    ):
+        board.set_piece_at(algebraic_to_pos(name), piece)
+
+    validator = MoveValidator(board, rules=build_rules())
+    played = []
+    for start, end in (((0, 4), (0, 6)), ((7, 4), (7, 2))):
+        move = validator.find_move(start, end, board)
+        assert move is not None, f"no castle was offered from {start} to {end}"
+        move.apply_to_board(board)
+        validator.notify_move_made(move, board)
+        played.append(move)
+
+    assert [move.move_type for move in played] == [
+        "castling",
+        "castling",
+    ], "the point of this test is that neither type names a side"
+    assert ExportAlgebraic().to_algebraic(played) == "1. O-O O-O-O"
 
 
 # --- the header record, which the diagram calls *Field - Field - Extra*

@@ -1643,6 +1643,13 @@ offers the two formats that mean something for it. **The engine-change half
     `build_exporters()` with the record first. It writes no position record, and
     `ExportLetter` refuses `FEN` by name — the absence is stated in
     `games/checkers/export/__init__.py` rather than probed for at runtime.
+    **The algebraic writer mis-read one thing of its own, 2026-10-05, and it is
+    closed here:** it chose `O-O` from the spelling of `Move.move_type`, which
+    is the single word `castling` for either castle, so a game that castled on both
+    sides was written `O-O` twice. The side is read from the rook's square, as
+    `pgn.py:_castle_of` already did, and
+    `tests/test_notation_and_writers.py::test_a_castle_that_the_engine_itself_offered_tells_which_one_it_is`
+    plays both castles and asserts the two tokens.
 26. No format switch and no format-name string exists in the engine. **True as of
     2026-10-05**, and asserted structurally: `tests/test_engine_holds_no_chess.py` walks
     every module under `model/` with the writer names and format names read from the chess

@@ -44,7 +44,10 @@ what the test actually reaches.
   and the engine keeps only the `ExportWriter` protocol. **PGN movetext is
   Standard Algebraic Notation** — read off a replay of the game, so the file that
   says which knight moved and the suffix that says check or mate are answers about
-  the position and not about the move. **FEN computes all six fields**: the
+  the position and not about the move. **The algebraic record tells the two
+  castles apart** — `O-O` from `O-O-O`, decided by the square the rook stands on,
+  since the engine's move type for a castle is the single word `castling` and says
+  no side. **FEN computes all six fields**: the
   castling rights from the two pieces and their flags, the en passant target from
   the last move, the halfmove clock as the plies since a capture or an advance
   (which is `FiftyMoveRule`'s own number — asserted equal, so there is no second

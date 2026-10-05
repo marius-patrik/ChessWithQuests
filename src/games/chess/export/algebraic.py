@@ -33,6 +33,11 @@ in this order: what moved, and where it went.
     O-O        and O-O-O are castling, which names no square at all.
     =<letter>  names the piece a promotion produced.
 
+Which of the two castles a castle is comes from the square the rook stands on. The engine's
+move type for either is the single word `castling`, so the side is not in the spelling to be
+read: FR-44 promises both `O-O` and `O-O-O`, and a record that writes one of them twice for a
+game that castled on both sides is not a record anybody can read back.
+
 So `1. e4 e5 2. Nf3 Nc6 3. exd5 O-O` is a record of the same game SAN would write, and it is a
 different record: there is no check or mate suffix and no disambiguation between two identical
 pieces that can both reach the square, because neither belongs to the algebraic notation and both
@@ -173,7 +178,16 @@ class ExportAlgebraic(ExportWriter):
             # `Move.move_type` is the engine's word for the move, and castling is the one kind
             # that names no square: it is a king's two-square walk and a rook's, and the record
             # says `O-O` rather than describing either.
+            #
+            # Which of the two it is comes from the rook's square, because the engine's type for
+            # either castle is the single word `castling` with no side in it — the spelling this
+            # used to test for was one no rule ever produced, so both castles were written `O-O`.
+            # `pgn.py:_castle_of` reads the same fact; the move type's own name is kept as the
+            # fallback for a hand-built move that carries no companion rook.
             if move.move_type.startswith("castling"):
+                rook_from = move.companion_start
+                if rook_from is not None:
+                    return "O-O" if rook_from[1] > move.end_pos[1] else "O-O-O"
                 return "O-O-O" if "queen" in move.move_type else "O-O"
             capture = "x" if move.captured_piece is not None else ""
             written = f"{self._piece_letter(move.piece)}{capture}{pos_to_algebraic(move.end_pos)}"
