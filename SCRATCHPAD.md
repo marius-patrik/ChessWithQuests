@@ -313,8 +313,14 @@ this paragraph is the decision, so that re-check does not have to invent one.
 Several members this section once called dead are alive and must not be touched:
 `Board.dimensions` (`board.py:103,111`), `Board.captured_white`
 (`board.py:57,176`, read by `move.py:165,220`), `Move.promotion_piece`
-(`move.py:93,185`), `ExportWriter.field`, `GameManager.players` and
-`WindowController.title`, `width` and `height`.
+(`move.py:93,185`), `GameManager.players` and `WindowController.title`, `width`
+and `height`. **`ExportWriter.field` is no longer on that list and never was a
+member.** It was `self.field: str = ""` in `__init__` — an instance attribute, not
+a method, and written once and read by nothing — and `3f04e25` deleted it with
+the rest of the dead state that moved the chess writers into their own
+configuration. \`grep -n "field" model/misc/export_writers.py\` finds no such
+member. A record that told a future reader not to delete a name that was already
+gone is the same defect as one that names a live member as dead.
 
 **`Move.captured_piece` is declared, documented and used.** It is a constructor
 parameter and instance attribute of `Move` (`model/game/move.py:67` and `:47`),
@@ -382,7 +388,7 @@ said thirteen, two, three and three.
 | 1 | PRD + SCRATCHPAD | **delivered** | main stack |
 | 2 | Flatten `src/` to root, generated docs pipeline | **delivered** | main stack |
 | 3 | Delete metadata-only tests, close docstring gaps, drop unused aliases | **delivered** — 51 collected tests removed, not 62; §5 | main stack |
-| 4 | CI: native self-contained workflows, remove the agent workflows only | **delivered, outside the main stack** — on a branch 24 commits behind the tip; re-scoped on the main stack by #167 | `feature/native-ci-workflows` |
+| 4 | CI: native self-contained workflows, remove the agent workflows only | **delivered, outside this stack** — on a branch **101 commits behind the tip**, counted with `git rev-list --count feature/native-ci-workflows..HEAD` at `d6ceede`; re-scoped on this stack by #167 | `feature/native-ci-workflows` |
 | 5 | Governance rules: `AGENTS.md` 1, 2, 4, 7, 9, 10, 11, 12, **13** | **delivered, outside the main stack** — on top of PR 4. Rule 13 is withdrawn on the main stack instead, tombstoned, by #167 | `feature/governance-rules` |
 | 6 | Packaging, entry point, git-ignored log directory | **delivered** — including both configurations in the package list (§4.1) | main stack |
 | 7 | README honesty | **delivered** in the main stack by commit `77d978c`. The stale branch rewrite is superseded and is not to be merged | main stack |
@@ -395,7 +401,7 @@ said thirteen, two, three and three.
 | 14 | Wire the orphan subsystems | **delivered** | main stack |
 | 15 | View layer with the game-start modal | **delivered** — `BoardView`, `PlayerGameView`, `PlayerView`, `QuestCard`, `QuestList`, `StartModal` | main stack |
 | 16 | Settings surface | **delivered** — the five sections, the corner configuration selector with create/rename/delete/duplicate, and a code editor that validates before the code joins a configuration | main stack |
-| 17 | `games/checkers/` | **partial** — the board, two piece kinds, eight rules, the clock and four quests, held to the published perft counts, and **two writers**: `ExportLetter` and its own `ExportMetadata`, declared `Letter` and `Field-Field-Extra` by `build_exporters()`. There is no position record and none was invented. The game it plays is flying-kings, not WCDF English draughts; `notes/object_model.md` §21 | main stack |
+| 17 | `games/checkers/` | **partial** — the board, two piece kinds, eight rules, the clock and four quests, held to the published perft counts, and **two writers**: `ExportLetter` and its own `ExportMetadata`, declared `Letter` and `Field-Field-Extra` by `build_exporters()`. There is no position record and none was invented. **The game it plays is now WCDF English draughts** — the king steps one square, the forty-move count is 80 plies, and threefold repetition exists, since 2026-10-04; `notes/object_model.md` §21. This row said it was still flying-kings, which was true until then and was not corrected when it stopped being true | main stack |
 | 18 | Export generalised | **delivered** — one writer class per format in `games/chess/export/`, the format switch and the `ChessNotationWriter` class deleted, the engine holding only the `ExportWriter` protocol and `tests/test_engine_holds_no_chess.py` walking `model/` to keep it that way. The item's other half closed 2026-10-05: *letter* is `ExportAlgebraic`, and the header is `ExportMetadata` supplied through `Configuration.metadata` | this branch |
 | 19 | Export formats: PGN, FEN, field-field-extra, stenographic | **delivered 2026-10-05** — all five formats have a writer, the header is derived from the game with no placeholder strings, the movetext is real SAN read off a replay, FEN computes all six fields, and the coordinate record is compressed with a standard library codec and reads back. See §4.1 and `notes/object_model.md` §27 | this branch |
 | 20 | Czech aliases and remaining dead code | **partial** — all fifteen aliases ship, `Knight` is canonical, `Tower`, `Horse` and `Controller` are gone. Absent: the `controller/controller.py` → `game_manager_controller.py` rename, and the dead-code re-check | main stack |
@@ -413,20 +419,36 @@ the main stack after the plan was written, and each is a real pull request:
 | The knight rename | `Horse` → `Knight`, with `Kun` as the alias and `games/chess/pieces/knight.py` as the file | main stack |
 | The checkers configuration | `games/checkers/` as its own directory | main stack |
 
-**`feature/native-ci-workflows` is not on the main stack**, and neither is
+**`feature/native-ci-workflows` is not on this stack**, and neither is
 `feature/governance-rules`, which is built on it. Planned PR 4 and PR 5 therefore
 exist only there, and any statement in this file about PR 4 or PR 5 describes work
-a reader of the main stack cannot see. Both branches forked from `f4e1487` and are
-22 to 25 commits behind this stack, so neither can be merged without a rebase —
-`feature/native-ci-workflows` still carries a `src/` tree.
+a reader of this stack cannot see.
+
+**Measured, not inherited.** `git rev-list --count <branch>..HEAD` at `d6ceede`, the
+tip when this paragraph was written: **101** for `feature/native-ci-workflows` and
+**101** for `feature/governance-rules`, so neither can be merged without a rebase.
+`git merge-base <branch> HEAD` puts both at `7190f17`, which is the commit after
+`f4e1487` that removed the unused aliases — so "forked from `f4e1487`" was true
+of an ancestor and wrong as a fork point, and the twenty-two-to-twenty-five figure
+was the distance *forward* from `f4e1487` to each branch, read as though it were
+the distance behind. **Re-run the count rather than trusting it:** it grows with
+every commit on this stack, which is exactly why it is quoted against a named one.
+
+**`feature/native-ci-workflows` does not carry a `src/` tree.**
+`git ls-tree -r --name-only feature/native-ci-workflows | grep -c '^src/'` prints
+**0**. An earlier revision of this file said it still did, which was true when
+written and false from the flattening onwards: `4f0638d` moved the model layer to
+the repository root and is an ancestor of the branch's own merge base, so the
+`src/` tree this paragraph warned about could not have been on it.
 
 **`feature/readme-honesty` is superseded and is not to be merged.** Planned PR 7
-was delivered in the main stack by commit `77d978c`; that rewrite states what the
-product does today, and the branch forked from `f4e1487`, twenty-two commits
-before this stack, predates the view layer, `games/`, the packaging and the
-settings surface. Every capability claim in it is false. An earlier revision of
-this file said PR 7 was "not started" and that the branch "must be superseded, not
-merged" as outstanding work; the supersession has happened.
+was delivered in this stack by commit `77d978c`; that rewrite states what the
+product does today, and the branch's merge base with this stack is `623106e`,
+**103** commits behind at `d6ceede` by the same command. It predates the view
+layer, `games/`, the packaging and the settings surface. Every capability claim
+in it is false. An earlier revision of this file said PR 7 was "not started" and
+that the branch "must be superseded, not merged" as outstanding work; the
+supersession has happened.
 
 **The plan issues' labels lag their contents.** #127 (PR 1) and #129 are labelled
 `In Progress`; #126 (PR 4) and #124 (PR 5) carry no status label at all, though
