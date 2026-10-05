@@ -168,7 +168,7 @@ class SettingsDialog:
             self.message.set(f"{name} could not be loaded: {error}")
             self.choice.set(self.configuration.name)
             return None
-        self.message.set("")
+        self.message.set(_not_in_force(self.configuration))
         self._rebuild()
         return self.configuration
 
@@ -192,7 +192,7 @@ class SettingsDialog:
             return None
         self.selector.configure(values=self.configuration_names())
         self.choice.set(name)
-        self.message.set(f"{name} created from {source}.")
+        self.message.set(f"{name} created from {source}.{_not_in_force(self.configuration)}")
         self._rebuild()
         return self.configuration
 
@@ -579,9 +579,48 @@ class SettingsDialog:
                 if self.configuration.is_default
                 else None
             ),
+            on_saved=self._source_saved,
         )
         self.editors_open.append(editor)
         return editor
+
+    def _source_saved(self, path: str) -> None:
+        """Load the configuration again now that a file in one of its sections has changed.
+
+        A rule or quest file is not a field: saving one changes what the configuration *is*,
+        so the form's copy of it is stale from that moment. Loading again is what turns "I
+        saved a rule" into "my rule is in force", which is the one thing a player cannot
+        otherwise tell — a file written and not composed looks exactly like a file written and
+        composed, and the editor's own verdict is about the code rather than about the
+        configuration.
+
+        Anything the player has typed but not saved goes the way it goes when they pick another
+        configuration from the selector, which is the same trade this form has already made.
+
+        Args:
+            path: The file that was written.
+
+        Returns:
+            None
+        """
+        name = self.configuration.name
+        try:
+            reloaded = load_configuration(name, root=self.root)
+        except (OSError, ValueError) as error:
+            # A file that cannot be composed refuses the load, and the refusal names the file.
+            # A player who has just been told that is told which of their files it is.
+            self.message.set(
+                f"{os.path.basename(path)} was written but {name} will not load: {error}"
+            )
+            return
+        self.configuration = reloaded
+        self._rebuild()
+        section = os.path.basename(os.path.dirname(path))
+        self.message.set(
+            f"{os.path.basename(path)} is part of {name}: "
+            f"{len(reloaded.rules)} rules and {len(reloaded.quests)} quests are in force."
+            f"{_not_in_force(reloaded, section)}"
+        )
 
     # --- saving
 
@@ -728,6 +767,35 @@ class SettingsDialog:
         """
         self.window.wait_window()
         return None
+
+
+def _not_in_force(configuration: Configuration, section: Optional[str] = None) -> str:
+    """Return what the form says about the files in a section that join nothing.
+
+    A file in a composed section that declares no entry contributes nothing, which is what a
+    helper module is for and what a file the player has not finished looks like. Nothing
+    about the two is distinguishable from the form, so each is named rather than one of them
+    being quietly kept.
+
+    Args:
+        configuration: The configuration just loaded.
+        section: The section directory to report on, for instance `rules`. Defaults to None,
+            which reports every section.
+
+    Returns:
+        str: One clause naming each file and saying it is not in force, prefixed by "Not in
+        force:", or "" when every file in the section is in force. Paths are relative to the
+        configuration directory, which is where a player looks for the file.
+    """
+    prefix = os.path.join(configuration.path, section or "", "")
+    reported = [
+        note[len(configuration.path) + len(os.sep) :]
+        for note in configuration.uncomposed
+        if note.startswith(prefix)
+    ]
+    if not reported:
+        return ""
+    return " Not in force: " + "; ".join(reported)
 
 
 def _apply(subject: Any, fields: List[Field], values: Dict[str, Any], section: str) -> None:

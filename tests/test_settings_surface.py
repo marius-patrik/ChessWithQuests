@@ -1516,6 +1516,75 @@ def test_the_rules_section_offers_the_editor_for_every_rule_it_shows(tk_root, ga
     dialog.cancel()
 
 
+def test_saving_a_rule_file_tells_the_player_it_is_in_force(tk_root, games_dir):
+    """The gap in the flow: the editor's verdict is about the code, not about the game.
+
+    A rule file used to be written, checked, reported sound — and joined nothing, because
+    nothing composed it. So the form now loads the configuration again once a file in one of
+    its sections has been written and says what is in force, which is the one thing a player
+    cannot work out from the editor. The rules the section composed are on the tab it
+    rebuilds, so the claim in the message is visible rather than merely asserted.
+
+    Args:
+        tk_root: The session's Tk root.
+        games_dir: A throwaway `games/` root holding the default configuration.
+
+    Returns:
+        None
+    """
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    dialog = SettingsDialog(tk_root, variant, root=games_dir)
+    tk_root.update()
+
+    path = dialog.create_source("no_pawn_moves", "rule")
+    editor = dialog.editors_open[-1]
+    editor.text.insert("1.0", GOOD_RULE)
+
+    assert editor.save() == path
+    tk_root.update()
+
+    assert "no_pawn_moves.py is part of house" in dialog.message.get()
+    assert f"{len(variant.rules) + 1} rules" in dialog.message.get()
+    labels = [rule.label for rule in dialog.configuration.rules]
+    assert "Stay on board" in labels
+    dialog.cancel()
+
+
+def test_a_rule_file_that_declares_nothing_is_named_in_the_form(tk_root, games_dir):
+    """A file the player started and did not finish is not the same as a helper, and only the
+    name says so — so the form says the name.
+
+    `house/rules/attacks.py` is a helper three rule files share and declares no rule, and a
+    half-written `zz_notes.py` looks exactly like it. The editor will not save such a file —
+    its own check refuses one — so the only way to have one is to write it outside the product,
+    which is why the report belongs on the load rather than on the save.
+
+    Args:
+        tk_root: The session's Tk root.
+        games_dir: A throwaway `games/` root holding the default configuration.
+
+    Returns:
+        None
+    """
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    dialog = SettingsDialog(tk_root, variant, root=games_dir)
+    tk_root.update()
+    target = os.path.join(variant.path, "rules", "zz_notes.py")
+    pathlib.Path(target).write_text(
+        '"""Not finished."""\n\n\ndef helper():\n    return 1\n', "utf-8"
+    )
+
+    copied = dialog.add_configuration()
+    tk_root.update()
+
+    assert copied.name == "house_copy"
+    assert "Not in force:" in dialog.message.get()
+    assert "rules/zz_notes.py declares no Rule" in dialog.message.get()
+    assert "rules/attacks.py declares no Rule" in dialog.message.get()
+    assert len(copied.rules) == len(variant.rules)
+    dialog.cancel()
+
+
 def test_the_quests_section_says_so_when_a_quest_is_declared_by_the_engine(tk_root, games_dir):
     """FR-33 asks for an editor in the Quests section, and chess's quests are the engine's.
 

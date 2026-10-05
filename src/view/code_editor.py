@@ -204,9 +204,11 @@ class CodeEditor:
 def editable_sources(configuration_path: str, section: str) -> List[str]:
     """Return the files in a configuration section that a player may edit.
 
-    A section holds the modules the configuration brought with it. `__init__.py` is left out
-    of nothing — it is a real file and a player may edit it — but a module that declares no
-    rule is not somewhere the editor should offer to change a rule.
+    A section holds the modules the configuration brought with it, and `compose_section`
+    composes that same set — this is the same directory read from the other side, for the
+    form rather than for the configuration. `__init__.py` is a real file and a player may edit
+    it, but a module that declares no rule is not somewhere the editor should offer to change a
+    rule.
 
     Args:
         configuration_path: The configuration's directory.
