@@ -1,15 +1,30 @@
-"""What the installation reports, and what each game's own writers write it with.
+"""What a draughts game is written as, and what it is not.
 
-`chesswithquests.offered_formats` asks each shipped configuration what it offers, so
-`--check` says more than that a directory exists. The last test here is about the other half:
-a copy of `games/checkers/` writes with the copy's writers, its own naming and its own board,
-and the module a class came from is the proof.
+`games/checkers/export/` holds the two writers this game has: the letter notation, which
+writes moves as the square numbers draughts uses, and the metadata header, which says who
+played, when, and how the game ended. Which notations exist is the configuration's answer, so
+these tests hold each writer to the record it writes and to the rule that a writer answers the
+notations it declares and refuses the rest.
 
-**Which notations exist is the configuration's answer**, so a report of the installation
-reports it. A game that exports nothing is a fact about that game and the report says so.
+**The numbering is the board's**, counted from the squares the game is played on, and every
+test here that names a square pins it against `tests/test_draughts_perft.py`'s independent
+derivation of the same arrangement. Two derivations asserted equal are one numbering; one
+asserted equal to itself is nothing.
+
+**The refusal of `FEN` is a claim about the game, not a gap.** There is no position record
+for English draughts — the numbers name squares rather than describing a position, and a
+draughts position has no halfmove clock or castling right to record — so a writer answering
+`FEN` would be inventing a notation to satisfy a caller. `games/checkers/export/__init__.py`
+gives the argument in full.
+
+**The last test is about the part nobody looks at until it breaks**: the engine naming a
+draughts writer or a draughts notation at all, which is the same shape as the chess gate and is
+the only thing that keeps the seam the seam.
 """
 
+import ast
 import pathlib
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, List, Optional
@@ -566,3 +581,101 @@ def test_the_installation_report_says_what_each_game_can_export():
 
     assert "chess exports: PGN" in report
     assert "checkers exports: Letter, Field-Field-Extra" in report
+
+
+def test_the_engine_names_no_draughts_writer_and_no_draughts_notation():
+    """The chess leak gate's own shape, pointed at this game.
+
+    The vocabulary is read at run time — the writer class names `games/checkers/export`
+    defines and the notations `load_configuration("checkers")` offers — so the gate cannot
+    drift from the code it guards. Docstrings are exempt, because a module is allowed to *talk*
+    about a notation in order to say the engine names none, and declared field names are exempt
+    because a name a module hands to `Field(...)` is that field's own.
+
+    Returns:
+        None
+    """
+    import model
+
+    def checkers_vocabulary():
+        """Return every draughts writer name and notation the configuration declares.
+
+        Returns:
+            frozenset: Class names and format names, in lower case.
+        """
+        names = set()
+        root = pathlib.Path(__file__).resolve().parents[1] / "games" / "checkers" / "export"
+        for path in sorted(root.rglob("*.py")):
+            if "__pycache__" in path.parts:
+                continue
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if isinstance(node, ast.ClassDef):
+                    names.add(node.name.lower())
+        for writer in load_configuration("checkers").exporters:
+            names |= {str(name).lower() for name in writer.formats()}
+        return frozenset(names)
+
+    def engine_modules():
+        """Yield every module's path under `model/`.
+
+        Returns:
+            list: Each module's path, `__pycache__` ignored.
+        """
+        root = pathlib.Path(model.__file__).parent
+        return [path for path in sorted(root.rglob("*.py")) if "__pycache__" not in path.parts]
+
+    def code_without_docstrings(path):
+        """Return a module's source with every docstring removed.
+
+        Args:
+            path: The module's path.
+
+        Returns:
+            str: The module unparsed without its docstrings.
+        """
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef)):
+                continue
+            body = getattr(node, "body", [])
+            if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+                if isinstance(body[0].value.value, str):
+                    body[0] = ast.copy_location(ast.Pass(), body[0])
+        return ast.unparse(tree)
+
+    def declared_field_names(path):
+        """Return the field names a module declares for itself.
+
+        Args:
+            path: The module's path.
+
+        Returns:
+            frozenset: Every name it hands to `Field(...)`, in lower case.
+        """
+        names = set()
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+                continue
+            if node.func.id != "Field" or not node.args:
+                continue
+            first = node.args[0]
+            if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                names.add(first.value.lower())
+        return frozenset(names)
+
+    vocabulary = checkers_vocabulary()
+    modules = engine_modules()
+    assert vocabulary, "the gate's vocabulary is empty, so it would match nothing and pass"
+    assert modules
+
+    offenders = []
+    for path in modules:
+        declared = declared_field_names(path)
+        source = code_without_docstrings(path).lower()
+        for name in sorted(vocabulary):
+            if name in declared:
+                continue
+            if re.search(rf"\b{re.escape(name)}\b", source):
+                offenders.append(f"{path.name}: {name}")
+
+    assert offenders == [], f"the engine names a draughts writer or notation: {offenders}"
