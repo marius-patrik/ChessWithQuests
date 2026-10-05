@@ -169,14 +169,30 @@ games/chess/
   clocks/       clock configuration
 ```
 
+**A section is composed out of the files it holds.** `rules/` and `quests/` are
+composed from their own modules: `build_rules()` and `build_quests()` are declared
+functions that hand the section's package to `compose_section`, which builds one
+instance of every `Rule` or `Quest` subclass those modules declare. A file
+dropped into `rules/` is therefore in force because it is a file in `rules/` —
+there is no list to edit. The order is the section's own module first and then the
+remaining files by name, because rule order is the tie-break when two rules propose
+an outcome at once. `pieces/`, `clocks/` and `export/` are composed by hand,
+because what belongs in them is a choice rather than an entry per file. A file in a
+composed section that cannot be imported refuses the configuration's loading and
+names itself; one that declares no rule or quest is left out and named in the
+settings form, because a section legitimately holds helper modules beside its
+entries.
+
 **`quests/` holds no quest files in either shipped configuration.** The twenty
 quest classes live in `model/game/quests.py` and a configuration instantiates them:
 `build_quests()` is declared in `games/chess/__init__.py`, and
-`games/chess/quests/__init__.py` is a single docstring line and nothing else.
-`games/checkers/quests/__init__.py` declares its own `build_quests()` and its
-directory holds no quest file either. This is a recorded departure from the line
-above, in `notes/object_model.md` §22, and it is the reason the line above is
-stated here rather than quietly dropped.
+`games/chess/quests/__init__.py` composes a directory that is empty.
+`games/checkers/quests/__init__.py` composes its own directory and declares four
+quests of its own, and its directory holds no quest file either. This is a recorded
+departure from the line above, in `notes/object_model.md` §22, and it is the reason
+the line above is stated here rather than quietly dropped. The *directory* is
+composed, so a quest written there joins the configuration without being named
+anywhere; what the two configurations ship in it is still nothing.
 
 Everything in a configuration is a Python file. It could not all be data,
 because rules and quests carry logic, and one language avoids a format split
@@ -252,8 +268,8 @@ no `Clock` class.** `notes/object_model.md` §13 registers one as the intention 
 | FR-30 | A selector in the corner chooses **which configuration is being edited**. It appears in settings only. |
 | FR-31 | Below it are sections, one per configurable surface: **Board, Pieces, Rules, Quests, Clocks**. |
 | FR-32 | **All data-based configuration is form-exposed**, assembled from each type's declaration by one renderer. |
-| FR-33 | The Rules and Quests sections offer a code editor for authoring logic, which writes into the configuration directory. |
-| FR-34 | The editor validates before the code may join the configuration, reporting errors in the editor rather than at game start. |
+| FR-33 | The Rules and Quests sections offer a code editor for authoring logic, which writes into the configuration directory. **A file written there joins the configuration**: each of the two sections is composed out of the files it holds, so the rule or quest in it is in force the next time that configuration is loaded, with no list to edit. The form loads the configuration again after a save and says what is in force. |
+| FR-34 | The editor validates before the code may join the configuration, reporting errors in the editor rather than at game start. **A file in a composed section that cannot be imported refuses the configuration's loading and names itself**, so a file edited outside the product cannot join the game silently; a file that declares no rule or quest is left out rather than refused, and the settings form names it. |
 | FR-35 | Settings can be saved, reset to the shipped defaults, or cancelled. |
 
 ### 7.6 Game start and view

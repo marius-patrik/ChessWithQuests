@@ -31,7 +31,10 @@ Breaking any of these is a rejected change regardless of quality.
    8×8, no `getType() == "king"`. Chess is a *configuration*, not the engine.
 5. **Rules and quests are the only code-driven layers**, and both use the same
    pattern: a parent class with subclasses, composed explicitly, never a
-   registry. Everything else is data.
+   registry. Everything else is data. Composition is explicit as well: a
+   configuration's `rules/` and `quests/` sections compose the files their own
+   directory holds, so the tree is the list and a rule is in force for having
+   been written.
 6. **Every change arrives as a pull request.** Nothing lands unreviewed. Do not
    merge — that is the maintainer's decision alone.
 7. **Commit messages are Conventional Commits**, scoped by area: `area:model`,
@@ -118,21 +121,42 @@ naming something that does not exist.
 data: rules and quests carry logic, so one language avoids a format split and
 keeps the tree readable.
 
+**A section is composed out of the files it holds.** `CONFIGURATION_SECTIONS` in
+`model/game/configuration.py` declares which directories a configuration has and
+what each one composes, and `compose_section` builds one instance of every `Rule`
+or `Quest` subclass the modules in that directory declare. `build_rules()` and
+`build_quests()` stay declared functions in each configuration — they hand their
+own section's package to the composer — and there is no registry, no plugin loader
+and no scan of anything outside the section. So a file written into `rules/` is in
+force because it is a file in `rules/`, which is what `PRD.md` FR-33 requires and
+what the code editor's "No problems found" used to promise and the product did not
+keep (§4.1). Order is the section's own module first and the remaining files by
+name, because rule order is the tie-break when two rules propose an outcome at
+once. A file that cannot be imported refuses the load and names itself; one that
+declares nothing is left out and named in `Configuration.uncomposed`, because
+`rules/attacks.py` is a helper three rule files share and refusing the load over it
+would stop the game starting. `pieces/`, `clocks/` and `export/` are composed by
+hand and say so in the same declaration.
+
 **A configuration is a folder that can be copied.** `cp -r games/chess
 games/house`, change what differs, and a variant exists. `cp -r games/checkers
 games/house` works the same way. Duplication is the extension mechanism. One game
 runs one board. `model/game/configuration.py` loads a loaded directory as a
-package rooted at itself, so a copy composes its own board, pieces, rules, clocks
-and quests rather than the original's.
+package rooted at itself, and composes a section as the package it is handed
+rather than as a name looked up somewhere, so a copy composes its own board,
+pieces, rules, clocks and quests rather than the original's.
 
 **One declared deviation from "one file per entry": quests.** `PRD.md` §6 promises
 `quests/  one file per quest: logic and parameters`. Neither configuration keeps
-quest files there. `games/chess/quests/__init__.py` is a single docstring line and
-nothing else, and `games/chess/__init__.py` declares `build_quests()`. `games/checkers/quests/__init__.py`
-declares its own `build_quests()`. The twenty quest classes live in
+quest files there. `games/chess/quests/` holds an `__init__.py` and nothing else,
+and `games/chess/__init__.py` instantiates the engine's twenty quest classes as
+`build_quests()`. `games/checkers/quests/__init__.py` composes its own directory —
+empty — and instantiates four of them itself. The quest classes live in
 `model/game/quests.py`, which a configuration instantiates, because a
-configuration ships a handful of quests rather than the whole library. This is
-recorded as a deviation in `notes/object_model.md` §22 and annotated in `PRD.md` §6.
+configuration ships a handful of quests rather than the whole library. The
+*directory* is composed, so a quest written there joins the configuration; what the
+two configurations ship in it is still nothing. This is recorded as a deviation in
+`notes/object_model.md` §22 and annotated in `PRD.md` §6.
 
 ---
 
@@ -201,6 +225,7 @@ each of them.
 | **PGN movetext is not SAN.** `ExportPGN.to_pgn` writes each move's destination square. The header half of that row is closed: it no longer falls back to anything, because a writer handed a game and nothing else derives the header from that game | `games/chess/export/pgn.py` |
 | **Stenographic is a coordinate pair, not a stenographic record.** `ExportStenographic.to_stenographic` joins start and end squares per move, with no compression | `games/chess/export/stenographic.py` |
 | **The draughts letter record does not write the route of a capture chain.** `ExportLetter` writes the departure square and the arrival square, which is the rulebook's own convention (FMJD Annex 1 article 8.2), but a chain of three jumps that arrives on 30 by one route and a different chain that arrives on 30 by another read alike. The disambiguating long form — every square landed on, `18x25x30` — is what `PDN` prescribes for exactly this and is **not written**. Recorded rather than fixed: a chain is one move in this engine, so the record is correct about what was played and silent about how | `games/checkers/export/letter.py`, `move_text` |
+| ~~**A rule or quest file written into a configuration joined nothing.**~~ **Closed 2026-10-05.** `view/settings_dialog.py` wrote `rules/<stem>.py`, the editor validated it and reported no problems, and `games/chess/rules/__init__.py` held a literal tuple of the thirteen rules chess ships — so the file was written, checked, and never composed. No error, no warning, no rule. `rules/` and `quests/` are composed out of their own files now, in file-name order, and a file that cannot be imported refuses the load by name | `model/game/configuration.py` `compose_section`, `games/chess/rules/__init__.py`, `tests/test_section_composition.py` |
 | ~~**`ChessNotationWriter` is still an engine class.**~~ **Closed 2026-10-05.** The class is deleted, the writers are `games/chess/export/`'s, and `build_exporters()` declares them in order | `notes/object_model.md` §7 |
 | ~~**`ChessNotationWriter.export` is unexercised.**~~ **Closed 2026-10-05.** There is no format switch left to exercise; each writer's `export` is called in `tests/test_notation_and_writers.py`, in any spelling, and refuses a notation it does not write | `tests/test_notation_and_writers.py` |
 | ~~**Two of the diagram's five formats have no writer at all.**~~ **Closed 2026-10-05.** *Letter* is `ExportAlgebraic` in `games/chess/export/algebraic.py`, declaring `Algebraic`, and *Field - Field - Extra* is `ExportMetadata` in `games/chess/export/metadata.py`. All five of the diagram's formats are one writer each | `PRD.md` FR-44, FR-48; `notes/reference_diagram.md` |
@@ -1675,7 +1700,7 @@ reason is what matters.
 | 11 | Five rule hooks | Four cover game logic exhaustively — turn-based logic can only forbid a move or end the game — plus `status` for display. Check is not a game end, so folding it into `outcome` would have blurred the semantics |
 | 12 | `Result` carries a precedence | Without it, two rules firing at once is ambiguous, and "any conceivable logic" collapses on the first collision |
 | 13 | A rule's `value` persists, its `state` resets | Otherwise saving a configuration would save a game's history |
-| 14 | No `define_ruleset` and no registry | A configuration is composed explicitly, so the rule type set is closed and greppable. A registry adds surface for nothing |
+| 14 | No `define_ruleset` and no registry | A configuration is composed explicitly, so the rule type set is closed and greppable. A registry adds surface for nothing. **Amended 2026-10-05:** the closed, greppable set is the files in `rules/`, composed by `compose_section` rather than named in a tuple — see `notes/object_model.md` §25 |
 | 15 | No `CustomBoard`, `CustomPiece` or `CustomQuest` types | Board, piece and quest customisation is already complete through data; these classes would wrap data that is already custom and exist only for symmetry |
 | 16 | No condition class for quests | Two hierarchies would express the same thing. The pieces pattern settles it: `Pawn(Piece)` carries its own logic, with no strategy object underneath |
 | 17 | The whole configuration is one file tree in Python | It cannot all be data — rules and quests carry logic — and one language avoids a format split and the `tomllib` availability problem on Python 3.10 |

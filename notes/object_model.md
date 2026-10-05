@@ -155,9 +155,13 @@ user request adds it.
 - **Deliberately not added**: a registration function such as `define_ruleset`, a
   rule registry, or `CustomBoard` / `CustomPiece` / `CustomQuest` types. A
   configuration is composed explicitly, so the set of rule types is closed and
-  greppable, and a new rule is a new file plus one reference. The `Custom*` types
+  greppable, and a new rule is a new file. The `Custom*` types
   would wrap data that is *already* custom — board dimensions and piece vectors
   are data, and new behaviour is expressed by a `Rule` subclass.
+  **Amended 2026-10-05**: the sentence read "a new rule is a new file plus one
+  reference", and the reference is gone — see §25, which composes a section out of
+  the files it holds. The "deliberately not added" list stands: there is still no
+  registry and no registration function, because a directory is not a registry.
 - **Fallback**, recorded so the trade-off stays visible: if a stricter reading is
   preferred, the same values can be held as plain data attributes on
   `GameManager` with no new classes, at the cost of the `Rule` and `Quest`
@@ -974,6 +978,70 @@ earlier section registered.
   record rather than describing §11 as unamended.
 - **Approval**: not applicable — both are corrections of fact, not decisions. They
   are owed as code changes under planned PR 12 and PR 17 respectively.
+
+---
+
+### 25. A Section Is Composed Out of the Files It Holds
+
+- **Date**: 2026-10-05
+- **Context**: §4 decided that rules and quests are parent classes with
+  subclasses, composed explicitly, never a registry — and that a new rule is "a
+  new file plus one reference". The reference was the problem.
+  `games/chess/rules/__init__.py` held a literal tuple of thirteen classes and
+  `games/checkers/rules/__init__.py` a tuple of eight, and the settings form's
+  code editor wrote a player's rule into `rules/<stem>.py`, validated it, reported
+  "No problems found", and left the game playing on without it: no error, no
+  warning, no rule. Nothing in `PRD.md`, `README.md`, `SCRATCHPAD.md` or these
+  notes recorded the gap. `PRD.md` FR-33 promised the editor "writes into the
+  configuration directory" and was silent on whether what it wrote then joined.
+- **Deviation from §4's wording, not from the diagram**: `compose_section` in
+  `model/game/configuration.py` builds one instance of every `Rule` or `Quest`
+  subclass the modules in a section's own directory declare. `build_rules()` and
+  `build_quests()` remain declared functions in each configuration and remain the
+  only composition there is; they hand their own section's package to the composer.
+  A new rule is a new file, with nothing to edit.
+- **Still no registry, and this is the line**: `CONFIGURATION_SECTIONS` maps each
+  section directory name to the parent class its modules must declare, and the
+  composer walks that one directory. There is no registration function, no
+  entry-point scan, no plugin loader and no `importlib` search over `sys.path`. A
+  directory is not a registry: nothing registers anything, nothing reaches outside
+  the configuration, and what is in force is exactly what `ls rules/` shows.
+- **Order, stated because it is a tie-break**: `resolve_outcomes` takes the first
+  of two equally strong proposals and `Configuration` hands the rules on in
+  composition order, so the order decides outcomes in a collision. It is the
+  section's own module first — `__init__.py` is a real file in the section and may
+  declare rules of its own — and then the remaining files sorted by name. A
+  directory listing is in whatever order the filesystem hands back, which is not
+  reproducible by a player and not the same on two machines.
+- **What a bad file does, decided rather than left open**: a file that cannot be
+  imported **refuses the load** and names itself and the exception, because the
+  alternative is the failure above with a warning attached. A file that imports and
+  declares nothing usable is **left out and named** in `Configuration.uncomposed`,
+  because a section legitimately holds helpers beside its entries —
+  `games/chess/rules/attacks.py` is the ray and attack geometry three rule files
+  share, and `games/checkers/rules/{geometric,chains}.py` are draughts' — and
+  refusing the load over one would stop the game starting for a file doing its job.
+  A half-written file looks exactly like a helper, so it is named rather than
+  dropped in silence; `view/settings_dialog.py` shows the name.
+- **Why this does not reintroduce the copy failure §19 closed**: the composer
+  takes the section's *package*, and a configuration is loaded as a package rooted
+  at its own directory (§16), so it composes `…house.rules` for a copy called
+  `house`. Composing by name would have undone that in one line.
+- **What is still not composed**: `pieces/`, `clocks/` and `export/`, which
+  `CONFIGURATION_SECTIONS` declares with `None` because what belongs in them is a
+  choice rather than an entry per file — a piece catalogue, a preferred notation
+  order. `games/chess/pieces/__init__.py` therefore still holds a `PIECES` tuple
+  and a piece file a player writes joins nothing, which is the same defect one
+  section over. **Recorded, not fixed**: it is outside what was asked for, and
+  `tests/test_engine_holds_no_chess.py` reads `PIECES` by name to build its
+  vocabulary, so changing it is its own change.
+- **Approval**: directed by the user, 2026-10-02, *"make it so the Rule class
+  handles this so Rules are the only place thats logic (code) driven and not just
+  data driven and that allows us to add any logic we want we can then implement an
+  actual code editor for custom rules and rulesets can be just a multiselect over
+  rules"*, *"code editor is not backlog that should be how rules are edited in
+  settings now"*, and *"custom rulesets and rules should be written as files to
+  the same place other files are"*.
 
 ---
 
