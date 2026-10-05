@@ -1,9 +1,10 @@
 """Loading a configuration.
 
-A configuration is a directory under `games/`, and it is composed explicitly: the
-configuration's own module says what it is made of. There is no registry and no
-discovery-by-name, so the set of rules in force is closed, greppable and known at the point
-of use.
+A configuration is a directory under `games/`, and it is composed out loud: the sections it
+has are declared by `CONFIGURATION_SECTIONS`, and each one composes the modules its own
+directory holds. There is no registry, no plugin loader and no scan of anything else, so what
+a configuration is made of is what its directory holds — and a copy composes the copy's files
+rather than the original's, which is the failure `games/chess/__init__.py` exists to prevent.
 
 Loading is bounded on purpose. Code loads from inside the configuration directory being
 edited and from nowhere else — never an arbitrary path, never an environment variable —
@@ -16,12 +17,43 @@ import os
 import re
 import shutil
 import sys
+from types import ModuleType
 from typing import Callable, Any, Dict, Iterable, List, Optional
 
 from model.game.board import Board
 from model.game.games import DEFAULT_GAME, available_games, games_root
 from model.game.quest import Quest
 from model.game.rule import Rule
+
+#: The sections a configuration directory holds, and what each one composes. A section whose
+#: value is a class is composed out of the modules in its own directory: every subclass of
+#: that class one of those modules declares is in force. A section whose value is None is
+#: composed by hand by the configuration's `build_…` functions, because what belongs in it is
+#: not one file per entry — a clock and a notation are each a choice, and the order of the
+#: choices is the preference they are listed in.
+CONFIGURATION_SECTIONS: Dict[str, Optional[type]] = {
+    "pieces": None,
+    "rules": Rule,
+    "quests": Quest,
+    "clocks": None,
+    "export": None,
+}
+
+
+#: The file a Python package is itself in. A section holds it like any other file, and it is
+#: the one file in a section that is already imported.
+_PACKAGE_MODULE = "__init__.py"
+
+
+class ConfigurationSourceError(ValueError):
+    """A file in a configuration's section could not be composed into the configuration.
+
+    Raised by `compose_section`, always with a message naming the file and what is wrong
+    with it. It is a `ValueError` because every caller that loads a configuration already
+    handles one — `view/settings_dialog.py` puts the message in the form rather than showing a
+    traceback to a player — and because a section holding a file that cannot be read is a
+    problem with what was loaded rather than with the loader.
+    """
 
 
 class Configuration:
@@ -32,7 +64,8 @@ class Configuration:
         path: Absolute path to the configuration directory.
         board: The board the game runs on.
         pieces: The piece classes this configuration offers.
-        rules: The rules in force, in the order they are declared.
+        rules: The rules in force, in the order `compose_section` composes them: the
+            section's own module first, then the rest of its files by name.
         quests: The quests available.
         clocks: The clock configurations available.
         exporters: The export writers this configuration offers.
@@ -47,6 +80,11 @@ class Configuration:
             notations it can be written in, and the answer to that is a configuration's. A
             configuration that declares none gets `None` rather than a record the engine
             made up, because a record of a game nobody described is a record of nothing.
+        uncomposed: One line per file in a composed section that contributes nothing to the
+            configuration, each naming the file and saying why. A section legitimately holds
+            helpers beside its entries, so a file that declares no entry is not an error —
+            but a file the player wrote and did not finish looks exactly like a helper, and
+            without this the two are indistinguishable from the settings form.
         package: The module name the configuration is registered under, so a module inside it
             can resolve its relative imports. Empty until the configuration is loaded from a
             directory, which is the only way a relative import can work at all.
@@ -65,6 +103,7 @@ class Configuration:
         notation: Optional[Any] = None,
         metadata: Optional[Any] = None,
         board_factory: Optional[Callable[[], Board]] = None,
+        uncomposed: Optional[Iterable[str]] = None,
     ):
         """Assemble a configuration.
 
@@ -73,7 +112,8 @@ class Configuration:
             path: Absolute path to the configuration directory.
             board: The board the game runs on.
             pieces: The piece classes this configuration offers.
-            rules: The rules in force, in the order they are declared.
+            rules: The rules in force, in the order the configuration's own rules section
+                composed them.
             quests: The quests available.
             clocks: The clock configurations available.
             exporters: The export writers this configuration offers.
@@ -86,6 +126,10 @@ class Configuration:
             board_factory: Builds a fresh board for this configuration. Holding one board
                 means one game; holding the way to build one means as many games as the
                 player has time for.
+            uncomposed: One line per file in a composed section that contributes nothing,
+                each naming the file and saying why. Collected by `compose_section` through
+                the list passed to it by the configuration's own `build_rules()` and
+                `build_quests()`.
         """
         self.name = name
         self.path = path
@@ -98,6 +142,7 @@ class Configuration:
         self.notation: Optional[Any] = notation
         self.metadata: Optional[Any] = metadata
         self.board_factory: Optional[Callable[[], Board]] = board_factory
+        self.uncomposed: List[str] = list(uncomposed) if uncomposed else []
         self.package: str = ""
 
     @property
@@ -204,6 +249,204 @@ class Configuration:
             f"Configuration(name={self.name!r}, path={self.path!r}, "
             f"rules={len(self.rules)}, quests={len(self.quests)})"
         )
+
+
+def compose_section(section: ModuleType, notes: Optional[List[str]] = None) -> List[Any]:
+    """Compose the entries every module in one configuration section declares.
+
+    A section is a directory of a configuration, and the modules in it are what the
+    configuration has: `rules/zz_new.py` is in force because it is a file in `rules/`, with no
+    list anywhere to add its name to. This is the whole of the composition, and it is
+    deliberately the only one. `CONFIGURATION_SECTIONS` says what a module in the section must
+    declare, and this walks the files the section holds — no registry, no plugin loader, and
+    nothing outside the section's own directory.
+
+    Composition is over the section's own package rather than over a path and a module name,
+    because a configuration can be copied. `games/chess/__init__.py` exists to keep a copy
+    loading its own files, and a composition that looked the section up by name would undo
+    that: the copy would compose `games.chess.rules` and play the original's rules while
+    looking as though it had loaded its own.
+
+    **Order** is the section package first — `__init__.py` is a real file in the section and
+    may declare entries of its own — and then the remaining modules by file name. A directory
+    listing is in whatever order the filesystem hands back, and rule order is the tie-break
+    when two rules propose an outcome at once: `resolve_outcomes` takes the first of two
+    equally strong proposals. Sorted file names are the one order a player can predict,
+    reproduce by hand and read off the settings form.
+
+    **A file that cannot be imported refuses the load.** The alternative is a game that plays
+    without a file the player put there and says nothing at all, which is the failure this
+    replaces. **A file that declares nothing usable is left out**, because a section
+    legitimately holds helpers beside its entries — `games/chess/rules/attacks.py` holds the
+    ray and attack geometry three rule files share — and a half-written file must not stop
+    the game starting. Either way the file is named: in the message of a refusal, and in
+    `notes` for a file left out, which the settings form shows.
+
+    Args:
+        section: The section's package, already imported. A section's own `__init__.py`
+            passes `sys.modules[__name__]`, so what is composed is the copy's section and not
+            the original's.
+        notes: A list to append one line to per file that contributes nothing. Defaults to
+            None, which discards them.
+
+    Returns:
+        List[Any]: One built instance per class the section's modules declare, in the order
+        described above. Empty for a section that declares nothing, which is a configuration
+        that plays by no rule of that kind rather than a failure.
+
+    Raises:
+        ConfigurationSourceError: If `section` is not a declared section, if a file in it
+            cannot be imported, or if a class it declares cannot be built.
+    """
+    directory = _section_directory(section)
+    name = os.path.basename(directory)
+    base = CONFIGURATION_SECTIONS.get(name)
+    if base is None:
+        raise ConfigurationSourceError(
+            f"{section.__name__} is not one of the declared sections: "
+            f"{', '.join(sorted(CONFIGURATION_SECTIONS))}. Only a section whose parent class "
+            f"is declared is composed out of the modules in its directory."
+        )
+    # A file written since this process last looked is invisible to the finder until the
+    # caches are dropped, and writing one is exactly how a rule reaches a configuration: the
+    # editor saves the file and the configuration is loaded again in the same process.
+    importlib.invalidate_caches()
+
+    entries: List[Any] = []
+    for filename in _section_files(directory):
+        path = os.path.join(directory, filename)
+        module = _section_module(section, filename, path)
+        declared = _declared_entries(module, base)
+        if not declared:
+            # The section's own module is where the composition lives, so a section that
+            # declares no entry of its own is the ordinary case and is not worth reporting.
+            if notes is not None and filename != _PACKAGE_MODULE:
+                notes.append(f"{path} declares no {base.__name__}")
+            continue
+        entries.extend(_build_entries(declared, path))
+    return entries
+
+
+def _section_directory(section: ModuleType) -> str:
+    """Return the directory one configuration section holds its modules in.
+
+    Args:
+        section: The section's package.
+
+    Returns:
+        str: The section's own directory, which is the first entry of its search path.
+
+    Raises:
+        ConfigurationSourceError: If `section` has no search path, which means it is not a
+            package and so has no directory of modules to compose.
+    """
+    paths = list(getattr(section, "__path__", None) or [])
+    if not paths:
+        raise ConfigurationSourceError(
+            f"{getattr(section, '__name__', section)} is not a package, so it has no "
+            f"directory of modules to compose; a section is a directory of a configuration"
+        )
+    return paths[0]
+
+
+def _section_files(directory: str) -> List[str]:
+    """Return the module files a section holds, in the order they are composed.
+
+    Args:
+        directory: The section's own directory.
+
+    Returns:
+        List[str]: Every `.py` file name in the directory, the section's own module first
+        and the rest sorted by name. The package leads because it is composed first, not
+        because an underscore happens to sort early.
+    """
+    names = sorted(name for name in os.listdir(directory) if name.endswith(".py"))
+    if _PACKAGE_MODULE in names:
+        names.remove(_PACKAGE_MODULE)
+        names.insert(0, _PACKAGE_MODULE)
+    return names
+
+
+def _section_module(section: ModuleType, filename: str, path: str) -> ModuleType:
+    """Return one module of a section, importing it against the section's own package.
+
+    Args:
+        section: The section's package.
+        filename: The file's name, ending in `.py`.
+        path: The file's path, used in the message of a failure.
+
+    Returns:
+        ModuleType: The module. The section's own module is returned rather than imported a
+        second time, because it is already imported — it is the package doing the composing.
+
+    Raises:
+        ConfigurationSourceError: If the file cannot be imported, naming the file and the
+            exception it raised.
+    """
+    if filename == _PACKAGE_MODULE:
+        return section
+    try:
+        return importlib.import_module(f".{filename[: -len('.py')]}", package=section.__name__)
+    except Exception as error:  # noqa: BLE001 - every failure here is the player's code
+        raise ConfigurationSourceError(
+            f"{path} could not be imported, so this configuration will not load: "
+            f"{type(error).__name__}: {error}"
+        ) from error
+
+
+def _declared_entries(module: ModuleType, base: type) -> List[type]:
+    """Return the classes one module of a section declares for the section to compose.
+
+    A class the module merely imported is not one it declares, and is left to the module that
+    does declare it: `castling.py` importing `attacks.py`'s helpers must not compose them,
+    and a rule shared between two files must not be in force twice.
+
+    Args:
+        module: The module to read.
+        base: The parent class an entry of the section derives from.
+
+    Returns:
+        List[type]: The declared classes, in the order the module declares them.
+    """
+    declared = [
+        value
+        for value in vars(module).values()
+        if isinstance(value, type)
+        and value is not base
+        and issubclass(value, base)
+        and value.__module__ == module.__name__
+    ]
+    return list(dict.fromkeys(declared))
+
+
+def _build_entries(declared: List[type], path: str) -> List[Any]:
+    """Build one instance of each class a section's module declares.
+
+    An entry a section composes is built with no arguments, because the section is what knows
+    what it holds and it has only the class to go on. A class that insists on an argument
+    cannot be composed that way, and is said so rather than left to fail at game start.
+
+    Args:
+        declared: The classes the module declares.
+        path: The file they were declared in, used in the message of a failure.
+
+    Returns:
+        List[Any]: One instance per class.
+
+    Raises:
+        ConfigurationSourceError: If a class cannot be built, naming the file, the class and
+            the exception it raised.
+    """
+    built: List[Any] = []
+    for candidate in declared:
+        try:
+            built.append(candidate())
+        except Exception as error:  # noqa: BLE001 - any failure here is the player's code
+            raise ConfigurationSourceError(
+                f"{path}: {candidate.__name__} could not be built, so this configuration "
+                f"will not load: {type(error).__name__}: {error}"
+            ) from error
+    return built
 
 
 def _within(candidate: str, directory: str) -> bool:
@@ -355,6 +598,10 @@ def load_configuration_at(path: str, root: Optional[str] = None) -> Configuratio
     Raises:
         ValueError: If `path` is not inside `root`. Loading player-authored code from an
             arbitrary path is exactly what the bound is for.
+        ConfigurationSourceError: If a file in one of the configuration's composed sections
+            cannot be composed. The message names the file, and refusing is the point: a
+            configuration that loaded without one of its files would play a game the player
+            does not believe they are playing.
         FileNotFoundError: If `path` is not a directory, or holds no `build_configuration`.
     """
     allowed = os.path.abspath(root or games_root())
@@ -374,7 +621,15 @@ def load_configuration_at(path: str, root: Optional[str] = None) -> Configuratio
     if builder is None:
         raise FileNotFoundError(f"{resolved} declares no build_configuration()")
 
-    configuration = builder()
+    try:
+        configuration = builder()
+    except Exception:
+        # A file in a section that cannot be composed is a failure a player hits and fixes,
+        # so the half-built package must not stay in `sys.modules` under this directory's
+        # name while they do: the next attempt would find the modules already loaded and
+        # compose from a mixture of two loads.
+        _purge_module(module.__name__)
+        raise
     configuration.name = name
     configuration.path = resolved
     configuration.package = module.__name__
