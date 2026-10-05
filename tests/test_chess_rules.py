@@ -18,7 +18,7 @@ from games.chess.board import build_board
 from games.chess.rules import build_rules
 from games.chess.rules.attacks import has_legal_move, square_color
 from games.chess.rules.check import in_check
-from games.chess.rules.castling import CASTLE_KING_SIDE, CASTLE_QUEEN_SIDE, CastlingRule
+from games.chess.rules.castling import CastlingRule
 from games.chess.rules.en_passant import EnPassantRule
 from games.chess.rules.draws import (
     FiftyMoveRule,
@@ -224,14 +224,25 @@ def test_castling_is_withdrawn_once_the_king_has_moved():
 
 
 def test_castling_is_withheld_when_the_path_is_occupied():
-    """A blocked square means no castle, even though nothing is attacking."""
+    """A blocked square means no castle, even though nothing is attacking.
+
+    The bishop on f1 blocks the king's own route, so only the castle carrying the a-file rook
+    survives. What is asserted is which castle survived, read from the rook each move carries:
+    the previous assertion here compared `move_type` against the castle token `O-O`, which
+    could never be equal and so could never fail — the move type for either castle is the one
+    word `castling`, which is exactly why a writer that read it wrote `O-O` twice.
+
+    Returns:
+        None
+    """
     board = castling_ready_board()
     board.set_piece_at((0, 5), Bishop(-1))
     rule = CastlingRule()
 
-    assert CASTLE_KING_SIDE not in [
-        m.move_type for m in rule.available_moves(board, board.get_piece_at((0, 4)))
-    ]
+    offered = rule.available_moves(board, board.get_piece_at((0, 4)))
+
+    assert [move.companion_start for move in offered] == [(0, 0)]
+    assert [move.move_type for move in offered] == ["castling"]
 
 
 def test_en_passant_is_offered_only_on_the_ply_after_a_double_advance():

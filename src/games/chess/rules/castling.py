@@ -12,9 +12,13 @@ from model.game.move import Move
 from model.game.rule import Rule
 from .attacks import is_attacked, opponent
 
-#: Precedence is unused here; castling never ends a game.
-CASTLE_KING_SIDE = "O-O"
-CASTLE_QUEEN_SIDE = "O-O-O"
+#: The two castles as Standard Algebraic Notation writes them. **These are tokens, not move
+#: types**: `Move.move_type` for either castle is the single word `castling` and carries no
+#: side in it, so a writer that read `move_type` here wrote `O-O` twice and the record could
+#: not be read back. What tells the two apart is which rook the move carries, read from
+#: `Move.companion_start`. Precedence is unused in this rule; castling never ends a game.
+KING_SIDE_CASTLE_TOKEN = "O-O"
+QUEEN_SIDE_CASTLE_TOKEN = "O-O-O"
 
 
 class CastlingRule(Rule):

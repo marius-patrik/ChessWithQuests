@@ -327,6 +327,38 @@ def test_a_castle_that_the_engine_itself_offered_tells_which_one_it_is():
     assert ExportAlgebraic().to_algebraic(played) == "1. O-O O-O-O"
 
 
+def test_the_castle_tokens_the_rule_names_are_the_ones_the_writers_write():
+    """Three spellings of two castles, in three modules, and one answer.
+
+    `games/chess/rules/castling.py` declares what the two castles are called, `pgn.py`
+    declares the same two again, and the algebraic writer writes them. Nothing in the engine
+    joins those three together, so nothing would notice if one of them swapped sides — which
+    is the bug this asserts against, in the place where the three spellings can actually be
+    compared. The rule's constants are named `*_CASTLE_TOKEN` because they are spellings and
+    not move types: `Move.move_type` is the single word `castling` for either castle.
+
+    Returns:
+        None
+    """
+    from games.chess.export.pgn import LONG_CASTLE, SHORT_CASTLE
+    from games.chess.rules.castling import (
+        KING_SIDE_CASTLE_TOKEN,
+        QUEEN_SIDE_CASTLE_TOKEN,
+    )
+
+    assert (KING_SIDE_CASTLE_TOKEN, QUEEN_SIDE_CASTLE_TOKEN) == ("O-O", "O-O-O")
+    assert (SHORT_CASTLE, LONG_CASTLE) == (KING_SIDE_CASTLE_TOKEN, QUEEN_SIDE_CASTLE_TOKEN)
+    assert (
+        ExportAlgebraic().to_algebraic(
+            [
+                Move((7, 4), (7, 6), move_type="castling", companion_start=(7, 7)),
+                Move((0, 4), (0, 2), move_type="castling", companion_start=(0, 0)),
+            ]
+        )
+        == f"1. {KING_SIDE_CASTLE_TOKEN} {QUEEN_SIDE_CASTLE_TOKEN}"
+    )
+
+
 # --- the header record, which the diagram calls *Field - Field - Extra*
 
 
