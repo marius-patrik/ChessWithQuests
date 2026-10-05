@@ -1,23 +1,12 @@
-"""What the checkers configuration declares, and what a played draughts game writes.
+"""What the installation reports, and what each game's own writers write it with.
 
-`games/checkers/__init__.py` composes two writers — the letter notation and the header — and
-the naming the window draws the move history with. Which notations exist is the
-configuration's answer: `GameManager.default_format` takes the first, `save_log` names its file
-from it, and `Configuration.metadata` is how the header reaches the writers that ask for one.
+`chesswithquests.offered_formats` asks each shipped configuration what it offers, so
+`--check` says more than that a directory exists. The last test here is about the other half:
+a copy of `games/checkers/` writes with the copy's writers, its own naming and its own board,
+and the module a class came from is the proof.
 
-**A finished game is played rather than assembled.** The record is walked move by move against
-the moves the manager actually made, because a record pasted into a test is a record that can
-be pasted in wrongly. **The refusal of `FEN` is a claim about the game, not a gap**:
-`games/checkers/export/__init__.py` argues that English draughts has no position record and
-that writing one to satisfy a writer would be inventing a notation.
-
-**A configuration is a directory, so a copy of it brings its own writers with it.** That is
-what the last test here is for: the module a writer class came from is the proof, exactly as it
-is for the board's pieces.
-
-**The numbering is the board's**, so every test here that mentions a square number uses
-`tests/test_draughts_perft.py`'s independent derivation of the same arrangement to say which
-square it means.
+**Which notations exist is the configuration's answer**, so a report of the installation
+reports it. A game that exports nothing is a fact about that game and the report says so.
 """
 
 import pathlib
@@ -562,3 +551,18 @@ def test_a_copied_checkers_configuration_writes_with_its_own_writers_and_its_own
 
     assert type(configuration.notation).__module__.startswith("_configuration_")
     assert type(configuration.board).__module__.startswith("_configuration_")
+
+
+def test_the_installation_report_says_what_each_game_can_export():
+    """`--check` is what makes this installation verifiable with no window server, and a game
+    that exports nothing is invisible in a report that lists only directory names.
+
+    Returns:
+        None
+    """
+    from chesswithquests import report_installation
+
+    report = report_installation()
+
+    assert "chess exports: PGN" in report
+    assert "checkers exports: Letter, Field-Field-Extra" in report

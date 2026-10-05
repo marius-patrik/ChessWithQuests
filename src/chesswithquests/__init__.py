@@ -11,7 +11,7 @@ from typing import Any, List, Optional
 
 from model.game.games import DEFAULT_GAME, available_games, configuration_path, games_root
 
-__all__ = ["main", "build_window"]
+__all__ = ["main", "build_window", "offered_formats", "report_installation"]
 
 APPLICATION_TITLE = "ChessWithQuests"
 
@@ -41,17 +41,51 @@ def build_arguments(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="report what this installation can find, then exit without opening a window",
+        help=(
+            "report what this installation can find, including the notations each "
+            "configuration offers, then exit without opening a window"
+        ),
     )
     return parser.parse_args(argv)
+
+
+def offered_formats(name: str) -> str:
+    """Describe the notations one shipped configuration can write.
+
+    Which notations a game has is the configuration's own answer, so a report that named the
+    directories but not their notations would say nothing about the part of the installation a
+    player notices when a game refuses an export. Each configuration is asked what it offers,
+    and a configuration that cannot be loaded says so here rather than taking the whole report
+    down with it — this is a diagnostic, and its value is largest exactly when something is
+    broken.
+
+    Args:
+        name: The configuration's directory name.
+
+    Returns:
+        str: The declared format names in the order the configuration declares them, or a
+        message saying why they could not be asked for.
+    """
+    from model.game.configuration import load_configuration
+
+    try:
+        configuration = load_configuration(name)
+    except Exception as error:
+        return f"could not be loaded ({error})"
+    offered: List[str] = []
+    for writer in configuration.exporters:
+        for declared in writer.formats():
+            if declared not in offered:
+                offered.append(str(declared))
+    return ", ".join(offered) if offered else "(exports nothing)"
 
 
 def report_installation() -> str:
     """Describe what this installation can find.
 
     Returns:
-        str: A report naming the located `games/` directory and every shipped
-        configuration.
+        str: A report naming the located `games/` directory, every shipped configuration, and
+        the notations each of them offers.
     """
     games = available_games()
     lines = [
@@ -59,6 +93,7 @@ def report_installation() -> str:
         f"games directory: {games_root()}",
         f"configurations: {', '.join(games) if games else '(none found)'}",
     ]
+    lines.extend(f"  {name} exports: {offered_formats(name)}" for name in games)
     return "\n".join(lines)
 
 
