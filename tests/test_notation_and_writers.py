@@ -147,23 +147,32 @@ def test_the_coordinate_record_writer_declares_one_spelling_and_answers_any():
     """
     writer = ExportStenographic()
     moves = [Move((1, 4), (3, 4)), Move((6, 4), (4, 4))]
+    record = writer.export("Stenographic", moves=moves)
 
     assert writer.formats() == ("Stenographic",)
-    assert writer.export("Stenographic", moves=moves) == "e2e4 e7e5"
-    assert writer.export("stenographic", moves=moves) == "e2e4 e7e5"
-    assert writer.export("STENOGRAPHIC", moves=moves) == "e2e4 e7e5"
+    assert writer.from_stenographic(record) == "e2e4 e7e5"
+    assert writer.export("stenographic", moves=moves) == record
+    assert writer.export("STENOGRAPHIC", moves=moves) == record
 
     with pytest.raises(UnsupportedExportFormat, match="Stenographic"):
         writer.export("PGN", moves=moves)
 
 
 def test_a_game_with_no_moves_still_writes_an_empty_coordinate_record():
-    """A record of no moves is genuinely empty, which is not the same as refusing.
+    """A record of no moves reads back as nothing, which is not the same as refusing.
+
+    The record is a compressed container, so the text of it is not empty even when there is
+    nothing inside; what has to hold is that reading it back gives the empty record. Asserting
+    the text is empty would assert that the format is uncompressed.
 
     Returns:
         None
     """
-    assert ExportStenographic().export("Stenographic", moves=[]) == ""
+    writer = ExportStenographic()
+    record = writer.export("Stenographic", moves=[])
+
+    assert writer.from_stenographic(record) == ""
+    assert record != "", "a refused notation and an empty one must not be the same text"
 
 
 # --- the algebraic record, which the diagram calls *letter*
@@ -201,7 +210,9 @@ def test_the_algebraic_record_is_not_the_coordinate_record_and_not_the_transcrip
     """
     moves = [Move((1, 4), (3, 4)), Move((6, 4), (4, 4)), Move((1, 6), (3, 6))]
 
-    assert ExportStenographic().to_stenographic(moves) == "e2e4 e7e5 g2g4"
+    assert ExportStenographic().from_stenographic(ExportStenographic().to_stenographic(moves)) == (
+        "e2e4 e7e5 g2g4"
+    )
     assert ExportAlgebraic().to_algebraic(moves) == "1. e4 e5 2. g4"
 
 

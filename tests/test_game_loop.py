@@ -10,6 +10,7 @@ import os
 import tempfile
 
 import pytest
+from games.chess.export.stenographic import ExportStenographic
 from model.game.manager import GameManager
 from model.game.move import Move
 from model.game.quest import Quest
@@ -135,15 +136,21 @@ def test_the_transcript_records_the_game_in_each_notation():
     game.finish_game()
 
     fen = game.transcript("FEN")
-    # The position after Qh4#: Black's queen on h4, White's king still on e1, no castling.
-    assert fen.startswith("rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR")
+    # The position after Qh4#: Black's queen on h4, White's king still on e1, both sides'
+    # kings and rooks still on their own squares, so all four rights survive. The last move
+    # was the queen's, which took nothing and was not a pawn, so there is no en passant target
+    # and the halfmove clock is the one quiet ply since the g-pawn last moved.
+    assert fen == "rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3"
     assert fen.split()[1] == "w"
 
-    assert game.transcript("Stenographic") == "f2f3 e7e5 g2g4 d8h4"
+    # The coordinate record is compressed now, so what is asserted is what it reads back as.
+    assert ExportStenographic().from_stenographic(game.transcript("Stenographic")) == (
+        "f2f3 e7e5 g2g4 d8h4"
+    )
 
-    pgn = game.transcript("PGN")
-    assert "[Event" in pgn
-    assert "f2f3" in pgn or "1." in pgn
+    # Fool's mate, in the notation a PGN reader can replay it from.
+    assert game.transcript("PGN").split("\n\n")[1] == "1. f3 e5 2. g4 Qh4# 0-1"
+    assert "[Event" in game.transcript("PGN")
 
 
 def test_a_transcript_can_be_written_to_disk():
