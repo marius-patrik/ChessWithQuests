@@ -1,15 +1,15 @@
 """A clock's declared fields, so a clock is configurable through one form like everything else.
 
-A clock is the one configurable type that is a plain object rather than a parent class with
-subclasses: both shipped configurations ship a `Fischer`, and neither derives from anything.
-So there is no `Clock` class for a declaration to hang off, and the Clocks section would be
-the one section with hand-built widgets — which is the thing FR-32 rules out.
+A clock declares its own fields through `value_fields()` when it has any, and this module is what
+the Clocks section asks first: the parent pattern is the rule, the parent class is where a hook
+like this belongs, and a clock must not be the exception that makes the settings surface bespoke
+in one place. `model/game/clock.py` is that parent — a clock is an initial time, an increment and
+the countdown they run on, and `clocks/` is composed out of the files that declare one.
 
-`clock_fields` closes that by declaring a clock's configurable values from what the clock
-holds. A clock that declares its own fields through `value_fields()` is asked first, so a
-configuration with a richer clock gets a richer form for free; a clock that does not is
-described by the two values every clock in this engine has, an initial time and an increment,
-which is exactly what `PRD.md` FR-6 says a clock declares.
+`Clock` itself declares no fields, and this module is still what describes both shipped clocks.
+A clock does not have to be a `Clock` subclass to be configurable: it is enough that it holds an
+initial time and an increment, which is exactly what `PRD.md` FR-6 says a clock declares, and
+asking what the object holds is what keeps that true of a clock written in a variant.
 """
 
 from typing import Any, List

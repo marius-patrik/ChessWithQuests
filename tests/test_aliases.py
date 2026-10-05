@@ -170,12 +170,16 @@ def test_controller_is_not_a_name_this_project_uses():
 def test_the_chess_catalogue_lists_the_canonical_names():
     """`Configuration.pieces` names classes, so it must not carry an alias or a dropped name.
 
+    The catalogue is composed out of `pieces/` rather than listed, so this reads the composed
+    one: the alias must not appear twice because the section also composes the alias, and a
+    name dropped from the section must disappear from here with it.
+
     Returns:
         None
     """
-    from games.chess.pieces import PIECES
+    from games.chess.pieces import build_pieces
 
-    assert sorted(piece.__name__ for piece in PIECES) == [
+    assert sorted(piece.__name__ for piece in build_pieces()) == [
         "Bishop",
         "King",
         "Knight",

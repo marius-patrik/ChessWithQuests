@@ -5,9 +5,10 @@
 and cannot be edited or deleted: a variant starts by duplicating it.
 
 Composition is out loud and it is the directory. `build_configuration()` below says what this
-game is, and `rules/` and `quests/` are composed out of the files they hold: a rule written
-into `rules/` is in force because it is a file in `rules/`. There is no registry and no
-plugin loader, so what is in force is what the tree holds and nothing else.
+game is, and `pieces/`, `rules/`, `quests/`, `clocks/` and `export/` are each composed out of
+the files they hold: a rule written into `rules/` is in force, and a piece written into
+`pieces/` is in the catalogue, because each is a file in that directory. There is no registry
+and no plugin loader, so what is in force is what the tree holds and nothing else.
 
 Every import below is relative, and that is load-bearing rather than stylistic. This directory
 is a copyable unit: `cp -r games/chess games/house` and a variant exists. An absolute
@@ -19,82 +20,62 @@ than a section it looked up by name, and `rules/` and `pieces/` import relativel
 reason: the rules a copy composes, and the pieces its promotions produce, are the copy's.
 """
 
-from typing import Any, List, Optional
+from typing import Any, Iterable, List, Optional
 
 from model.game.configuration import Configuration
 from model.game.games import DEFAULT_GAME
 from model.game.quest import Quest
-from model.game.rule import Rule
 
+from . import clocks as clock_files
+from . import export as export_files
+from . import pieces as piece_files
 from . import quests as quest_files
+from . import rules as rule_files
 from .board import build_board
-from .clocks.fischer import Fischer
-from .export.algebraic import AlgebraicNotation, ExportAlgebraic
-from .export.fen import ExportFEN
+from .export.algebraic import AlgebraicNotation
 from .export.metadata import ExportMetadata
-from .export.pgn import ExportPGN
-from .export.stenographic import ExportStenographic
-from .pieces import build_pieces
-from .rules import build_rules
 
 
-def build_metadata() -> ExportMetadata:
-    """Build the header record chess's games are written with.
+def build_metadata(exporters: Iterable[Any]) -> Optional[ExportMetadata]:
+    """Return the header record among the composed writers, declaring chess's own fields on it.
 
-    Only what a game knows before it is played goes in here: the name of the event. Who was
+    The record is one of the writers `export/` composes, and this returns that same object
+    rather than a second one built here: a record is both a format in its own right and the
+    thing `GameManager` hands to every writer as `metadata`, and two records would be two that
+    could drift apart — one written with the event name and one without. Finding it among the
+    composed writers is what puts the same object in both places.
+
+    Only what a game knows before it is played is declared: the name of the event. Who was
     playing, when it began and how it ended are all derived from the game at write time, so
     nothing declared here can disagree with what happened.
 
-    Returns:
-        ExportMetadata: A header record naming this configuration's event.
-    """
-    return ExportMetadata({"Event": DEFAULT_GAME})
-
-
-def build_exporters(metadata: Optional[ExportMetadata] = None) -> List[Any]:
-    """Build the export writers chess offers, in the order they are preferred.
-
-    Order is the preference: `GameManager.default_format` takes the first format the first
-    writer declares, and `save_log` names its file from that. PGN leads, so a chess game
-    written without being asked for a notation is written as PGN and saved as `.pgn`.
-
-    Each writer lives in `export/`, imported relatively, because a configuration is a
-    directory that can be copied into a variant and an absolute `games.chess.…` import would
-    leave the copy writing with the original's writers — silently, with no error and no
-    warning. Which notations exist is chess's answer; `notes/object_model.md` section 7
-    registers the arrangement and the engine keeps only the protocol.
-
-    The header record is one of them and is handed back to the caller, because a record is
-    both a format in its own right and the thing the transcript writer composes its header
-    from. Passing it to `build_configuration` as `metadata` is what puts the same object in
-    both places; called without one, this function builds a fresh record and the configuration
-    gets a second, which is why the composition below passes its own.
-
-    Adding a notation is one file in `export/` and one line here.
-
     Args:
-        metadata: The header record to offer as a format. Defaults to a freshly built one.
+        exporters: The writers `export/` composed.
 
     Returns:
-        List[Any]: One writer per chess notation: the transcript, the algebraic record, the
-        header record, the position record, and the coordinate record.
+        Optional[ExportMetadata]: The header writer with `Event` declared, or None when the
+        composed writers hold no header record — a configuration that describes its games in
+        prose alone, and one the engine already supports by declaring no metadata.
     """
-    return [
-        ExportPGN(),
-        ExportAlgebraic(),
-        metadata if metadata is not None else build_metadata(),
-        ExportFEN(),
-        ExportStenographic(),
-    ]
+    for writer in exporters:
+        if isinstance(writer, ExportMetadata):
+            writer.set_header("Event", DEFAULT_GAME)
+            return writer
+    return None
 
 
 def build_configuration() -> Configuration:
     """Assemble the chess configuration.
 
-    The one list is the sections: `rules/` and `quests/` are composed out of the files they
-    hold, so nothing here has to name a rule for it to be in force. Both compositions are
-    handed the same list, and it is read afterwards, which is what lets a file in either
-    section that declares nothing be reported by name rather than dropped in silence.
+    Nothing here names a piece, a rule, a quest, a clock or a writer. The one list is the
+    sections: each is composed out of the files its own directory holds, so nothing in this
+    function has to name an entry for it to be in force. Every composition is handed the same
+    list and it is read afterwards, which is what lets a file in *any* section that declares
+    nothing be reported by name rather than dropped in silence.
+
+    The header record is the one thing read back out rather than composed: `export/` composes
+    it like any other writer, and `build_metadata` finds that object among them and declares
+    chess's event on it, so the record the manager is handed is the record the writers offer.
 
     Returns:
         Configuration: The chess board, and the pieces, rules, quests, clocks and exporters
@@ -102,20 +83,18 @@ def build_configuration() -> Configuration:
         the window draws the move history with, and what a copy of this directory brings with
         it — and the header record its transcripts are written with.
     """
-    metadata = build_metadata()
     uncomposed: List[str] = []
-    rules = build_rules(uncomposed)
-    quests = build_quests(uncomposed)
+    exporters = export_files.build_exporters(uncomposed)
     return Configuration(
         name=DEFAULT_GAME,
         path="",
         board=build_board(),
-        pieces=build_pieces(),
-        rules=rules,
-        quests=quests,
-        clocks=[Fischer()],
-        exporters=build_exporters(metadata),
-        metadata=metadata,
+        pieces=piece_files.build_pieces(uncomposed),
+        rules=rule_files.build_rules(uncomposed),
+        quests=build_quests(uncomposed),
+        clocks=clock_files.build_clocks(uncomposed),
+        exporters=exporters,
+        metadata=build_metadata(exporters),
         notation=AlgebraicNotation(),
         board_factory=build_board,
         uncomposed=uncomposed,

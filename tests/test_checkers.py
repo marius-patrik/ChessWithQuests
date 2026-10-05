@@ -1035,7 +1035,17 @@ def test_the_shipped_checkers_configuration_loads_itself():
     assert configuration.rules
     assert configuration.quests
     assert len(configuration.rules) == 8
-    assert [piece.__name__ for piece in configuration.pieces] == ["Man", "King"]
+    # Composed out of `pieces/` rather than listed, so the catalogue is the directory: two
+    # kinds, `king.py` before `man.py` by file name. Nothing plays by this order — the board
+    # places what it is told to — so it is the file order the assertion is about.
+    assert [piece.__name__ for piece in configuration.pieces] == ["King", "Man"]
+    assert configuration.clocks and [
+        clock.__class__.__name__ for clock in configuration.clocks
+    ] == ["Fischer"]
+    assert [writer.formats()[0] for writer in configuration.exporters] == [
+        "Letter",
+        "Field-Field-Extra",
+    ]
 
 
 def _lone_king(configuration: Any, square: int) -> Board:

@@ -62,15 +62,16 @@ def _chess_piece_types() -> frozenset:
     own knight actually reports, which `games/chess/pieces/knight.py` and `tests/test_perft.py`
     both assert. So `build_quests()` composing `CaptureOfType("horse")` passed the gate that
     exists to catch exactly that. Reading the catalogue means the gate cannot drift from the
-    code it guards.
+    code it guards, and the catalogue is composed out of `pieces/` rather than listed, so
+    reading it is also reading the directory a piece written into would join.
 
     Returns:
         frozenset: Every kind descriptor a chess piece reports.
     """
-    from games.chess.pieces import PIECES
+    from games.chess.pieces import build_pieces
 
     declared = set()
-    for piece_class in PIECES:
+    for piece_class in build_pieces():
         instance = piece_class(1)
         for name in (instance.getType(), getattr(instance, "piece_type", None)):
             if isinstance(name, str):
@@ -603,10 +604,14 @@ def test_the_gate_sees_every_kind_the_chess_catalogue_declares():
     `horse` is what this codebase's knight reports. The gate carried a hand-kept set that
     omitted it, so a leak expressed as `CaptureOfType("horse")` walked straight through the
     check that exists to catch exactly that.
-    """
-    from games.chess.pieces import PIECES
 
-    declared = {piece_class(1).getType().lower() for piece_class in PIECES}
+    The catalogue is composed out of `pieces/` rather than listed, so reading it is reading
+    the directory a piece written into would join: a new kind cannot appear in the tree
+    without appearing in the gate's vocabulary with it.
+    """
+    from games.chess.pieces import build_pieces
+
+    declared = {piece_class(1).getType().lower() for piece_class in build_pieces()}
 
     assert (
         declared <= CHESS_PIECE_TYPES

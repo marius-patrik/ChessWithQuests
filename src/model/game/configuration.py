@@ -18,26 +18,37 @@ import re
 import shutil
 import sys
 from types import ModuleType
-from typing import Callable, Any, Dict, Iterable, List, Optional
+from typing import Callable, Any, Dict, FrozenSet, Iterable, List, Optional
 
 from model.game.board import Board
+from model.game.clock import Clock
 from model.game.games import DEFAULT_GAME, available_games, games_root
 from model.game.quest import Quest
 from model.game.rule import Rule
+from model.misc.export_writers import ExportWriter
+from model.pieces.piece import Piece
 
-#: The sections a configuration directory holds, and what each one composes. A section whose
-#: value is a class is composed out of the modules in its own directory: every subclass of
-#: that class one of those modules declares is in force. A section whose value is None is
-#: composed by hand by the configuration's `build_…` functions, because what belongs in it is
-#: not one file per entry — a clock and a notation are each a choice, and the order of the
-#: choices is the preference they are listed in.
+#: The sections a configuration directory holds, and what each one composes. Every section names
+#: the parent class its modules must derive from, and is composed out of the files in its own
+#: directory: one entry per subclass that class declares is in force — the class itself for a
+#: section in `CLASS_ENTRY_SECTIONS`, an instance built from it otherwise. There is no section
+#: left `None`, because `None` was how `pieces/`, `clocks/` and `export/` said "composed by hand"
+#: while a file a player wrote into one of them joined nothing — and a hand-written list beside a
+#: directory is exactly the defect composition removes.
 CONFIGURATION_SECTIONS: Dict[str, Optional[type]] = {
-    "pieces": None,
+    "pieces": Piece,
     "rules": Rule,
     "quests": Quest,
-    "clocks": None,
-    "export": None,
+    "clocks": Clock,
+    "export": ExportWriter,
 }
+
+#: The sections whose composed entry is the declared class itself rather than an instance built
+#: from it. `Configuration.pieces` is a catalogue of what a board may hold, and a piece is placed
+#: by the board with a colour and a square: `Piece` cannot be built with no arguments at all,
+#: because a piece has no colour until it is placed. Everything else in a section is one object the
+#: game holds for the whole of it — a rule, a quest, a clock, a writer — so those are instances.
+CLASS_ENTRY_SECTIONS: FrozenSet[str] = frozenset({"pieces"})
 
 
 #: The file a Python package is itself in. A section holds it like any other file, and it is
@@ -63,12 +74,14 @@ class Configuration:
         name: The configuration's directory name.
         path: Absolute path to the configuration directory.
         board: The board the game runs on.
-        pieces: The piece classes this configuration offers.
+        pieces: The piece classes this configuration offers, composed out of `pieces/`.
         rules: The rules in force, in the order `compose_section` composes them: the
             section's own module first, then the rest of its files by name.
-        quests: The quests available.
-        clocks: The clock configurations available.
-        exporters: The export writers this configuration offers.
+        quests: The quests available, composed out of `quests/`.
+        clocks: The clock configurations available, composed out of `clocks/`.
+        exporters: The export writers this configuration offers, composed out of `export/`.
+            Every writer the section holds is here whatever order `export/` prefers them in;
+            the preference decides only which of them leads.
         notation: How this configuration names its squares and its moves, for the window to
             draw them with. It is whatever answers `move_label(number, move)`, and it is
             optional: a configuration that names its squares in no notation gets its move
@@ -111,12 +124,14 @@ class Configuration:
             name: The configuration's directory name.
             path: Absolute path to the configuration directory.
             board: The board the game runs on.
-            pieces: The piece classes this configuration offers.
+            pieces: The piece classes this configuration offers, composed out of `pieces/`.
             rules: The rules in force, in the order the configuration's own rules section
                 composed them.
-            quests: The quests available.
-            clocks: The clock configurations available.
-            exporters: The export writers this configuration offers.
+            quests: The quests available, composed out of `quests/`.
+            clocks: The clock configurations available, composed out of `clocks/`.
+            exporters: The export writers this configuration offers, composed out of
+                `export/`. Every writer that section declares is included; the section's own
+                declared order decides which of them leads.
             notation: How this configuration names a move, for the window to draw the move
                 history with. Anything answering `move_label(number, move)` will do; None
                 means the game is drawn with coordinates.
@@ -126,10 +141,10 @@ class Configuration:
             board_factory: Builds a fresh board for this configuration. Holding one board
                 means one game; holding the way to build one means as many games as the
                 player has time for.
-            uncomposed: One line per file in a composed section that contributes nothing,
+            uncomposed: One line per file in any composed section that contributes nothing,
                 each naming the file and saying why. Collected by `compose_section` through
-                the list passed to it by the configuration's own `build_rules()` and
-                `build_quests()`.
+                the list passed to it by the configuration's own `build_…()` functions for
+                every section it composes.
         """
         self.name = name
         self.path = path
@@ -251,14 +266,18 @@ class Configuration:
         )
 
 
-def compose_section(section: ModuleType, notes: Optional[List[str]] = None) -> List[Any]:
+def compose_section(
+    section: ModuleType,
+    notes: Optional[List[str]] = None,
+    preferred: Iterable[Optional[type]] = (),
+) -> List[Any]:
     """Compose the entries every module in one configuration section declares.
 
     A section is a directory of a configuration, and the modules in it are what the
-    configuration has: `rules/zz_new.py` is in force because it is a file in `rules/`, with no
-    list anywhere to add its name to. This is the whole of the composition, and it is
+    configuration has: `pieces/zz_new.py` is in the catalogue because it is a file in `pieces/`,
+    with no list anywhere to add its name to. This is the whole of the composition, and it is
     deliberately the only one. `CONFIGURATION_SECTIONS` says what a module in the section must
-    declare, and this walks the files the section holds — no registry, no plugin loader, and
+    derive from, and this walks the files the section holds — no registry, no plugin loader, and
     nothing outside the section's own directory.
 
     Composition is over the section's own package rather than over a path and a module name,
@@ -274,6 +293,14 @@ def compose_section(section: ModuleType, notes: Optional[List[str]] = None) -> L
     equally strong proposals. Sorted file names are the one order a player can predict,
     reproduce by hand and read off the settings form.
 
+    **`preferred` is an ordering, never a membership.** A section may declare which of its
+    entries lead — `export/` does, because `GameManager.default_format` takes the first format
+    the first writer declares and `save_log` names its file from it, which is a preference
+    rather than a fact about the directory. Everything the directory declares is composed and
+    returned whatever the preference says; a name in `preferred` that nothing declares is a
+    refusal rather than a shrug, because a preference for a writer that is not there is exactly
+    the way the directory and the declaration drift apart unnoticed.
+
     **A file that cannot be imported refuses the load.** The alternative is a game that plays
     without a file the player put there and says nothing at all, which is the failure this
     replaces. **A file that declares nothing usable is left out**, because a section
@@ -288,15 +315,20 @@ def compose_section(section: ModuleType, notes: Optional[List[str]] = None) -> L
             the original's.
         notes: A list to append one line to per file that contributes nothing. Defaults to
             None, which discards them.
+        preferred: The classes to place first, in the order given. Entries whose class is not
+            named follow, in composed order, and nothing is dropped for not being named.
+            Defaults to an empty sequence, which is the composed order unchanged.
 
     Returns:
-        List[Any]: One built instance per class the section's modules declare, in the order
-        described above. Empty for a section that declares nothing, which is a configuration
-        that plays by no rule of that kind rather than a failure.
+        List[Any]: One entry per class the section's modules declare — the class itself for a
+            section in `CLASS_ENTRY_SECTIONS`, otherwise one instance built from it — in the
+        order described above. Empty for a section that declares nothing, which is a
+        configuration that offers no rule of that kind rather than a failure.
 
     Raises:
-        ConfigurationSourceError: If `section` is not a declared section, if a file in it
-            cannot be imported, or if a class it declares cannot be built.
+        ConfigurationSourceError: If `section` is not a declared section or is declared with
+            no parent class, if a file in it cannot be imported, if a class it declares cannot
+            be built, or if `preferred` names a class the section does not declare.
     """
     directory = _section_directory(section)
     name = os.path.basename(directory)
@@ -305,7 +337,8 @@ def compose_section(section: ModuleType, notes: Optional[List[str]] = None) -> L
         raise ConfigurationSourceError(
             f"{section.__name__} is not one of the declared sections: "
             f"{', '.join(sorted(CONFIGURATION_SECTIONS))}. Only a section whose parent class "
-            f"is declared is composed out of the modules in its directory."
+            f"is declared is composed out of the modules in its directory, and every "
+            f"declared section names one."
         )
     # A file written since this process last looked is invisible to the finder until the
     # caches are dropped, and writing one is exactly how a rule reaches a configuration: the
@@ -313,6 +346,7 @@ def compose_section(section: ModuleType, notes: Optional[List[str]] = None) -> L
     importlib.invalidate_caches()
 
     entries: List[Any] = []
+    composed_of: List[Optional[type]] = []
     for filename in _section_files(directory):
         path = os.path.join(directory, filename)
         module = _section_module(section, filename, path)
@@ -323,8 +357,48 @@ def compose_section(section: ModuleType, notes: Optional[List[str]] = None) -> L
             if notes is not None and filename != _PACKAGE_MODULE:
                 notes.append(f"{path} declares no {base.__name__}")
             continue
-        entries.extend(_build_entries(declared, path))
-    return entries
+        built = _build_entries(declared, path, name)
+        entries.extend(built)
+        composed_of.extend(declared)
+    return _ordered_by_preference(entries, composed_of, preferred, name)
+
+
+def _ordered_by_preference(
+    entries: List[Any],
+    composed_of: List[Optional[type]],
+    preferred: Iterable[Optional[type]],
+    name: str,
+) -> List[Any]:
+    """Return the composed entries with the preferred classes first, and nothing dropped.
+
+    Args:
+        entries: The composed entries, in composed order.
+        composed_of: The class each entry was composed from, in the same order.
+        preferred: The classes to place first, in the order given.
+        name: The section's directory name, used in the message of a refusal.
+
+    Returns:
+        List[Any]: The same entries, reordered. Every entry is present exactly once.
+
+    Raises:
+        ConfigurationSourceError: If `preferred` names a class the section did not compose,
+            naming the class and the section.
+    """
+    ranks = {cls: rank for rank, cls in enumerate(preferred)}
+    if not ranks:
+        return entries
+    absent = [cls for cls in ranks if cls not in composed_of]
+    if absent:
+        named = ", ".join(getattr(cls, "__name__", repr(cls)) for cls in absent)
+        raise ConfigurationSourceError(
+            f"the {name} section prefers {named}, which its files do not declare, so this "
+            f"configuration will not load: the preference and the directory have drifted apart"
+        )
+    # A stable sort, so an entry the preference does not name keeps its composed order and
+    # follows everything the preference does name, and a file that declares nothing is still
+    # composed rather than dropped for not being listed.
+    ordered = sorted(zip(entries, composed_of), key=lambda pair: ranks.get(pair[1], len(ranks)))
+    return [entry for entry, _declared in ordered]
 
 
 def _section_directory(section: ModuleType) -> str:
@@ -419,24 +493,33 @@ def _declared_entries(module: ModuleType, base: type) -> List[type]:
     return list(dict.fromkeys(declared))
 
 
-def _build_entries(declared: List[type], path: str) -> List[Any]:
-    """Build one instance of each class a section's module declares.
+def _build_entries(declared: List[type], path: str, name: str) -> List[Any]:
+    """Build one entry from each class a section's module declares.
 
     An entry a section composes is built with no arguments, because the section is what knows
     what it holds and it has only the class to go on. A class that insists on an argument
     cannot be composed that way, and is said so rather than left to fail at game start.
 
+    **One section is exempt**: `CLASS_ENTRY_SECTIONS` names `pieces`, whose entry is the class
+    itself. A board places a piece by building one with a colour and a square, and a piece with
+    no colour is not a piece — so a catalogue of *classes* is what a piece section composes, and
+    asking for instances would refuse every piece in the tree.
+
     Args:
         declared: The classes the module declares.
         path: The file they were declared in, used in the message of a failure.
+        name: The section's directory name, used to say whether this section composes classes.
 
     Returns:
-        List[Any]: One instance per class.
+        List[Any]: One entry per class — the class itself for a class-entry section, otherwise
+        one instance built from it.
 
     Raises:
         ConfigurationSourceError: If a class cannot be built, naming the file, the class and
             the exception it raised.
     """
+    if name in CLASS_ENTRY_SECTIONS:
+        return list(declared)
     built: List[Any] = []
     for candidate in declared:
         try:
