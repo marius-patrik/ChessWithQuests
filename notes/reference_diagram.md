@@ -68,6 +68,20 @@ and `ExportAlgebraic` writes exactly that. `AlgebraicNotation` already carried t
 diagram's own word would have left the file, the class and the configuration's `notation` all
 saying one thing while the writer declared another.
 
+**The second game that writes *letter*, 2026-10-05.** `games/checkers/export/letter.py` holds
+`ExportLetter`, declared **`Letter`**, which is the diagram's own word — in draughts the
+squares are named by a number rather than a letter, so there is no `Algebraic` for the file,
+the class or the `notation` to agree with, and `NumberedNotation` is the naming the window
+asks. The record is the rulebook's own two marks: `18-22` for a move that takes nothing and
+`18x25` for one that takes something (FMJD Annex 1 article 8.2.2 and 8.2.3). *Draughts also
+writes the header*, as `games/checkers/export/metadata.py`'s `ExportMetadata` under the same
+`Field-Field-Extra`, with one difference in kind rather than in spelling: a PGN header is the
+seven-tag roster and obliged to carry `?` for a tag nobody supplied, while no published roster
+obliges a draughts record to carry a tag it has nothing for, so its writer leaves that field
+out. **Draughts writes no position record at all**, and `ExportLetter` refuses `FEN` by name —
+see `games/checkers/export/__init__.py`, which argues it from the absence of a halfmove clock
+and a castling right in this game.
+
 **The reading of *Field - Field - Extra*, 2026-10-05.** The box is prose, not a grammar, and
 the repository held no code for it. `PRD.md` FR-48 is the only sentence describing it — *the
 game transcript header, derived from real state* — and that sentence is what is implemented:

@@ -824,7 +824,28 @@ Recorded because the question is fair and the answer is not obvious.
     the abstraction holds. A variant that wants the international king changes one
     number, `max_steps`, in one piece.
   - **Approval**: recorded 2026-10-04 as a measured discrepancy between `PRD.md`
-    FR-54 and `games/checkers/`, and closed the same day against FR-54 as written.
+FR-54 and `games/checkers/`, closed the same day against FR-54 as written, and
+      **approved by the maintainer on 2026-10-04**. The ruling covered all five gaps, the
+      one divergence kept on purpose (1.32.1 proposed rather than claimed), and leaving
+      `LimitedKingsRule` and `CaptureRule` declared and inert.
+- **The exporters this section recorded as absent now exist.** As of 2026-10-05
+  `games/checkers` declares **two**: `ExportLetter` (declared `Letter`, written
+  in the square numbers one to thirty-two as `18-22` or `18x25`) and its own
+  `ExportMetadata` (declared `Field-Field-Extra`), assembled by
+  `build_exporters()` in `games/checkers/__init__.py`. **What is still absent,
+  and still not a departure, is a position record**: English draughts has no FEN,
+  `ExportLetter` refuses `FEN` by name, and `games/checkers/export/__init__.py`
+  argues why from the absence of a halfmove clock and a castling right in this
+  game. No engine file changed to add either writer, which is FR-55 and the
+  acceptance criterion of issue #164 both at once.
+- **Mitigation**: none of this touches the engine or the diagram's classes. Each
+  departure is a rule's configured value or an absent rule inside one
+  configuration directory, which is exactly where `SCRATCHPAD.md` §2 says the
+  variation between games lives. Closing them is a change to
+  `games/checkers/` and to nothing else — which is the strongest evidence yet that
+  the abstraction holds.
+- **Approval**: recorded 2026-10-04 as a measured discrepancy between `PRD.md`
+    FR-54 and `games/checkers/`, closed the same day against FR-54 as written, and
     **approved by the maintainer on 2026-10-04**. The ruling covered all five gaps, the
     one divergence kept on purpose (1.32.1 proposed rather than claimed), and leaving
     `LimitedKingsRule` and `CaptureRule` declared and inert.
@@ -911,6 +932,8 @@ earlier section registered.
 | `Configuration.metadata` | `configuration.py:60`. The record of who played, when and how a game ended, handed to the writers that ask for one. Optional, and the engine reads it without knowing what it is | §7 by implication — a configuration supplies the writers, so it supplies what they are given; the attribute was not named |
 | `GameManager.started_at` | `manager.py:99`. The moment a game began, so a writer can date it. The date of a game is a fact about the game, not about the format that records it | none — new here |
 | `ExportAlgebraic`, `ExportMetadata` | `games/chess/export/{algebraic,metadata}.py`. The diagram's format list is prose in a box with no edges, so the classes it stands for are not drawn. §7 registers the arrangement and `notes/reference_diagram.md` records the reading of *Field - Field - Extra* the code implements | §7 by implication; the two writers were not named |
+| `ExportLetter`, `games/checkers/export/metadata.py`'s `ExportMetadata`, `NumberedNotation`, `CheckersBoard`, `games/checkers/board.py`'s `square_number` | The draughts answers to the same format list: `ExportLetter` (declared `Letter`), a second `ExportMetadata` under `Field-Field-Extra`, `NumberedNotation` as the naming the window asks, `CheckersBoard` overriding `file_label` with square numbers, and `square_number` as the one derivation of the numbering all of them read. None is drawn; §7 places each beside the configuration that uses it, and `notes/reference_diagram.md` records the reading | §7 by implication; the objects were not named. **`square_number` is the board's, not the writer's**: the numbering is counted from `is_played_square`, so the perft gate's independent derivation and the production one are asserted equal for all 32 squares |
+| `chesswithquests.offered_formats` | The `--check` report asks each shipped configuration what it offers, so a game that exports nothing is visible in the report rather than invisible in it | §7 by implication — which notations exist is a configuration's answer, so a report of the installation reports it too |
 
 - **Approval**: **not approved.** Recorded 2026-10-04 by a sweep of the tree
   against `notes/reference_diagram.md`. None of the twenty changes a class the
