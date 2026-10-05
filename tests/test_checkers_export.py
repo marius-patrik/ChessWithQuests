@@ -1,21 +1,20 @@
-"""The draughts numbering: squares one to thirty-two, counted from the board.
+"""A draughts board labels its own columns, in the numbering it counts from the board.
 
-`games/checkers/board.py` knows which squares English draughts is played on, and
-`square_number` counts those in board order from one — which is what makes one to four
-White's back row and twenty-nine to thirty-two the crown row. It is counted rather than
-written out, so it cannot disagree with the rule it is derived from.
+`Board.file_label` numbers a column by default and `games/chess/board.py`'s `ChessBoard`
+overrides that with the algebraic letter. `games/checkers/board.py`'s `CheckersBoard`
+overrides it the same way, with this game's square numbers — so a draughts window draws
+draughts numbers along its edge instead of digits that mean nothing to a player of it. A
+draughts column holds four numbered squares and has no name of its own, so the label names
+the first of them counted from White's side.
 
-**Every test here that names a square pins it against
-`tests/test_draughts_perft.py`'s independent derivation of the same arrangement.** That file
-derives the numbering from the geometry of the dark squares on purpose, so the published counts
-it is gated against cannot be restated in terms of whatever the game happens to implement. Two
-derivations asserted equal are one numbering; one derivation asserted equal to itself is
-nothing.
+**The numbering is `square_number`**, counted from the squares the game is played on, and
+every test here that names a square pins it against `tests/test_draughts_perft.py`'s
+independent derivation of the same arrangement.
 """
 
 import pytest
 
-from games.checkers.board import square_number
+from games.checkers.board import build_board, square_number
 from tests.test_draughts_perft import coordinates, square_of
 
 # --- the numbering, which is the board's and the perft gate's at once
@@ -68,3 +67,34 @@ def test_a_light_square_has_no_number_and_says_so():
 
     with pytest.raises(ValueError, match="not on"):
         square_number(8, 1)
+
+
+# --- the board's own column labels
+
+
+def test_a_draughts_board_names_its_columns_with_square_numbers():
+    """The window draws what the board says, so this is what a draughts player reads along the
+    bottom edge: the numbers of the squares that column holds, not 1 to 8.
+
+    Returns:
+        None
+    """
+    board = build_board()
+
+    assert board.file_label(0) == "5"
+    assert board.file_label(1) == "1"
+    assert board.file_label(7) == "4"
+    assert [board.file_label(col) for col in range(8)] != [str(col + 1) for col in range(8)]
+
+
+def test_the_column_labels_are_the_squares_the_board_actually_numbers():
+    """Every label is a real square number of that column, and the first one from White's side.
+
+    Returns:
+        None
+    """
+    board = build_board()
+
+    for col in range(board.cols):
+        numbers = [square_number(row, col) for row in range(board.rows) if (row + col) % 2 == 1]
+        assert board.file_label(col) == str(numbers[0])

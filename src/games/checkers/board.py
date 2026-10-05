@@ -119,6 +119,37 @@ def square_number(row: int, col: int, rows: int = DIMENSIONS[0], cols: int = DIM
     )
 
 
+class CheckersBoard(Board):
+    """A draughts board, whose columns are named by the square numbers they hold.
+
+    The engine's `Board` numbers its columns and every other board does the same. This one
+    names them the way this game names its squares, which is why the window draws draughts
+    numbers along its edge rather than digits that mean nothing here.
+    """
+
+    def file_label(self, col: int) -> str:
+        """Return what this board calls the column at `col`.
+
+        A draughts column holds four numbered squares and has no name of its own, so the
+        label names the first of them counted from White's side — the square at the top of
+        that column, which is the one a player reading the edge meets first. Writing all four
+        would be more complete and wider than a square; a column's own index would name
+        nothing a draughts player uses.
+
+        Args:
+            col: The column's 0-indexed number.
+
+        Returns:
+            str: The number of the first square in that column, in this game's naming.
+        """
+        numbers = [
+            square_number(row, col, self.rows, self.cols)
+            for row in range(self.rows)
+            if is_played_square(row, col)
+        ]
+        return str(numbers[0]) if numbers else super().file_label(col)
+
+
 def starting_placement(
     rows: int = DIMENSIONS[0], cols: int = DIMENSIONS[1]
 ) -> List[Tuple[Tuple[int, int], Piece]]:
@@ -169,16 +200,18 @@ def build_board(rows: int = DIMENSIONS[0], cols: int = DIMENSIONS[1]) -> Board:
         cols: Columns the board has.
 
     Returns:
-        Board: An eight by eight board holding the dark squares, with twelve men a side.
+        CheckersBoard: An eight by eight board holding the dark squares, with twelve men a
+        side, whose columns are named by this game's square numbers.
 
     Raises:
         ValueError: If the board cannot hold the standard starting position.
     """
-    return Board((rows, cols), placement=starting_placement(rows, cols))
+    return CheckersBoard((rows, cols), placement=starting_placement(rows, cols))
 
 
 __all__ = [
     "BLACK_ROWS",
+    "CheckersBoard",
     "DIMENSIONS",
     "PIECES_PER_SIDE",
     "WHITE_ROWS",
