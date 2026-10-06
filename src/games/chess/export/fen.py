@@ -64,12 +64,13 @@ from typing import Any, List, Optional, Tuple
 from model.game.manager import UnsupportedExportFormat
 from model.misc.export_writers import ExportWriter
 
+from ..castling_rights import castling_sides
+
 #: The kinds whose movement a piece's having moved governs, and the file offsets the castle rule
 #: walks. A colour's rook for the short castle stands three files beyond the file its royal
 #: piece castles from, and the long castle's rook four files short of it — the same arithmetic
 #: `rules/castling.py` does when it offers the two moves. The letter each is written as is the
 #: second half of each pair, in the order the format prescribes.
-ROOK_OFFSETS: Tuple[Tuple[int, str], ...] = ((3, "K"), (-4, "Q"))
 
 #: What the four fields between the placement and the side to move say when there is nothing to
 #: say. The format's own markers.
@@ -204,16 +205,13 @@ class ExportFEN(ExportWriter):
         letters: List[str] = []
         for color in (1, -1):
             row = 0 if color == 1 else board.rows - 1
-            royal = self._of_kind(board, row, board.cols // 2, royal_kind, color)
-            if royal is None:
-                continue
-            for offset, letter in ROOK_OFFSETS:
-                file = board.cols // 2 + offset
-                rook = self._of_kind(board, row, file, rook_kind, color)
-                if rook is not None:
-                    # The format writes the second colour's rights in lower case, which is how a
-                    # reader tells whose they are without reading the rest of the field.
-                    letters.append(letter if color == 1 else letter.lower())
+            # The same function the castling rule reads, so a right cannot be written for a castle
+            # the rule would not offer. It used to be offsets from the middle file — three and
+            # four — which name squares nothing stands on once the board is not eight files wide.
+            for side in castling_sides(board, color, row, royal_kind, rook_kind):
+                # The format writes the second colour's rights in lower case, which is how a
+                # reader tells whose they are without reading the rest of the field.
+                letters.append(side.letter if color == 1 else side.letter.lower())
         return "".join(letters) or NO_RIGHTS
 
     def en_passant_target(self, board: Any, moves: List[Any]) -> str:

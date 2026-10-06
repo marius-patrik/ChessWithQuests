@@ -20,6 +20,7 @@ from games.chess.board import build_board
 from games.chess.rules import build_rules
 from games.chess.rules.attacks import has_legal_move, square_color
 from games.chess.rules.check import in_check
+from games.chess.export.fen import ExportFEN
 from games.chess.rules.castling import CastlingRule
 from games.chess.rules.en_passant import EnPassantRule
 from games.chess.rules.draws import (
@@ -827,3 +828,68 @@ def test_a_king_that_moved_and_came_back_is_not_the_same_position():
     king.setMoved(True)
 
     assert position_key(board, 1) != before, "losing castling rights did not change the position"
+
+
+def ten_file_castling_board():
+    """Return a board ten files wide with both rooks and the royal piece where such a game puts them.
+
+    The rooks go on the first and last file and the king on the file the rule castles from, which
+    is the middle one. Nothing about that is an eight-file assumption: the rooks are five files
+    from the king here, where on eight files they are three.
+
+    Returns:
+        Board: Ten by ten, a white king on its own file and white rooks on a1 and j1.
+    """
+    from games.chess.board import ChessBoard
+    from games.chess.rules.castling import CastlingRule
+
+    board = ChessBoard((10, 10))
+    king_file = CastlingRule().start_file(board)
+    board.set_piece_at((0, king_file), King(1))
+    board.set_piece_at((0, 0), Rook(1))
+    board.set_piece_at((0, 9), Rook(1))
+    board.set_piece_at((9, king_file), King(-1))
+    return board
+
+
+def test_a_castle_is_offered_on_a_board_that_is_not_eight_files_wide():
+    """The rook used to be assumed to be three files from the king.
+
+    That is true on eight files and false on ten, where the rooks stand five files away. Both the
+    rule and the position record did that arithmetic separately, so they agreed with each other
+    and offered no castle and wrote no rights at all.
+    """
+    board = ten_file_castling_board()
+    rule = CastlingRule()
+    rule.attach()
+
+    king = next(
+        piece
+        for col in range(10)
+        if (piece := board.get_piece_at((0, col))) is not None and piece.getType() == "king"
+    )
+    offered = rule.available_moves(board, king)
+
+    assert [(m.end_pos[1], m.companion_start[1], m.companion_end[1]) for m in offered] == [
+        (7, 9, 6),
+        (3, 0, 4),
+    ], "the ten-file castles are not the ten-file ones"
+
+
+def test_the_position_record_writes_the_rights_for_those_same_two_castles():
+    """One question, one answer: the writer reads what the rule reads."""
+    board = ten_file_castling_board()
+
+    rights = ExportFEN().castling_rights(board)
+
+    assert rights == "KQ", f"the record wrote {rights!r} for a position offering KQ"
+
+
+def test_a_ten_file_board_names_its_last_square():
+    """`j10` is the square that broke a single-digit rank read."""
+    from games.chess.export.algebraic import algebraic_to_pos, pos_to_algebraic
+
+    assert pos_to_algebraic((9, 9)) == "j10"
+    assert algebraic_to_pos("j10") == (9, 9)
+    for square in ((0, 0), (9, 9), (4, 4), (9, 0), (0, 9)):
+        assert algebraic_to_pos(pos_to_algebraic(square)) == square

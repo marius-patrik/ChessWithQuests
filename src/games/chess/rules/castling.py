@@ -10,6 +10,7 @@ from typing import Any, List, Optional, Tuple
 from model.game.field import Field
 from model.game.move import Move
 from model.game.rule import Rule
+from ..castling_rights import castling_sides
 from .attacks import is_attacked, opponent
 
 #: The two castles as Standard Algebraic Notation writes them. **These are tokens, not move
@@ -97,18 +98,19 @@ class CastlingRule(Rule):
         if color in castled:
             return []
 
-        # Everything else follows from where the royal piece stands. It crosses two files
-        # towards one rook or the other, and that rook ends up on the file next to where the
-        # royal piece lands.
-        start = origin[1]
+        # Where each rook stands, and where the royal piece would land beside it, is read from
+        # the board by `castling_sides` — the same question the FEN writer asks, answered once.
+        # It used to be arithmetic here and arithmetic there, the rook three files from the king,
+        # which is only true on a board of eight files.
         offered: List[Move] = []
-        for king_dest, rook_file, rook_dest in (
-            (start + 2, start + 3, start + 1),
-            (start - 2, start - 4, start - 1),
+        for side in castling_sides(
+            position, color, row, self.value.get("royal_kind"), self.value.get("rook_kind")
         ):
-            if not (0 <= rook_file < position.cols and 0 <= king_dest < position.cols):
+            if not (0 <= side.king_dest < position.cols and 0 <= side.rook_dest < position.cols):
                 continue
-            move = self._castle(position, piece, color, row, rook_file, rook_dest, king_dest)
+            move = self._castle(
+                position, piece, color, row, side.rook_file, side.rook_dest, side.king_dest
+            )
             if move is not None:
                 offered.append(move)
         return offered
