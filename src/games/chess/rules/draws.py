@@ -5,7 +5,7 @@ deterministic, and every one of them is switchable, because "at what value" is
 configuration and "whether at all" is the player's.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from model.game.field import Field
 from model.game.move import Move
@@ -146,7 +146,16 @@ class FiftyMoveRule(Rule):
 
 
 class ThreefoldRepetitionRule(Rule):
-    """End the game in a draw once a position has occurred three times."""
+    """End the game in a draw once a position has occurred three times.
+
+    A position is counted when every rule has been told what happened, not when this rule is.
+    `on_move_made` runs in the middle of that announcement — the rules are notified in
+    composition order, and this configuration's `draws.py` is notified before its
+    `en_passant.py` — so what the set is offering about the position just reached is not yet in
+    the set when this rule would read it. The part of a position that is on the board is
+    therefore read at once and the part that is in the rules is read at the first moment it is
+    answerable; see `_settle`.
+    """
 
     default_name = "Threefold repetition"
 
@@ -169,13 +178,60 @@ class ThreefoldRepetitionRule(Rule):
             None
         """
         self.state["seen"] = {}
+        self.state["pending"] = []
         self.recorded = None
+
+    def permits_move(self, position: Any, move: Move) -> bool:
+        """Count what the last move produced, and allow this move as this rule always does.
+
+        This is where the counting happens, and it is here rather than in `on_move_made`
+        because validation is the first moment after a move on which every rule has been told
+        what happened. It is also a moment this rule is guaranteed to be asked at: every move
+        anybody plays is validated first, so a position cannot go uncounted for want of a
+        question — which matters because nothing in the shipped game asks whether the game is
+        over until it is.
+
+        Args:
+            position: The board the move would be played on.
+            move: The move being considered.
+
+        Returns:
+            bool: True. This rule forbids nothing; it only counts.
+        """
+        self._settle()
+        return True
+
+    def _settle(self) -> None:
+        """Count every position set aside that the rule set has now finished telling us about.
+
+        A rule that offers a square holds the offer for one ply and withdraws it on the next
+        move of any kind, so its answer is final from the moment the move producing it has been
+        announced until the next move is announced — and reading it anywhere else reads the
+        wrong ply's offer. This rule is notified inside that window but before the offering
+        rule has been, so the placement is set aside when the move is announced and the offer
+        is read here, from a set that has been told everything.
+
+        Returns:
+            None
+        """
+        pending = self.state.get("pending") or []
+        if not pending:
+            return
+        offers = offered_squares(self.rules)
+        self.state["pending"] = []
+        seen = self.state.setdefault("seen", {})
+        for placement in pending:
+            key = with_offers(placement, offers)
+            self.recorded = key
+            seen[key] = seen.get(key, 0) + 1
 
     def record(self, position: Any, active_color: Optional[int] = None) -> int:
         """Record a position once and report how often it has occurred.
 
         Recording is idempotent for the position being judged, so asking whether the game is
-        over cannot itself push a position over the limit.
+        over cannot itself push a position over the limit. Everything set aside by the last
+        move is counted first, which is what makes the position being judged the one just
+        counted rather than a second occurrence of it.
 
         Args:
             position: The board as it stands.
@@ -186,7 +242,10 @@ class ThreefoldRepetitionRule(Rule):
         Returns:
             int: How many times this position has occurred in this game.
         """
-        key = position_key(position, self.active_color if active_color is None else active_color)
+        self._settle()
+        key = position_key(
+            position, self.active_color if active_color is None else active_color, self.rules
+        )
         if key == self.recorded:
             return self.state.setdefault("seen", {}).get(key, 1)
         self.recorded = key
@@ -195,13 +254,18 @@ class ThreefoldRepetitionRule(Rule):
         return seen[key]
 
     def on_move_made(self, position: Any, move: Move) -> None:
-        """Record the position the move produced.
+        """Set aside the position the move produced.
 
         The position a move produces is judged with the *next* player to move, not the one
         who just moved. `active_color` still names the player who moved, because a game
         flips it after telling the rules what happened, so keying on it recorded every
         position under a turn order no other record of that position would ever use, and no
         position could be seen twice.
+
+        What is set aside is the placement alone. The rules are notified in composition order
+        and this one is notified before any rule that offers a square, so the offer for this
+        position is not in the set yet and is read later, by `_settle`, from a set that has
+        been told everything.
 
         Args:
             position: The board after the move.
@@ -211,7 +275,7 @@ class ThreefoldRepetitionRule(Rule):
             None
         """
         mover = move.piece.getColor() if move.piece is not None else self.active_color
-        self.record(position, opponent(mover))
+        self.state.setdefault("pending", []).append(placement_key(position, opponent(mover)))
 
     recorded: Optional[str] = None
 
@@ -302,17 +366,49 @@ class MutualAgreementRule(Rule):
 RIGHTS_BEARING_KINDS: Tuple[str, ...] = ("king", "rook")
 
 
-def position_key(position: Any, active_color: int) -> str:
-    """Build the identity of a position for repetition purposes.
+def offered_squares(rules: Iterable[Any]) -> List[Tuple[int, int]]:
+    """Return every square the rule set is offering, in an order that does not depend on it.
 
-    The rulebook's test is "the same player to move, the same pieces on the same squares, and
-    the same moves available to every piece". This covers the first two and, for castling, the
-    third. It does not cover a capture in passing: this configuration keeps no en passant target
-    on the board for a key to read, so a position reached by a pawn's two-square advance keys
-    the same as the same placement reached any other way. Reaching the same placement twice with
-    a live offer on the second occasion takes a pawn arriving on that square twice by different
-    routes, which no line of play produces, so the omission is recorded in
-    `notes/object_model.md` rather than worked around.
+    Args:
+        rules: The rules in force, in the order the configuration declared them. Every rule
+            answers this — it is declared on the parent — so there is nothing to skip.
+
+    Returns:
+        List[Tuple[int, int]]: The squares being offered, each once, sorted. Sorted because
+        the rules are declared in file-name order, which is a tie-break for two rules
+        proposing an outcome and says nothing about which of two simultaneous offers identifies
+        a position first.
+    """
+    squares: Set[Tuple[int, int]] = set()
+    for rule in rules:
+        square = rule.target_square()
+        if square is not None:
+            squares.add((square[0], square[1]))
+    return sorted(squares)
+
+
+def with_offers(placement: str, offers: Sequence[Tuple[int, int]]) -> str:
+    """Complete a placement key with what the rule set is offering.
+
+    Args:
+        placement: The key built from the board alone.
+        offers: The squares the rule set is offering, already reduced by `offered_squares`.
+
+    Returns:
+        str: The placement key with one field per offer. A set offering nothing returns the
+        placement key unchanged, so a configuration whose rules make no offers is described by
+        exactly the key it was described by before.
+    """
+    return placement + "".join(f"|offer:{row}:{col}" for row, col in offers)
+
+
+def placement_key(position: Any, active_color: int) -> str:
+    """Build the part of a position's identity that is on the board.
+
+    Everything here can be read at the moment a move is announced, which is what makes it the
+    half of `position_key` a rule can read for itself: what the rule set is offering is only
+    answerable once the whole set has been told, and the two halves are read at different
+    moments for that reason.
 
     Args:
         position: The board as it stands.
@@ -339,6 +435,48 @@ def position_key(position: Any, active_color: int) -> str:
                 moved = "m" if piece.hasMoved() else "n"
             parts.append(f"{piece.getType()}{'w' if piece.getColor() == 1 else 'b'}{moved}")
     return "|".join(parts)
+
+
+def position_key(position: Any, active_color: int, rules: Iterable[Any] = ()) -> str:
+    """Build the identity of a position for repetition purposes.
+
+    The rulebook's test is "the same player to move, the same pieces on the same squares, and
+    the same moves available to every piece". The first two are on the board and the third is
+    not: what a rule is offering lives in that rule's state and nowhere else, so it is read by
+    asking the set rather than by reading the board. Every rule answers `target_square`, which
+    is the question "what square are you offering", and a rule that offers nothing answers
+    None — so the key covers whatever this set is offering, and a set that offers nothing is
+    described by exactly the key it was described by before.
+
+    For a capture in passing the offer is recorded after every two-square advance whether or
+    not a capture is available to anybody, the same convention the position record writes and
+    for the same reason: an answer that depended on which pieces happened to be standing where
+    would depend on the rules in force rather than on the position. **The cost is that the
+    key is conservative in the safe direction.** Two placements reached with an offer standing
+    and without one are two positions here, where the rulebook would sometimes call them one
+    — the offer it cannot take up is not a move — so a repetition can go uncounted rather than
+    a repetition be claimed that the rulebook does not allow. That is the right way round for a
+    draw, and it is the same trade-off `export/fen.py` records for the same field.
+
+    **The offer belongs to the ply it was made on, and is read at the right moment.** A rule
+    that offers a square withdraws the offer on the next move of any kind, so its answer is
+    final only between one move being announced and the next one tried; read inside the
+    announcement it answers for the wrong ply. A caller that reads the key while rules are
+    being notified will therefore get the previous ply's offer — which is why
+    `ThreefoldRepetitionRule` reads `placement_key` when the move is announced and the offers
+    afterwards.
+
+    Args:
+        position: The board as it stands.
+        active_color: Whose turn it is.
+        rules: The rules in force, asked what they are offering. Defaults to no rules at all,
+            which is a set offering nothing and keys the placement alone.
+
+    Returns:
+        str: A key covering the placement, whose turn it is, the moved flag of the pieces whose
+        movement that flag governs, and one field per square the rule set is offering.
+    """
+    return with_offers(placement_key(position, active_color), offered_squares(rules))
 
 
 #: The knight's class was renamed to `Knight` on 2026-10-03, and its *configured* kind was

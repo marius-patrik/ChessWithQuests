@@ -54,8 +54,9 @@ Three reasons, in order of weight:
 
 What it costs is recorded rather than hidden: after `1. e4` two positions that differ only in
 whether the fifth rank pawn has moved are written with different en passant fields, so they are
-not the same string. `rules/draws.py` already records that this configuration keeps no en passant
-target in a repetition key for the same reason.
+not the same string. `rules/draws.py` keys a repetition on the same convention — a position's
+identity asks the rule set what it is offering, which is what `EnPassantRule.target_square`
+answers — and is conservative for the same reason and in the same direction.
 """
 
 from typing import Any, List, Optional, Tuple

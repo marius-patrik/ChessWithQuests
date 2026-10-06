@@ -247,16 +247,40 @@ Recorded because the question is fair and the answer is not obvious.
   chess formats and live in `games/chess/export/`. A game with no FEN
   representation has no FEN exporter, because the structure says so rather than
   a runtime capability check deciding.
-- **A repetition key cannot see a capture in passing.** The rulebook counts two positions as
+- **A repetition key asks the rule set what it is offering.** The rulebook counts two positions as
   the same only when the same moves are available to every piece, and a pawn that has just
   advanced two squares hands the opponent a capture that the same placement without it does
-  not. This configuration keeps no en passant target on the board for `position_key` to read —
-  the offer lives in `EnPassantRule`'s state — so the key covers the placement, the side to
-  move and the castling rights, and not the offer. Reaching the same placement a second time
-  *with* a live offer needs a pawn to arrive on that square twice by two different routes,
-  which no line of play produces, so nothing measurable is lost. Recorded 2026-10-04; the
-  honest fix is for the en passant offer to live on the board, which is a change to that rule
-  and not a key.
+  not — so what a rule is offering is part of a position's identity and not merely part of its
+  moves. **Closed 2026-10-05.** This was recorded here as a limitation: the offer lived in
+  `EnPassantRule`'s state, the key read the board, and there was nothing on the board for it to
+  read. `Rule.target_square` is now declared on the parent — *"what square are you offering"*,
+  which `royal_kind` was already the model for — every rule answers it, and `position_key`
+  takes the rule set and asks. `EnPassantRule` answers with the square a capturing piece lands
+  on, one row behind the advanced piece, recorded after every declared first advance whether or
+  not a capture is available, which is the convention `export/fen.py` already writes and for
+  the same reason: an answer that depended on which pieces happened to be standing where would
+  depend on the rules in force rather than on the position.
+
+  Two things about that record remain true and are kept here rather than deleted with it.
+  **Reaching the same placement a second time *with* a live offer needs a pawn to arrive on
+  that square twice by two different routes, which no line of play produces** — one pawn starts
+  on each file, a long advance keeps the file, and a pawn that has advanced cannot come back —
+  so the case the key now answers is asked of the key and not of a game, and
+  `tests/test_chess_rules.py` asks it of the key. And **the key is conservative in the safe
+  direction**: two placements reached with an offer standing and without one are two positions
+  here where the rulebook would sometimes call them one, since an offer nobody can take up
+  grants no move — so a repetition can go uncounted, and a repetition the rulebook does not
+  allow can never be claimed.
+
+  **The offer belongs to a ply, and reading it is a question of when.** A rule that offers a
+  square withdraws the offer on the next move of any kind, so its answer is final only between
+  one move being announced and the next one tried; the rules are notified of a move one at a
+  time in composition order, and this configuration's `draws.py` is notified before its
+  `en_passant.py`. `ThreefoldRepetitionRule` therefore reads the placement when the move is
+  announced and the offers at the first moment the whole set has been told — which is
+  `permits_move`, every attempted move's validation. Nothing asks whether a game is over until
+  it is, so that moment is the only one guaranteed to arrive. No deviation: a question on the
+  parent, asked of the set, which is the shape `royal_kind` already has.
 - **`SurviveWithoutCapture` asks for quiet moves, not for moves that cost you nothing.**
   Its description read "Play the required number of moves without losing a piece",
   while `observe_move` counts a move only when `not event.is_capture` — that is, when the

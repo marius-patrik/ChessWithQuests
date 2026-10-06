@@ -6,7 +6,7 @@ validator asks and rules answer — a rule may permit or forbid a move, never ca
 may propose an outcome, never impose one.
 """
 
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from model.game.events import OUTCOME_DRAW, OUTCOME_LOSS, OUTCOME_WIN
 from model.game.field import Field
@@ -284,6 +284,33 @@ class Rule:
             kind = rule.value.get(ROYAL_KIND)
             if kind:
                 return kind
+        return None
+
+    def target_square(self) -> Optional[Tuple[int, int]]:
+        """Return the square this rule is offering, when it is offering one.
+
+        A rule that offers a move for one ply and then withdraws it holds something the board
+        cannot show: the same placement with the offer standing and the offer gone is one
+        position to a board and two positions to a game, and the second question — how many
+        times has this position occurred — is unanswerable unless the offer is part of what
+        identifies a position. `royal_kind` is the other cross-rule question, and it is
+        answered the same way: every rule answers this and the rule that needs the answer asks
+        its set, so nothing here is a particular game's rule.
+
+        **An offer belongs to the ply that made it, so this is answerable only between one
+        move being announced and the next one tried.** A rule that withdraws an offer on the
+        next move of any kind is right for every ply in between and wrong outside it, and the
+        rules are notified of a move one at a time in the order the configuration declared
+        them — so a rule asking its set from inside `on_move_made` may be asking a rule that
+        has not been told yet, and gets the previous ply's answer. A rule that needs this for
+        a position it was just told about reads what it can at once and reads this at the
+        first moment the whole set has been told; `ThreefoldRepetitionRule` does exactly that
+        and says why in `_settle`.
+
+        Returns:
+            Optional[Tuple[int, int]]: The square being offered, or None — which is what every
+            rule that has no offer says.
+        """
         return None
 
     def attach(self) -> None:

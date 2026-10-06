@@ -439,6 +439,55 @@ def test_a_repetition_is_counted_under_the_player_who_is_to_move_next():
     assert max(rule.state["seen"].values()) == 3
 
 
+def _play_quietly(game: GameManager, wanted: str) -> None:
+    """Play one move without asking whether the game is over.
+
+    Args:
+        game: The game to play in.
+        wanted: The move as `from to`, such as `g1 f3`.
+
+    Returns:
+        None
+
+    Raises:
+        LookupError: When the move is not offered.
+    """
+    origin = _origin(wanted)
+    target = _target(wanted)
+    for move in game.get_valid_moves():
+        if move.start_pos == origin and move.end_pos == target:
+            assert game.make_move(move), f"{wanted} was offered but could not be played"
+            return
+    raise LookupError(f"{wanted} is not offered in this position")
+
+
+def test_a_repetition_is_counted_by_a_game_that_never_asks_whether_it_is_over():
+    """The game counts its own positions; being asked is not what makes it count them.
+
+    A position is counted once the whole rule set has been told what happened, which is the
+    moment the next move is validated, and every move anybody plays is validated first. That
+    has to be where it happens: the shipped window asks whether the game is over only once
+    `get_state` says the game is, so a position counted only when asked would go uncounted for
+    the whole game and the shuffle below would never be called a repetition.
+
+    This is a standing guard rather than a test of a past defect — a key with no offer in it is
+    counted at the same moment, so it passes against the code as it stood before the offer
+    became part of a position. It is here so that moving the counting back into the question
+    cannot pass unnoticed.
+    """
+    game = GameManager()
+    for wanted in ["g1 f3", "g8 f6", "f3 g1", "f6 g8"] * 2:
+        _play_quietly(game, wanted)
+
+    assert game.get_result() is None, "two cycles of the shuffle were not yet a repetition"
+
+    for wanted in ["g1 f3", "g8 f6"]:
+        _play_quietly(game, wanted)
+
+    result = game.get_result()
+    assert result is not None and result.reason == "threefold repetition"
+
+
 def test_asking_whether_the_game_is_over_keeps_what_the_rules_know():
     """Asking a question is not the start of a new game.
 

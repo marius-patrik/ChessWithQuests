@@ -293,6 +293,131 @@ def test_en_passant_expires_when_another_move_is_played():
     assert rule.available_moves(board, white_pawn) == []
 
 
+def test_the_offered_square_is_the_one_a_capturing_piece_lands_on():
+    """The offer names the square behind the advanced piece, not the one it stands on.
+
+    Two squares are in play and they are not the same square: the advanced piece is lifted from
+    the square it stands on, which `victim_square` answers, and the capturing piece lands one
+    row further on, which is what a position record calls the target. Reporting the first for
+    the second would name a square no capture ever ends on.
+    """
+    board = empty_board()
+    black_pawn = Pawn(-1)
+    board.set_piece_at((4, 4), black_pawn)
+
+    rule = EnPassantRule()
+    rule.attach()
+    assert rule.target_square() is None
+
+    rule.on_move_made(board, Move((6, 4), (4, 4), piece=black_pawn))
+
+    assert rule.victim_square() == (4, 4)  # e5, where the advanced pawn stands
+    assert rule.target_square() == (5, 4)  # e6, where a capturing pawn would land
+
+
+def test_a_rule_that_offers_nothing_says_so():
+    """Every rule answers the question, and the answer for no offer is None."""
+    assert EnPassantRule().target_square() is None
+    assert ThreefoldRepetitionRule().target_square() is None
+
+
+def test_a_live_capture_in_passing_is_part_of_what_identifies_a_position():
+    """The same placement with the offer standing and without it is two positions.
+
+    This is the case the key used to miss. A pawn that has just advanced two squares hands the
+    opponent a capture the same placement reached any other way does not, so the rulebook
+    counts the two as different positions; the key read neither the offer nor anything else
+    about it, and read the placement alone.
+
+    The control matters as much as the difference: with no offer standing the key is exactly
+    the key this function has always produced, so a key that differed for every position would
+    pass the first half of this and be wrong.
+    """
+    board = empty_board()
+    black_pawn = Pawn(-1)
+    board.set_piece_at((4, 4), black_pawn)
+
+    rule = EnPassantRule()
+    rule.attach()
+    without_offer = position_key(board, -1, [rule])
+
+    rule.on_move_made(board, Move((6, 4), (4, 4), piece=black_pawn))
+
+    assert position_key(board, -1, [rule]) != without_offer
+    # A set that is asked nothing it can answer keys the placement alone.
+    assert position_key(board, -1, []) == without_offer
+
+
+def offering_board():
+    """Return a board on which one long advance has just been made and offers a capture.
+
+    The black pawn stands on e5 having come from e7 by its declared one-off long step, the
+    white rook and both kings are out of its way, and nothing has been told about any move yet,
+    so a rule asked what it is offering answers for a position the caller is about to describe.
+
+    Returns:
+        tuple: The board, the advance that produced this position, and a quiet move that
+        withdraws the offer without changing the placement of the advanced pawn.
+    """
+    board = empty_board()
+    board.set_piece_at((4, 4), Pawn(-1))  # e5, arrived at from e7
+    board.set_piece_at((6, 0), Rook(1))  # a1, which can step aside
+    board.set_piece_at((7, 0), King(-1))  # a8
+    board.set_piece_at((0, 7), King(1))  # h1, which can step aside
+    return (
+        board,
+        Move((6, 4), (4, 4), piece=board.get_piece_at((4, 4))),
+        Move((6, 0), (7, 0), piece=board.get_piece_at((6, 0))),
+    )
+
+
+def test_three_occurrences_differing_only_in_a_live_offer_are_not_a_repetition():
+    """The draw the key used to propose wrongly: three of one position that was never one.
+
+    The same board is put to the rule three times, and the only thing that changes is whether
+    an offer is standing. Two occurrences are the same position and the third is a different
+    one, so no position has occurred three times and nothing may be proposed — which is the
+    question the key could not previously answer, and it answered it wrongly every time.
+
+    The moves are announced to this configuration's whole rule set through the engine's own
+    dispatcher and in the order the configuration declares them, which puts the repetition rule
+    before the rule that offers the square. That order is the reason the offer is read when the
+    next question is asked rather than when the move is announced, and a test that announced the
+    moves to the two rules by hand would not have exercised any of it.
+
+    The second half is the control: the same three occurrences with the offer standing on all
+    of them *are* a repetition. Without it the first half would also pass for a rule that
+    counted nothing at all.
+    """
+    board, advance, quiet = offering_board()
+
+    def judged_after(moves):
+        """Return what this configuration's repetition rule proposes after these moves.
+
+        Args:
+            moves: The moves to announce, in order, to a freshly composed rule set.
+
+        Returns:
+            Optional[Result]: What the rule proposes for the position the last move produced.
+        """
+        rules = build_rules()
+        validator = MoveValidator(board, rules=rules)
+        repetition = next(rule for rule in rules if isinstance(rule, ThreefoldRepetitionRule))
+        for move in moves:
+            validator.notify_move_made(move, board)
+        return repetition.outcome(board)
+
+    alternating = judged_after([advance, quiet, advance])
+    assert alternating is None, (
+        "a draw was proposed for three occurrences that were not one position, "
+        "because the offer was not part of the key"
+    )
+
+    offered_throughout = judged_after([advance] * 3)
+    assert offered_throughout is not None
+    assert offered_throughout.reason == "threefold repetition"
+
+
 def test_promotion_is_offered_to_the_four_choices():
     """A pawn reaching the far rank is offered a promotion, not left a pawn."""
     board = empty_board()

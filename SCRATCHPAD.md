@@ -1201,15 +1201,22 @@ and every `hasattr` probe are gone. `find_king` is gone. **`is_check`
 called from `manager.py:211,215,353,354`. Neither is *hard-coded* coupling —
 neither names a piece type — but neither was removed either.
 
-**Where `getType()` actually still is.** Twenty-one call sites across ten files,
-counted as occurrences of the call rather than lines holding it — `attacks.py:98`,
-`draws.py:340` and `geometric.py:89` each hold two:
+**Where `getType()` actually still is.** Twenty-two call sites across ten files,
+counted as occurrences of the call rather than lines holding it — `attacks.py:98` and
+`geometric.py:89` each hold two:
 
 | Location | Sites |
 |---|---|
-| `games/chess/rules/` | **13 across 5 files** — `attacks.py:62,98`, `castling.py:84,145,191,215`, `draws.py:128,333,340,395`, `bishop_colour.py:90`, `promotion.py:102` |
-| `games/checkers/rules/` | 5 across 3 files — `draws.py:100`, `limited_kings.py:68`, `geometric.py:89,131` |
-| `model/game/` | **3 across 2 files** — `validator.py:199`, `manager.py:351,352` |
+| `games/chess/rules/` | **14 across 5 files** — `attacks.py:62,98`, `bishop_colour.py:90`, `castling.py:88,149,195,219`, `draws.py:128,432,439,536`, `promotion.py:119,270` |
+| `games/checkers/rules/` | 6 across 3 files — `draws.py:105,229`, `limited_kings.py:68`, `geometric.py:89,131` |
+| `model/game/` | **3 across 2 files** — `validator.py:199`, `manager.py:382,383` |
+
+Re-measured 2026-10-05 rather than inherited. This table said **twelve** sites in
+`games/chess/rules/` listed as thirteen, with `castling.py` and `draws.py` three
+and four lines out of date and `promotion.py` holding one call where it now holds
+two — the second is the one that resolves what a pawn may be promoted to out of
+this configuration's own catalogue, added with the catalogue-driven promotion.
+The two `model/game/` rows were correct and are unchanged.
 
 An earlier revision of this section said "the three remaining `getType()`
 comparisons are in `games/chess/rules/` — `attacks.py`, `castling.py` and
