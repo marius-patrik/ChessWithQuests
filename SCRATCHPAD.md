@@ -1663,14 +1663,18 @@ asserted. An unannotated item here is a target, not a verified state.
     collide.
 11. A rule's configured `value` persists; its runtime `state` resets each game
     and never reaches disk.
-12. Those rules hold on non-8×8 boards, rank-relative rules generalised.
-    **Half asserted.** `tests/test_board_generalisation.py` builds 8×8, 10×10 and
-    5×7 boards and exercises move validation, sliding, capture, an engine-level
-    promotion and FEN serialisation on each. `CastlingRule` and `EnPassantRule`
-    derive their files from the board in code (`castling.py:44,56`, and the
-    `position.cols` bounds at `:105`), but **no test plays either on a board that
-    is not 8×8**. "Generalised" is a statement about the code here, not a
-    verified behaviour.
+  12. Those rules hold on non-8×8 boards, rank-relative rules generalised.
+      **Asserted, and the arithmetic that broke it is gone.**
+      `tests/test_board_generalisation.py` builds 8×8, 10×10 and 5×7 boards and
+      exercises move validation, sliding, capture, an engine-level promotion and
+      FEN serialisation on each. Castling was the exception: the rook was placed
+      by arithmetic — three files from the king — in `CastlingRule` and, separately,
+      in `ExportFEN`, so on ten files the two agreed with each other and offered no
+      castle and wrote no rights. Both now read `games/chess/castling_rights.py`,
+      which finds the rook on the board, and `tests/test_chess_rules.py` plays a
+      ten-file castle and writes its record. `algebraic_to_pos` read the rank as a
+      single character, so `j10` did not parse; it reads every digit after the file
+      letter, and the round trip is asserted on both widths.
 13. A move may consist of several hops.
 14. Nothing in the engine mentions a king, a pawn, a check or a mate.
     **True for piece *types*, false for the words.** `MoveValidator.is_check` and

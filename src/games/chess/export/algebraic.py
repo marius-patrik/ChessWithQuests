@@ -6,10 +6,11 @@ White's side. A game whose board is not eight files wide has no such naming, so 
 nothing here — which is what "a game with no FEN representation has no FEN exporter" means in
 `notes/object_model.md`.
 
-Only the letters `a` to `h` and the single-digit ranks of a chess board are handled. That is
-deliberate rather than merely convenient: `algebraic_to_pos` reads the rank as
-`int(algebraic[1])`, which is the whole reason this conversion cannot describe a board of any
-other width, and pretending otherwise would move the defect rather than remove it.
+The file is one letter and the rank is every digit after it, so a board of ten files names its
+last square `j10`. Reading a single character for the rank worked while ranks fitted in one digit
+and broke at `j10`; the whole of that limitation is gone, and what remains is that the letters run
+from `a` to whatever the last file is, which is a question about the board rather than this
+module.
 
 `AlgebraicNotation` is the same naming offered as something the window may ask. It is how a
 move is labelled in the move history, and it is declared by the configuration rather than
@@ -83,14 +84,18 @@ def pos_to_algebraic(position: Tuple[int, int]) -> str:
 def algebraic_to_pos(algebraic: str) -> Tuple[int, int]:
     """Convert an algebraic notation coordinate string to a 0-indexed (row, col) tuple.
 
+    The file is the first letter and the rank is **every** digit after it, so a board of ten files
+    names its last square `j10` rather than truncating the rank to `1`. Reading one character was
+    only ever right for a rank below ten.
+
     Args:
-        algebraic: Coordinate string (e.g. 'e4', 'a1').
+        algebraic: Coordinate string (e.g. 'e4', 'a1', 'j10').
 
     Returns:
         Tuple[int, int]: Tuple of (row, col) 0-indexed coordinates.
     """
     col = ord(algebraic[0].lower()) - ord("a")
-    row = int(algebraic[1]) - 1
+    row = int(algebraic[1:]) - 1
     return (row, col)
 
 
