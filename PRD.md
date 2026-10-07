@@ -382,7 +382,7 @@ this project adds beyond the diagram is registered in `notes/object_model.md`.
 | `RevizorTahu` · `simulate_Move()`, `check_Šach()`, `check_Mat`, `check_Pat` | FR-8, FR-16, FR-61 |
 | `GameManager` · `plocha`, `aktivni_hrac`, `hraci`, `aktualni_tah`, `casovac`, `game_logger`, `revizor_tahu` | FR-62 |
 | `GameManager` · `zacni_tah()`, `mozne_tahy()`, `zrus_tah()`, `uloz_log()`, `get_stav()` | FR-62 |
-| `GameManager` · `najdi_uzivatele(id)` | FR-60 |
+| `GameManager` · `najdi_uzivatele(id)` | FR-60 — **the method is named on `UserManager`, not `GameManager`**: `UserManager.get_user` (`model/users/manager.py:36`). Corrected 2026-10-07; the diagram draws the lookup on `GameManager` and no such method exists there. |
 | `Timer` · `cas_hrac`, `nuluj_cas()`, `pocitej_cas()` | FR-6, FR-63 |
 | `GameLogger` · `soubor`, `uloz_tah()`, `vytvor_soubor()` | FR-50, FR-64 |
 | `Uzivatel` · `uzivatelske_jmeno`, `jmeno`, `email`, `elo`, `splnene_kwesty`, `pridej_quest()` | FR-60, FR-24 |
@@ -402,7 +402,7 @@ this project adds beyond the diagram is registered in `notes/object_model.md`.
 | ID | Requirement |
 |---|---|
 | FR-60 | A user has a username, display name, email and an ELO rating, is registered and looked up by identifier, is linked to the player it controls, and the player's rating is readable from that link. The user directory records its users, its action log and its history. |
-| FR-61 | The validator's four drawn operations are preserved. `simulate_Move()` returns the moves available to the active player; `check` reports whether the royal piece is attacked; checkmate and stalemate are reported as outcomes through `Result`. The royal piece is identified by whatever the configuration declares, never by a type name. |
+| FR-61 | The validator's four drawn operations are preserved. `simulate_Move()`'s requirement — the moves available to the active player — is met by `MoveValidator.get_all_valid_moves` (`model/game/validator.py:549`); the method of the drawn name, `simulate_move` (`:618`), returns rollback state and has no production caller. Corrected 2026-10-07. `check` reports whether the royal piece is attacked; checkmate and stalemate are reported as outcomes through `Result`. The royal piece is identified by whatever the configuration declares, never by a type name. |
 | FR-62 | The game manager holds the board, the active player, the players, the current move, the clock, the logger and the validator, and exposes starting a turn, listing available moves, cancelling a move, writing the log, and reporting the game state. |
 | FR-63 | A clock holds per-player time, resets, and counts down for the given player. |
 | FR-64 | A log creates its file on demand, records each move with its move type, and exposes the recorded moves. |

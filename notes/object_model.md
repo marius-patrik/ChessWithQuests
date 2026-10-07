@@ -134,8 +134,19 @@ user request adds it.
   default configuration the game behaves as the drawn model describes.
   Its drawn operations map onto the new mechanism as follows: `simulate_Move()`
   is satisfied by `Rule.available_moves`, `check_Šach()` and `check_Mat` and
-  `check_Pat` are outcomes proposed through `Rule.outcome`. **See FR-61**, which
-  is the requirement that preserves the validator's four drawn operations.
+`check_Pat` are outcomes proposed through `Rule.outcome`. **See FR-61**, which
+    is the requirement that preserves the validator's four drawn operations.
+    *Corrected 2026-10-07: this sentence said `simulate_Move()` "is satisfied by
+    `Rule.available_moves`", which is wrong twice over.
+    `Rule.available_moves` (`model/game/rule.py:224-235`) returns the *additional* moves a rule
+    offers on top of a piece's own vectors — `()` by default, and by design not the mover's move
+    set. The moves available to the active player come from
+    `MoveValidator.get_valid_moves` / `get_all_valid_moves` (`model/game/validator.py:490`, `:549`),
+    which this sentence never named. Meanwhile the method of the drawn name,
+    `MoveValidator.simulate_move` (`:618-637`), returns
+    `List[((row, col), previous_piece)]` — the state to put back — and has no production caller
+    outside `tests/test_validator.py`. So the drawn operation is served, but by
+    `get_all_valid_moves`, not by either method this sentence used to point at.*
   *Corrected 2026-10-04: this sentence cited FR-60, which is the requirement for
   `Uzivatel` and `User Manager` and has nothing to do with the validator. It is
   the same off-by-one class of error that `PRD.md` §7.10 had and that was corrected
@@ -593,8 +604,23 @@ Recorded because the question is fair and the answer is not obvious.
   same pair". Neither half was right. `refresh` calls `set_in_check`
   (`player_game_view.py:223`); `set_selection` is called from
   `on_square_clicked` (`:157,159`), `reload` (`:187`) and `on_new_game` (`:207`),
-  never from `refresh`.*
-- **Why composition rather than a third class**: the diagram's own
+never from `refresh`.*
+  - **The controller holds no view. It never did.**
+    `GameManagerController` draws three attributes that are not there: `game_view: GameView`,
+    `hrac_view: HracView` and `herni_plocha: HerniPlocha`. `GameController` assigns exactly three
+    instance attributes — `game_manager` (`controller/controller.py:17`), `selected_square` (`:32`)
+    and `highlighted_moves` (`:33`) — and `controller/window_controller.py` assigns none of those
+    names. `grep -rn "game_view\|hrac_view" controller/` returns nothing.
+    The dependency runs the other way: `view/app.py:57-64` constructs the `PlayerGameView` and stores
+    it on the Tk root as `root.game_view`. The view holds the controller
+    (`player_game_view.py:82`, `window_controller`); the controller holds no reference back.
+    `herni_plocha` is reached only as `self.game_manager.board` (`controller/controller.py:30`).
+    *Corrected 2026-10-07: this section said "`GameManagerController.game_view: GameView` is
+    satisfied by the `PlayerGameView` that holds the board view". That was a positive conformance
+    claim the code does not bear out — no such attribute exists on either controller, and a
+    `PlayerGameView` does not satisfy an attribute of another object. Verified against the original
+    diagram rather than the transcription of it.*
+  - **Why composition rather than a third class**: the diagram's own
   generalisation idiom settles what the parent is. `BoardView` is the piece the
   diagram has no box for, `PlayerGameView` is the `HracGameView` it does, and a
   `GameView` that wrapped the first inside the second would hold no state and
@@ -1186,9 +1212,41 @@ earlier section registered.
   from their own directories "using the same mechanism and the same policy", with the two
   judgement calls named as questions to be answered rather than inherited.
 
+### 27. Three Drawn Members That Do Not Exist, and One That Points Nowhere
+
+  - **Date**: 2026-10-07
+  - **Context**: found by fetching the original `Šachy - diagram tříd.drawio` (77,262 bytes) and
+    classifying every class box, member, operation and edge in both pages against the source, rather
+    than against the transcription in `notes/reference_diagram.md`. That transcription turned out to
+    be faithful — all 21 page-1 boxes and all 5 page-2 boxes are recorded — so nothing needed adding
+    to it. These four items were missing from *this* file.
+  - **D3 — `GameManager.je_vlastni_figurka(souradnice): bool`** is drawn on the page-2 `GameManager`
+    box. It does not exist: zero occurrences across `model/`, `games/`, `controller/`, `view/`,
+    `tests/`. The ownership test it draws is inline instead, at `controller/controller.py:31` and
+    again at `:59`. **No deviation**: the behaviour is present and is tested; only the drawn method
+    name is absent, and the ownership check belongs to the controller that asks the question.
+  - **D4/D5 — `GameManagerController.herni_plocha` and `.hrac_view`** are recorded in section 15,
+    which now says so explicitly rather than leaving them implied.
+  - **The page-2 edge contradicts its own member.** `GameManagerController.hrac_view` is typed
+    `HracView` but its edge points at the `HracGameView` box. `notes/reference_diagram.md:154`
+    records that `HracView` has no box; it does not record that the one attribute typed as
+    `HracView` is wired to a differently named box. **No deviation from the code** — this is a
+    defect *in the diagram*, recorded so it is not later mistaken for something we did.
+  - **Two signatures differ from the drawing.** `HerníPlocha.posun_figurky(Tah): bool` and
+    `nahrad_figurku(Figurka, Tah)` are `Board.move_piece(start_pos, end_pos)`
+    (`model/game/board.py:176`) and `Board.replace_piece(position, new_piece)` (`:204`): both take
+    coordinates where the drawing passes a `Move`, and `replace_piece`'s parameter order differs.
+    **No deviation**: a board mutating itself does not need to construct or receive the move object
+    that describes it, and the drawn signatures would only be satisfied by wrappers that add
+    nothing.
+  - **One drawn box, two classes.** `GameManagerController` is a single box; the code has
+    `GameController` (`controller/controller.py:8`) and `WindowController`
+    (`controller/window_controller.py:8`). This is a rename *and* a split, and only the rename was
+    registered (`Naming decisions`, `object_model.md:1374`). **Now registered.**
+
 ---
 
-### 27. Two Writers Gained a Replay, Four Gained Methods, and One Gained a Reader
+### 28. Two Writers Gained a Replay, Four Gained Methods, and One Gained a Reader
 
 - **Date**: 2026-10-05
 - **Context**: `PRD.md` FR-45, FR-46 and FR-49 each claimed a record the writer did not write.
@@ -1269,7 +1327,7 @@ earlier section registered.
 
 ---
 
-### 28. The Default Configuration Is Declared by the Root, and the Engine Names No Game
+### 29. The Default Configuration Is Declared by the Root, and the Engine Names No Game
 
 - **Date**: 2026-10-05. **Revised 2026-10-05**: the reading below was weighed, found defensible
   and **declined** — "a default configuration name is product configuration, not chess
@@ -1326,7 +1384,7 @@ earlier section registered.
   the maintainer ruled 2026-10-05 that nothing is to be left: a deviation recorded for a reason
   that still holds is work to do, not a note to keep. This section is the record of the work.
 
-### 29. The Code Editor Reaches Rules and Quests, and the Other Three Sections Are Hand-Written by Design
+### 30. The Code Editor Reaches Rules and Quests, and the Other Three Sections Are Hand-Written by Design
 
 - **Date**: 2026-10-05
 - **Context**: every section now composes from its own directory — §25 and §26 — so a piece, a

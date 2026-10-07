@@ -152,6 +152,7 @@ smoothing them over would make the deviations unverifiable.
 | `Id_uzivatele: hrac` | a user id typed as a player |
 | `proveď_tah`, `over platnost` | Czech with diacritics inside member names |
 | `HracView` | **no class box exists.** It appears only as an attribute *type* on `GameManagerController`. The class is created as `PlayerView` — `notes/object_model.md` section 15 |
+| `hrac_view` edge target | **the diagram contradicts itself.** `GameManagerController.hrac_view` is typed `HracView`, but its edge points at the `HracGameView` box. The row above records the missing box; this records the mismatch between the member's type and the box it is wired to |
 
 ### Structural inconsistency
 
