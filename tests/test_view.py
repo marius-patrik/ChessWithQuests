@@ -14,7 +14,7 @@ import pytest
 from model.game.board import Board
 
 from model.game.games import available_games
-from view.player_game_view import PlayerGameView, STATE_LABELS
+from view.player_game_view import PlayerGameView, STATE_LABELS, outcome_sentence
 from view.player_view import format_seconds
 from view.start_modal import StartModal
 
@@ -551,3 +551,68 @@ def test_the_canvas_follows_a_board_that_changed_size(window):
 
     assert board_view.canvas.winfo_reqwidth() == 10 * board_view.square_size
     assert board_view.canvas.winfo_reqheight() == 10 * board_view.square_size
+
+
+def test_a_game_that_did_not_end_in_checkmate_is_not_called_one():
+    """The footer said "Checkmate" for anything decisive, so a flagged chess game and a won
+    draughts game were both announced as checkmates. English draughts has no king and no check,
+    so there is no checkmate to detect there at all, and a game lost on time is a flag fall.
+
+    The reason is the only field that distinguishes them, and every rule that ends a game sets
+    it: `flag fall` from `games/chess/rules/flag.py`, `immobilised` from
+    `games/checkers/rules/immobilisation.py`, and the rest from the draw and check rules.
+    """
+    from model.game.rule import Result
+
+    reasons = [
+        "checkmate",
+        "flag fall",
+        "immobilised",
+        "stalemate",
+        "agreement",
+        "insufficient material",
+        "threefold repetition",
+    ]
+
+    for reason in reasons:
+        for winner in (1, -1, None):
+            sentence = outcome_sentence(Result(kind="win", winner=winner, reason=reason))
+            if reason != "checkmate":
+                assert "Checkmate" not in sentence, reason
+            if winner is None:
+                assert sentence.startswith("Draw"), reason
+            else:
+                colour = "White" if winner == 1 else "Black"
+                assert colour in sentence, reason
+                # Checkmate opens the sentence and is capitalised there; every other
+                # reason is written verbatim after the em dash.
+                assert reason in sentence or reason.capitalize() in sentence, reason
+
+
+def test_the_footer_reports_the_reason_a_game_actually_ended():
+    """Two games with the same winner and different reasons must not read alike."""
+    from model.game.rule import Result
+
+    flagged = outcome_sentence(Result(kind="win", winner=-1, reason="flag fall"))
+    mated = outcome_sentence(Result(kind="win", winner=-1, reason="checkmate"))
+    walled = outcome_sentence(Result(kind="win", winner=-1, reason="immobilised"))
+
+    assert mated == "Checkmate — Black wins."
+    assert flagged == "Black wins — flag fall."
+    assert walled == "Black wins — immobilised."
+    assert len({flagged, mated, walled}) == 3
+
+
+def test_a_flagged_clock_announces_a_flag_fall_in_the_real_window(window):
+    """The sentence is not only correct in isolation; it is what the footer shows."""
+    view = window
+    view.manager.timer.add_time(view.manager.active_player, -700)
+    view.manager.finish_game()
+    view.refresh()
+    view.update()
+
+    assert view.manager.get_state() == view.manager.STATE_TIMEOUT
+    assert view.manager.result is not None
+    assert view.manager.result.winner == -1
+    assert "flag fall" in view.status.get()
+    assert "Checkmate" not in view.status.get()

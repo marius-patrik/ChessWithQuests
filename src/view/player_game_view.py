@@ -36,6 +36,35 @@ STATE_LABELS = {
     GameManager.STATE_IN_PROGRESS: "",
 }
 
+#: The one reason that means the game ended in checkmate.
+#:
+#: Every other decisive `Result.reason` is a different ending that happens to arrive while the
+#: state constants say something generic: a chess game lost on time is a flag fall, and an English
+#: draughts game is won by immobilisation — a game with no king and no check, where "checkmate" is
+#: not a thing that could have happened. The reason is the only field that says which ending it
+#: was, so the sentence is built from it rather than from the state.
+CHECKMATE_REASON = "checkmate"
+
+
+def outcome_sentence(result: Any) -> str:
+    """Say how a finished game ended, in one sentence, without claiming more than happened.
+
+    Args:
+        result: The finished game's `Result`, carrying `winner` and `reason`.
+
+    Returns:
+        str: The sentence for the footer. A draw names its reason; a decisive result names the
+        winning colour and the reason; only a reason of `"checkmate"` is called a checkmate.
+    """
+    reason = str(getattr(result, "reason", "") or "").strip()
+    winner = getattr(result, "winner", None)
+    if winner is None:
+        return f"Draw — {reason}." if reason else "Draw."
+    colour = "White" if winner == 1 else "Black"
+    if reason == CHECKMATE_REASON:
+        return f"Checkmate — {colour} wins."
+    return f"{colour} wins — {reason}."
+
 
 def move_label(notation: Optional[Any], number: int, move: Move) -> str:
     """Return the text the move history lists a move as.
@@ -264,16 +293,13 @@ class PlayerGameView(ttk.Frame):
             # previous game's result.
             self.status.set(self.window_controller.status_message)
         label = STATE_LABELS.get(state, "")
-        if label and state in TERMINAL_STATES:
+        if state in TERMINAL_STATES:
             result = self.manager.result
             if result is not None:
-                winner = result.winner
-                if winner == 1:
-                    label = f"Checkmate — White wins ({result.reason})."
-                elif winner == -1:
-                    label = f"Checkmate — Black wins ({result.reason})."
-                else:
-                    label = f"Draw ({result.reason})."
+                # The reason, not the state, says what happened: a flag fall and an
+                # immobilisation both arrive while the state says something generic, and neither
+                # is a checkmate.
+                label = outcome_sentence(result)
             self.status.set(label)
 
         self._refresh_history()
