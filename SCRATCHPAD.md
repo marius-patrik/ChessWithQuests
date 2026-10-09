@@ -408,7 +408,7 @@ said thirteen, two, three and three.
 | 16 | Settings surface | **delivered** — the five sections, the corner configuration selector with create/rename/delete/duplicate, and a code editor that validates before the code joins a configuration | main stack |
 | 17 | `games/checkers/` | **partial** — the board, two piece kinds, eight rules, the clock and four quests, held to the published perft counts, and **two writers**: `ExportLetter` and its own `ExportMetadata`, declared `Letter` and `Field-Field-Extra` by `build_exporters()`. There is no position record and none was invented. **The game it plays is now WCDF English draughts** — the king steps one square, the forty-move count is 80 plies, and threefold repetition exists, since 2026-10-04; `notes/object_model.md` §21. This row said it was still flying-kings, which was true until then and was not corrected when it stopped being true | main stack |
 | 18 | Export generalised | **delivered** — one writer class per format in `games/chess/export/`, the format switch and the `ChessNotationWriter` class deleted, the engine holding only the `ExportWriter` protocol and `tests/test_engine_holds_no_chess.py` walking `model/` to keep it that way. The item's other half closed 2026-10-05: *letter* is `ExportAlgebraic`, and the header is `ExportMetadata` supplied through `Configuration.metadata` | this branch |
-| 19 | Export formats: PGN, FEN, field-field-extra, stenographic | **delivered 2026-10-05** — all five formats have a writer, the header is derived from the game with no placeholder strings, the movetext is real SAN read off a replay, FEN computes all six fields, and the coordinate record is compressed with a standard library codec and reads back. See §4.1 and `notes/object_model.md` §27 | this branch |
+| 19 | Export formats: PGN, FEN, field-field-extra, stenographic | **delivered 2026-10-05** — all five formats have a writer, the header is derived from the game with no placeholder strings, the movetext is real SAN read off a replay, FEN computes all six fields, and the coordinate record is compressed with a standard library codec and reads back. See §4.1 and `notes/object_model.md` §28 | this branch |
 | 20 | Czech aliases and remaining dead code | **partial** — all fifteen aliases ship, `Knight` is canonical, `Tower`, `Horse` and `Controller` are gone. Absent: the `controller/controller.py` → `game_manager_controller.py` rename, and the dead-code re-check | main stack |
 | 21 | Behavioural test coverage | **partial** — no test asserts on repository metadata any more, §4.3's list is unreferenced rather than untriaged, and §8 items 2, 6, 8 and 12 are not fully asserted | main stack |
 
@@ -1201,7 +1201,7 @@ and every `hasattr` probe are gone. `find_king` is gone. **`is_check`
 called from `manager.py:211,215,353,354`. Neither is *hard-coded* coupling —
 neither names a piece type — but neither was removed either.
 
-**Where `getType()` actually still is.** Twenty-two call sites across ten files,
+**Where `getType()` actually still is.** Twenty-three call sites across ten files,
 counted as occurrences of the call rather than lines holding it — `attacks.py:98` and
 `geometric.py:89` each hold two:
 
@@ -1220,7 +1220,7 @@ The two `model/game/` rows were correct and are unchanged.
 
 An earlier revision of this section said "the three remaining `getType()`
 comparisons are in `games/chess/rules/` — `attacks.py`, `castling.py` and
-`draws.py`". There are **thirteen** in that directory, across **five** files:
+`draws.py`". There are **fourteen** in that directory, across **five** files:
 `bishop_colour.py` and `promotion.py` were not named.
 
 **Where `hasattr` actually is.** Four probes, all in one file:
@@ -1233,8 +1233,10 @@ Rank-relative rules generalise: the home rank, the knight-forward file and the
 castling rook files are derived from the configured board rather than assumed to
 be 1, 8 and `a`–`h`. `CastlingRule.home_row` (`castling.py:44`) and
 `CastlingRule.start_file` (`:56`) read the board, and the castle loop bounds
-`rook_file` and `king_dest` against `position.cols`. **No test exercises castling
-or en passant on a non-8×8 board** — §8 item 12.
+`rook_file` and `king_dest` against `position.cols`. **No test exercises en passant on a non-8×8 board**, and this line said castling
+too until 2026-10-09. Castling is covered now: `tests/test_chess_rules.py:855` plays a
+ten-file castle and `:872` writes its record for the same board. §8 item 12 records the
+same correction, which this line contradicted.
 
 **Acceptance criteria**: each rule passes a game with it enabled and a game with it disabled,
 and the difference is the setting rather than a code path; no `getType()` or
@@ -1805,7 +1807,7 @@ offers the two formats that mean something for it. **The engine-change half
     **Now true.** The audit behind this correction found eleven unrecorded
     departures; §21, §22, §23 and §24 of that file record them, and §3, §7, §9,
     §11, §13 and §15 have been corrected against the code. **The eleventh was
-    recorded 2026-10-05 and is now fixed:** §28, the one chess string in the engine
+    recorded 2026-10-05 and is now fixed:** §29, the one chess string in the engine
     (`DEFAULT_GAME = "chess"`), recorded as a product configuration value and then
     declined — the default is declared by the configurations root in
     `games/default.json`, the guards read that, and the engine holds no configuration
@@ -1836,7 +1838,7 @@ offers the two formats that mean something for it. **The engine-change half
 | Risk | Severity | Mitigation |
 |---|---|---|
 | ~~Real PGN requires SAN disambiguation, which is easy to get subtly wrong — `Nbd7` versus `N1d7` versus `Nd7`~~ | **Discharged 2026-10-05.** The mitigation was each case getting its own test plus a known-good PGN, and both exist: seven disambiguation cases in `tests/test_transcript_notation.py`, and the Opera Game's published movetext as a literal the whole transcript is compared against. The pinned case is asserted in both directions — `Nb3` when the rival knight may not move, `Ndb3` when it may — because that is the one a geometry-based implementation gets wrong |
-| `getType()` and `hasattr` coupling fails **silently** on rename or on a custom piece | High | PR 11 removes it. PR 20 ships tests that fail when a probe breaks, not only when a name changes. **Partly discharged already**: the *hard-coded* kind comparisons are gone and `tests/test_engine_holds_no_chess.py` reads the chess catalogue from the configuration so the gate cannot drift. What remains is 16 `getType()` sites in `games/chess/rules/` and `model/game/` — the draughts rules hold five more — and four `hasattr` probes; §7 PR 11 lists them file by file |
+| `getType()` and `hasattr` coupling fails **silently** on rename or on a custom piece | High | PR 11 removes it. PR 20 ships tests that fail when a probe breaks, not only when a name changes. **Partly discharged already**: the *hard-coded* kind comparisons are gone and `tests/test_engine_holds_no_chess.py` reads the chess catalogue from the configuration so the gate cannot drift. What remains is 17 `getType()` sites in `games/chess/rules/` and `model/game/` — the draughts rules hold six more — and four `hasattr` probes; §7 PR 11 lists them file by file |
 | Deleting 51 collected tests masks a regression | Medium | Every deletion is import-only or metadata-only, and one `docs_hooks.py` test was rewritten to read a `tmp_path` fixture instead of real `notes/`. PR 21 adds behavioural coverage. §5 gives the exact count |
 | The flatten makes the whole repo the docs tree, and `exclude_docs` has to do work `docs_dir: src` did by construction | High | PR 2. Fallback is a dedicated docs directory rather than widening the tree |
 | A flat layout breaks setuptools auto-discovery over `tests/` | Medium | PR 6 sets `packages` explicitly |

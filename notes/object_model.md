@@ -418,12 +418,12 @@ Recorded because the question is fair and the answer is not obvious.
 
   | Type | Declaration | Where |
   |---|---|---|
-  | `Board` | `value_fields()` | `model/game/board.py:68` |
-  | `Piece` | `value_fields()` and `apply_values()` | `model/pieces/piece.py:123,160` |
+  | `Board` | `value_fields()` | `model/game/board.py:69` |
+  | `Piece` | `value_fields()` and `apply_values()` | `model/pieces/piece.py:211,248` |
   | `Rule` subclass | `value_fields()` | `model/game/rule.py:191` |
   | `Quest` subclass | `parameters()` | `model/game/quest.py` |
   | a clock | `clock_fields(clock)` | `model/game/clock_fields.py:28` |
-  | the renderer | `SECTIONS`, `_WIDGETS`, the section builders | `view/settings_dialog.py:37` |
+  | the renderer | `SECTIONS`, `_WIDGETS`, the section builders | `view/settings_dialog.py:38` |
 
   **`Clock` is not among them because it declares none** — §13 registered the class
   as the intention and §20 recorded it as unbuilt, and §26 builds it (2026-10-05) so
@@ -527,7 +527,7 @@ Recorded because the question is fair and the answer is not obvious.
   withdrawn.** Nothing in the transcript directs a FEN import; the decision recorded here is the
   maintainer's, on the owner's standing rule that the diagram is the whole specification, and it
   is recorded with this date. No reader is built.
-- **What remains**: `games/chess/export/fen.py` writes the record. §27 records the one reader
+- **What remains**: `games/chess/export/fen.py` writes the record. §28 records the one reader
   that *is* built — a coordinate record's own inverse — and why it is not the thing this entry
   was about.
 
@@ -1013,7 +1013,7 @@ earlier section registered.
 | `Configuration.notation` | `configuration.py:57`. The naming a configuration gives a move, for the window to draw the history with. Optional: absent means coordinate pairs | §7 by implication — the configuration owns its own naming; the attribute was not named |
 | `AlgebraicNotation`, `view.move_label` | `games/chess/export/algebraic.py` and `view/player_game_view.py`. The chess answer to `move_label(number, move)`, and the view's fallback to coordinates. §7 registers where the naming lives; neither object was drawn | §7 by implication; the two were not named |
 | `Configuration.metadata` | `configuration.py:60`. The record of who played, when and how a game ended, handed to the writers that ask for one. Optional, and the engine reads it without knowing what it is | §7 by implication — a configuration supplies the writers, so it supplies what they are given; the attribute was not named |
-| `GameManager.started_at` | `manager.py:99`. The moment a game began, so a writer can date it. The date of a game is a fact about the game, not about the format that records it | none — new here |
+| `GameManager.started_at` | `manager.py:120`. The moment a game began, so a writer can date it. The date of a game is a fact about the game, not about the format that records it | none — new here |
 | `ExportAlgebraic`, `ExportMetadata` | `games/chess/export/{algebraic,metadata}.py`. The diagram's format list is prose in a box with no edges, so the classes it stands for are not drawn. §7 registers the arrangement and `notes/reference_diagram.md` records the reading of *Field - Field - Extra* the code implements | §7 by implication; the two writers were not named |
 | `ExportLetter`, `games/checkers/export/metadata.py`'s `ExportMetadata`, `NumberedNotation`, `CheckersBoard`, `games/checkers/board.py`'s `square_number` | The draughts answers to the same format list: `ExportLetter` (declared `Letter`), a second `ExportMetadata` under `Field-Field-Extra`, `NumberedNotation` as the naming the window asks, `CheckersBoard` overriding `file_label` with square numbers, and `square_number` as the one derivation of the numbering all of them read. None is drawn; §7 places each beside the configuration that uses it, and `notes/reference_diagram.md` records the reading | §7 by implication; the objects were not named. **`square_number` is the board's, not the writer's**: the numbering is counted from `is_played_square`, so the perft gate's independent derivation and the production one are asserted equal for all 32 squares |
 | `chesswithquests.offered_formats` | The `--check` report asks each shipped configuration what it offers, so a game that exports nothing is visible in the report rather than invisible in it | §7 by implication — which notations exist is a configuration's answer, so a report of the installation reports it too |
@@ -1207,12 +1207,31 @@ earlier section registered.
   for the rules that compare a *configured* kind against a piece.
 - **Still out of scope, recorded not fixed**: `view/settings_dialog.py` offers the code editor on
   the Rules and Quests tabs only and `model/game/source_validation.py` validates `"rule"` and
-  `"quest"` only, so a piece, a clock or a writer is still written by hand — §29.
+  `"quest"` only, so a piece, a clock or a writer is still written by hand — §31.
 - **Approval**: directed by the user, 2026-10-05, to compose `pieces`, `clocks` and `export`
   from their own directories "using the same mechanism and the same policy", with the two
   judgement calls named as questions to be answered rather than inherited.
 
-### 27. Three Drawn Members That Do Not Exist, and One That Points Nowhere
+### 27. The Line Citations in This File Were Re-Measured, and Four Had Drifted
+
+- **Date**: 2026-10-09
+- **Context**: an independent no-context review checked fifteen claims in this file against the
+  code. Every one held. The *pointers* had drifted: four citations no longer landed on what they
+  name, because the code moved and the record did not.
+- **What had drifted**: `board.py:68` to `:69` for `Board.value_fields`; `piece.py:123,160` to
+  `:211,248` for `Piece.value_fields` and `apply_values`; `settings_dialog.py:37` to `:38` for
+  `SECTIONS`; `manager.py:99` to `:120` for `started_at`. `piece.py:123` landed on a comment rather
+  than a declaration, which is the worst kind of stale pointer: it looks right and shows nothing.
+- **What did not drift**: the claims themselves, in fifteen spot-checks across different sections.
+  A drifted pointer is a record defect, not a conformance one — this file's substance was sound.
+- **Why it matters anyway**: this file is the Rule 3 conformance authority, and a citation is the
+  first thing a reader checks. A pointer that has moved is a small claim about the code being
+  wrong, which is the same failure this file keeps recording in sections 3, 4 and 23.
+- **Not a deviation**: no behaviour changes. The citations were corrected to the code, not the code
+  to the citations.
+
+
+### 28. Three Drawn Members That Do Not Exist, and One That Points Nowhere
 
   - **Date**: 2026-10-07
   - **Context**: found by fetching the original `Šachy - diagram tříd.drawio` (77,262 bytes) and
@@ -1246,7 +1265,7 @@ earlier section registered.
 
 ---
 
-### 28. Two Writers Gained a Replay, Four Gained Methods, and One Gained a Reader
+### 29. Two Writers Gained a Replay, Four Gained Methods, and One Gained a Reader
 
 - **Date**: 2026-10-05
 - **Context**: `PRD.md` FR-45, FR-46 and FR-49 each claimed a record the writer did not write.
@@ -1327,7 +1346,7 @@ earlier section registered.
 
 ---
 
-### 29. The Default Configuration Is Declared by the Root, and the Engine Names No Game
+### 30. The Default Configuration
 
 - **Date**: 2026-10-05. **Revised 2026-10-05**: the reading below was weighed, found defensible
   and **declined** — "a default configuration name is product configuration, not chess
@@ -1384,7 +1403,7 @@ earlier section registered.
   the maintainer ruled 2026-10-05 that nothing is to be left: a deviation recorded for a reason
   that still holds is work to do, not a note to keep. This section is the record of the work.
 
-### 30. The Code Editor Reaches Rules and Quests, and the Other Three Sections Are Hand-Written by Design
+### 31. The Code Editor
 
 - **Date**: 2026-10-05
 - **Context**: every section now composes from its own directory — §25 and §26 — so a piece, a
