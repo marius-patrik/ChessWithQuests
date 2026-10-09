@@ -7,7 +7,7 @@ on:
     branches: ["main"]
   workflow_dispatch:
 
-# The pipeline itself lives in marius-patrik/agent-DarkFactory and is pinned in
+# The pipeline itself lives in marius-patrik/DarkFactory and is pinned in
 # `.github/darkfactory.json`. This file is a caller, not a copy: every job body, every script and
 # every version matrix comes from the pinned commit, so adopting a pipeline update is a one-line
 # change here and the diff shows exactly what moved.
@@ -17,8 +17,8 @@ on:
 # Secrets are not passed: CI needs none beyond the automatic GITHUB_TOKEN.
 jobs:
   pipeline:
-    uses: marius-patrik/agent-DarkFactory/.github/workflows/ci.yml@7ecba1617f553e6a34ceb31177e1ac84d08c350f
+    uses: marius-patrik/DarkFactory/.github/workflows/ci.yml@7ecba1617f553e6a34ceb31177e1ac84d08c350f
     with:
-      pipeline-repo: marius-patrik/agent-DarkFactory
+      pipeline-repo: marius-patrik/DarkFactory
       pipeline-ref: "7ecba1617f553e6a34ceb31177e1ac84d08c350f"
     secrets: inherit
