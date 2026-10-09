@@ -150,7 +150,11 @@ class Piece:
             None
         """
         super().__init_subclass__(**kwargs)
-        cls.CONFIGURED = {}
+        # `__init_subclass__` runs *after* the class body, so assigning unconditionally would wipe
+        # a subclass that ships its own declared values and leave it rendering nothing. Only a
+        # subclass that declares none of its own gets a fresh one.
+        if "CONFIGURED" not in cls.__dict__:
+            cls.CONFIGURED = {}
 
     #: Whether another piece may become this one. Declared on the piece rather than listed in
     #: a rule, so a piece written into a configuration's `pieces/` is a promotion target the

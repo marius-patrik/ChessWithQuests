@@ -1953,3 +1953,33 @@ def test_a_configuration_that_was_never_customised_writes_no_piece_values(tk_roo
     )
     assert saved.get("pieces", {}) == {}
     assert saved.get("clocks", {}) == {}
+
+
+def test_a_piece_class_may_ship_its_own_declared_values():
+    """`__init_subclass__` runs after the class body, so assigning unconditionally wiped them.
+
+    A piece that declares its own values in its class body is how a configuration ships a variant
+    without going through the settings dialog. Handing it an empty dict left it with no symbols at
+    all, so it drew nothing.
+    """
+    from model.pieces.piece import Piece
+
+    class Shipped(Piece):
+        CONFIGURED = {"white_symbol": "S"}
+
+    assert Shipped.CONFIGURED == {"white_symbol": "S"}
+    assert Shipped(1, "kind", [(0, 1)], [(0, 1)])._symbol_for(1) == "S"
+
+
+def test_a_piece_class_declaring_nothing_still_gets_its_own_dict():
+    """The other half: without a fresh dict, every subclass shares the base's."""
+    from model.pieces.piece import Piece
+
+    class One(Piece):
+        pass
+
+    class Two(Piece):
+        pass
+
+    assert One.CONFIGURED is not Two.CONFIGURED
+    assert One.CONFIGURED is not Piece.CONFIGURED
