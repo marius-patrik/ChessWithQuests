@@ -1904,3 +1904,95 @@ reason is what matters.
 | Persisting a game in progress | Not in the diagram |
 | A settings surface beyond the diagram's mockup | The mockup is a reference for layout and content, not a spec to reproduce exactly. Where the mockup and the diagram disagree, the diagram governs |
 | Reinstalling the shared DarkFactory pipeline | Deliberately deferred; its pin is stale and the dependency is removed in PR 4 |
+
+---
+
+## 12. Checkpoint — 2026-10-09
+
+Paused on the owner's request. This section says where the work stands and what is deliberately
+unfinished, so the next run starts from facts rather than from re-derivation.
+
+### What is delivered and open for review
+
+| PR | Subject | Plan |
+|---|---|---|
+| #187 | chess on a board wider than eight files | #186 |
+| #195 | the records asserted six claims the code did not bear out | #193/#194 |
+| #205 | every non-checkmate ending was announced as a checkmate | #203 |
+| #206 | the layout dropped panels on a short window | #201 |
+| #207 | the settings dialog discarded everything and nothing read it back | #199 |
+| #209 | close the divergences an independent review found | #208 |
+
+All Draft, bot-authored, each bound to exactly one Plan issue, each carrying a `Matches Plan`
+review, all CI-success across Python 3.10–3.13 plus docs, web, math, rust and paper. **Nothing is
+merged.** The full chain is 30 pull requests, every one green.
+
+### Bugs found by exercising the code rather than reading it
+
+Six, none of which a test failure would have surfaced. In order of severity: settings were never
+read back from disk, so every setting was lost at exit; the Pieces settings tab edited a throwaway
+instance; the layout unmapped panels below ~760 pixels; every non-checkmate ending was called a
+checkmate; a `hasattr`-style gate asserted `"knight" in SET | {"knight"}`, true of any input; and a
+piece that shipped its own declared values had them wiped.
+
+The pattern worth keeping: **four of the six were introduced by fixes made earlier the same day.** A
+green suite and a careful reading did not catch any of them. Building a real game and looking at it
+did, every time.
+
+### What is deliberately unfinished, and why
+
+**Five feature requests await a decision** (#188 symbols, #189 quests per player, #190 resign, #191
+layout, #192 SVG diagram). Each turns on an architectural choice, not a preference:
+
+- #191 names a diagram whose two pages contain 26 class boxes and no panel, widget or coordinate. If
+  "the layout" means the window, only `GUI_mockup.svg` describes one.
+- #189: duplicated per-side quest instances, or one quest carrying per-side progress.
+  `Quest.is_completed` is a single latch, which is the actual blocker either way.
+- #190: immediate resignation, or a confirmation step. And whether the control belongs to the side to
+  act or to each panel.
+- #188: the settings work it depends on is now delivered (#207), so only the filled-symbol and
+  per-side-colour decisions remain.
+- #192: whether to commit the reference `.drawio`. Without it the SVG cannot regenerate.
+
+Rule 12 holds all five until the interpretations are confirmed.
+
+### Two corrections this file's history should carry
+
+**The pipeline was not broken.** `marius-patrik/agent-DarkFactory` was renamed to
+`marius-patrik/DarkFactory` (pipeline commit `6203185`, 2026-10-08T09:10). The REST API follows the
+rename, so every probe looked healthy; the Actions resolver does not. The symptom — *"workflow was
+not found"* — reads like a missing file. `workflow_call` was never the cause: the consumers pin a
+SHA whose copy still has it. Two wrong diagnoses were published to #204 before the rename was found.
+
+**The transcript can be read directly.** `/Users/user/.local/share/opencode/opencode.db` stores
+message text in the `part` table, not `message` — the latter holds metadata only. Owner prose is
+`part.type = 'text'` joined to a `message` with `role = "user"`. 151 owner messages on 2026-10-02
+across 41 sessions, in a 7 GB database.
+
+### The owner's own last word on 2026-10-02, verified against today's code
+
+> "everything should be done ##settings button in start modal doesnt work, clocks dont count, quests
+> dont sem to advance, there is no way to reach settings after the initial modal - the modal should
+> show on new game, checkers arent implemented"
+
+All four behavioural complaints are **fixed today**, each verified by driving the real widget:
+
+| Complaint | Now |
+|---|---|
+settings button in start modal | `StartModal` shows Start/Settings/Cancel; invoking Settings calls `on_settings` |
+clocks dont count | the active player's clock ticks on its own — 600 to 595 over ~4s of wall time |
+quests dont sem to advance | a real capture completes `First blood` (1/1, done) and advances `Capture` to 1/5 |
+no way to reach settings after the modal | the playing window carries a Settings button; New game re-shows the modal |
+checkers arent implemented | `load_configuration("checkers")` composes, and both its exporters work |
+
+Two of my own checks were wrong on the way: I "verified" clocks and quests with moves that were not
+legal — `e2xd3` captures on an empty square — and read the absence of progress as a defect. The rule
+that keeps catching me: **a reproduction that is not a reproduction proves nothing.**
+
+### Standing constraints
+
+Never merge. One Plan issue per branch, one implementation review, CI dispatched on every ref
+because stacked pull requests do not trigger it. Tests assert behaviour, not repository metadata.
+Correct the records to the code, never the code to the records.
+
+---
