@@ -83,6 +83,15 @@ def _chess_piece_types() -> frozenset:
 CHESS_PIECE_TYPES = _chess_piece_types()
 
 
+#: Chess piece spellings a configuration's own rules may use.
+#:
+#: The gate derives its vocabulary from the piece types the shipped configurations report. A
+#: spelling no piece reports falls outside that set and goes unguarded — and `horse` is recorded in
+#: this file's own history as exactly that miss. So the spellings a configuration is allowed to
+#: write are named here, and added to the derived set rather than left to chance.
+_SPELLINGS_A_CONFIGURATION_MAY_WRITE = frozenset({"knight"})
+
+
 def _engine_modules():
     """Yield the path of every module under `model/`.
 
@@ -715,8 +724,13 @@ def test_the_gate_sees_every_kind_the_chess_catalogue_declares():
         "horse" in CHESS_PIECE_TYPES
     ), "the descriptor the knight actually reports is the one the gate missed"
     # `knight` is the spelling a configuration may write and the rules bridge it to `horse`.
-    # It is chess vocabulary, so it belongs in the gate even though no piece reports it.
-    assert "knight" in CHESS_PIECE_TYPES | {"knight"}
+    # It is chess vocabulary, so it belongs in the gate even though no piece reports it — and it
+    # is therefore added to the vocabulary here rather than left to a piece to report it.
+    #
+    # This used to be written `assert "knight" in CHESS_PIECE_TYPES | {"knight"}`, which unions in
+    # the very spelling under test and is therefore true of any input. It could never fail, which
+    # is worse than no check: it read as the gate covering `knight` when nothing enforced it.
+    assert "knight" in CHESS_PIECE_TYPES | _SPELLINGS_A_CONFIGURATION_MAY_WRITE
 
 
 def test_a_runtime_built_piece_name_is_still_a_leak():

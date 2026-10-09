@@ -9,8 +9,11 @@ what was built.** The departure says `Move` grows the sequence; this is a subcla
 that carries it, in the configuration whose game needs it. That is a deliberate divergence and
 it is the one that keeps the engine unchanged, which is the harder requirement: nothing under
 `model/`, `controller/` or `view/` grows a draughts-shaped member. Section 11 of the notes
-should be amended to say a `Move` subclass carries the hops; it is not, and this docstring is
-the honest record until it is.
+  is amended and says so: "`HopMove(Move)` carries the hop sequence, and it is declared by the
+  configuration whose game needs it", corrected 2026-10-04. This docstring said the section had not
+  been amended and that it was the honest record until it was; both halves stopped being true on
+  2026-10-04 and were left standing. **Corrected 2026-10-09** — the second half of the pair that
+  section 24 of the notes records as still owed.
 
 It is not a dodge. The engine's own `apply_to_board` / `unapply_from_board` pair is the
 mechanism, and this class is that pair: it reuses the engine's `Applied` record and the
