@@ -233,6 +233,16 @@ class Configuration:
                 quest.name: {"reward": quest.reward, "enabled": quest.enabled}
                 for quest in self.quests
             },
+            "clocks": {
+                clock.label: clock.persisted_values()
+                for clock in self.clocks
+                if clock.persisted_values() != _shipped_clock_values(clock)
+            },
+            "pieces": {
+                piece.__name__: piece.persisted_values()
+                for piece in self.pieces
+                if piece.persisted_values()
+            },
         }
 
     def save_values(self, path: Optional[str] = None) -> str:
@@ -735,7 +745,95 @@ def load_configuration_at(path: str, root: Optional[str] = None) -> Configuratio
     configuration.name = name
     configuration.path = resolved
     configuration.package = module.__name__
+    _apply_saved_values(configuration)
     return configuration
+
+
+def _shipped_clock_values(clock: Any) -> Dict[str, Any]:
+    """Return the values a clock's own class ships with.
+
+    A clock that was never changed must not appear in the saved file. Writing its defaults in
+    would pin the configuration to whatever the class happened to be built with, so a later change
+    to a shipped clock would never reach a copy that had been saved for some unrelated reason.
+
+    Args:
+        clock: The clock being considered.
+
+    Returns:
+        Dict[str, Any]: What a freshly built clock of the same class would report, or the
+        clock's own values when it cannot be built without arguments.
+    """
+    try:
+        return type(clock)().persisted_values()
+    except Exception:  # noqa: BLE001 - a clock may require arguments to build
+        return clock.persisted_values()
+
+
+def _apply_saved_values(configuration: Any) -> None:
+    """Apply the values a settings dialog saved for this configuration.
+
+    `save_values` has always written `configuration.json` and nothing has ever read it back, so
+    every setting was in force for the session that set it and gone by the next. This is the reading
+    half.
+
+    It runs after `name` and `path` are set and before the configuration is handed out, so every
+    caller — `load_configuration`, `load_default_configuration`, `copy_configuration` — gets a
+    configuration that already holds what was saved.
+
+    A missing file, a file that is not JSON, or a section that is absent leaves that part at the
+    shipped defaults. A configuration that was never customised must load exactly as it ships, and
+    a file the player hand-edited into something unreadable should cost them the settings, not the
+    game.
+
+    Args:
+        configuration: The configuration just assembled, with its path already set.
+
+    Returns:
+        None
+    """
+    from model.game.clock_fields import apply_clock_values
+
+    path = os.path.join(configuration.path, "configuration.json")
+    try:
+        with open(path, encoding="utf-8") as handle:
+            saved = json.load(handle)
+    except (FileNotFoundError, NotADirectoryError, ValueError):
+        return
+    if not isinstance(saved, dict):
+        return
+
+    board = saved.get("board")
+    if isinstance(board, (list, tuple)) and len(board) == 2:
+        try:
+            configuration.board.set_dimensions(int(board[0]), int(board[1]))
+        except (TypeError, ValueError):
+            pass
+
+    for label, values in (saved.get("rules") or {}).items():
+        rule = next((r for r in configuration.rules if r.label == label), None)
+        if rule is not None and isinstance(values, dict):
+            # `Rule.persisted_values` is `{"enabled": ..., **value}`, so the configured values sit
+            # beside the switch rather than under a key of their own.
+            rule.enabled = bool(values.get("enabled", rule.enabled))
+            rule.value.update({k: v for k, v in values.items() if k != "enabled"})
+
+    for name_, values in (saved.get("quests") or {}).items():
+        quest = next((q for q in configuration.quests if q.name == name_), None)
+        if quest is not None and isinstance(values, dict):
+            if "reward" in values:
+                quest.reward = values["reward"]
+            if "enabled" in values:
+                quest.enabled = bool(values["enabled"])
+
+    for label, values in (saved.get("clocks") or {}).items():
+        clock = next((c for c in configuration.clocks if c.label == label), None)
+        if clock is not None and isinstance(values, dict):
+            apply_clock_values(clock, dict(values))
+
+    for name_, values in (saved.get("pieces") or {}).items():
+        piece = next((p for p in configuration.pieces if p.__name__ == name_), None)
+        if piece is not None and isinstance(values, dict):
+            piece.CONFIGURED.update(values)
 
 
 def _purge_module(module_name: str) -> None:

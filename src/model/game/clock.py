@@ -22,7 +22,7 @@ clocking, which is what `PRD.md` FR-6 requires a clock to declare, and `model/ga
 describes one for the settings form by asking what it holds.
 """
 
-from typing import Optional, Union
+from typing import Any, Dict, Optional, Union
 
 from model.game.timer import Timer
 
@@ -56,6 +56,29 @@ class Clock:
         self.initial_seconds = initial_seconds
         self.increment_seconds = increment_seconds
         self.timer: Timer = timer if timer is not None else Timer(initial_seconds)
+
+    @property
+    def label(self) -> str:
+        """Return the name this clock is saved and shown under.
+
+        A configuration may offer more than one clock, so they are keyed by something stable. The
+        class name is that thing: a clock's identity is which kind it is.
+
+        Returns:
+            str: The clock's class name.
+        """
+        return type(self).__name__
+
+    def persisted_values(self) -> Dict[str, Any]:
+        """Return the values that may be written to disk.
+
+        Returns:
+            Dict[str, Any]: The initial time and the increment.
+        """
+        return {
+            "initial_seconds": self.initial_seconds,
+            "increment_seconds": self.increment_seconds,
+        }
 
     def reset(self) -> None:
         """Return both clocks to their starting time.

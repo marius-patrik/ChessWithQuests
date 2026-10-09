@@ -1,7 +1,7 @@
 """Base piece module defining the foundational `Piece` abstraction."""
 
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, ClassVar, Dict, List, Optional, Tuple
 
 from model.game.field import Field
 
@@ -55,6 +55,47 @@ def _vectors_as_text(vectors: Optional[List[Tuple[int, int]]]) -> str:
     return ", ".join(f"({row}, {col})" for row, col in vectors)
 
 
+def _record(declared: Dict[str, Any], key: str, value: Any, shipped: Any) -> Any:
+    """Remember a piece value only when the player changed it.
+
+    Args:
+        declared: The class's declared values, updated in place.
+        key: The field name.
+        value: What the form asked for.
+        shipped: What this piece's own constructor produced.
+
+    Returns:
+        Any: `value`, so the caller can assign and record in one line.
+    """
+    if value != shipped:
+        declared[key] = value
+    return value
+
+
+def _declared_symbols(
+    declared: Dict[str, Any], symbols: Optional[Any]
+) -> Optional[Tuple[str, str]]:
+    """Return the symbol pair a piece should carry.
+
+    Args:
+        declared: The values the settings dialog has declared for this piece class.
+        symbols: The class's own constructor argument.
+
+    Returns:
+        Optional[Tuple[str, str]]: The white and black symbols. Declared values win, because they
+        were set through the form; otherwise the class's own argument; otherwise None.
+    """
+    if "white_symbol" in declared or "black_symbol" in declared:
+        white = declared.get("white_symbol")
+        black = declared.get("black_symbol")
+        if white is None or black is None:
+            fallback = tuple(symbols) if symbols else ("", "")
+            white = fallback[0] if white is None else white
+            black = fallback[1] if black is None else black
+        return (str(white), str(black))
+    return tuple(symbols) if symbols else None
+
+
 class Piece:
     """Base class for every piece any configuration offers.
 
@@ -83,6 +124,33 @@ class Piece:
         has_moved: Whether the piece has ever moved. Cleared on placement, set by the board
             on the first move.
     """
+
+    #: Values a settings dialog has declared for this piece class, keyed by field name.
+    #:
+    #: A configuration offers piece *classes*, not instances, and a class is not an object — so a
+    #: form has to invent one to edit. Writing to that invented instance changed nothing that would
+    #: ever be played, because every piece in a game is built fresh from the class and the class's
+    #: constructor arguments decided what it drew. Declared values live here instead, and the
+    #: constructor prefers them, so one value set in the form reaches every piece built afterwards.
+    #: It is a class attribute rather than an instance attribute for exactly that reason.
+    CONFIGURED: ClassVar[Dict[str, Any]] = {}
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Give every piece class its own declared values.
+
+        Without this, a subclass that declares no `CONFIGURED` of its own inherits its parent's
+        *dictionary*, so declaring a symbol on a knight would change every piece in the game — the
+        knight's own glyph, the rook's, the pawn's. Each class gets an empty one instead, and a
+        class that wants to ship defaults declares them as fields or overrides the lookup.
+
+        Args:
+            **kwargs: Passed on to the parent class.
+
+        Returns:
+            None
+        """
+        super().__init_subclass__(**kwargs)
+        cls.CONFIGURED = {}
 
     #: Whether another piece may become this one. Declared on the piece rather than listed in
     #: a rule, so a piece written into a configuration's `pieces/` is a promotion target the
@@ -122,16 +190,19 @@ class Piece:
                 which is what makes a first-only advance available.
         """
         self.__color = color
+        declared = type(self).CONFIGURED
         self._type = piece_type
-        self._vectors = vectors
-        self._attack_vectors = attack_vectors
-        self._can_jump = can_jump
-        self._name = name or (str(piece_type) if piece_type is not None else "Piece")
-        self._max_steps = max_steps
-        self._initial_vectors = initial_vectors or []
+        self._vectors = declared.get("vectors", vectors)
+        self._attack_vectors = declared.get("attack_vectors", attack_vectors)
+        self._can_jump = bool(declared.get("can_jump", can_jump))
+        self._name = (
+            declared.get("name") or name or (str(piece_type) if piece_type is not None else "Piece")
+        )
+        self._max_steps = declared.get("max_steps", max_steps)
+        self._initial_vectors = declared.get("initial_vectors", initial_vectors or [])
         self.has_moved = has_moved
-        self._symbols = tuple(symbols) if symbols else None
-        self._fen = fen
+        self._symbols = _declared_symbols(declared, symbols)
+        self._fen = declared.get("fen", fen)
 
     def value_fields(self) -> List[Field]:
         """Declare what this piece is configured with.
@@ -191,22 +262,56 @@ class Piece:
                 cannot move is not a piece the player meant to write, and the alternative is a
                 piece that silently cannot move at all.
         """
+        # A form carries every declared field, and `save` applies all of them, so recording each
+        # one unconditionally would pin every shipped piece to its own defaults the first time a
+        # configuration was saved for any other reason. Only a value that differs from what this
+        # piece's own constructor produced is a declaration.
+        declared = type(self).CONFIGURED
+        fresh = type(self)(self.getColor())
+
         if "name" in values:
-            self._name = str(values["name"])
+            self._name = _record(declared, "name", str(values["name"]), fresh._name)
         if "white_symbol" in values or "black_symbol" in values:
             white = str(values.get("white_symbol", self._symbol_for(1)))
             black = str(values.get("black_symbol", self._symbol_for(-1)))
             self._symbols = (white, black)
+            for key, value, was in (
+                ("white_symbol", white, fresh._symbols[0]),
+                ("black_symbol", black, fresh._symbols[1]),
+            ):
+                _record(declared, key, value, was)
         if "vectors" in values:
-            self._vectors = _vectors_from_text(values["vectors"])
+            self._vectors = _record(
+                declared, "vectors", _vectors_from_text(values["vectors"]), fresh._vectors
+            )
         if "attack_vectors" in values:
-            self._attack_vectors = _vectors_from_text(values["attack_vectors"])
+            self._attack_vectors = _record(
+                declared,
+                "attack_vectors",
+                _vectors_from_text(values["attack_vectors"]),
+                fresh._attack_vectors,
+            )
         if "can_jump" in values:
-            self._can_jump = bool(values["can_jump"])
+            self._can_jump = _record(
+                declared, "can_jump", bool(values["can_jump"]), fresh._can_jump
+            )
         if "kind" in values:
-            self._type = str(values["kind"]) or None
+            self._type = _record(declared, "kind", str(values["kind"]) or None, fresh._type)
         if "fen" in values:
-            self._fen = str(values["fen"]) or None
+            self._fen = _record(declared, "fen", str(values["fen"]) or None, fresh._fen)
+
+    @classmethod
+    def persisted_values(cls) -> Dict[str, Any]:
+        """Return the values a settings dialog declared for this piece class.
+
+        Declared values only, so a configuration that was never customised writes nothing — a piece
+        that has never been edited must not appear in the saved file with its own defaults copied
+        into it, or loading that file would pin the shipped piece to whatever it was written with.
+
+        Returns:
+            Dict[str, Any]: Whatever has been declared for this class, keyed by field name.
+        """
+        return dict(cls.CONFIGURED)
 
     def _symbol_for(self, color: Any) -> str:
         """Return this piece's declared symbol for one side.

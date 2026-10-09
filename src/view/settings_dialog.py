@@ -335,7 +335,11 @@ class SettingsDialog:
             frame = self._frame(page, piece_class.__name__)
             fields = probe.value_fields()
             editors = self._add_fields(frame, fields)
-            self.entries_by_section["Pieces"].append((probe, fields, editors))
+            # The probe declared the fields; the *class* is what the form edits. Writing to the
+            # probe changed nothing that would ever be played, because every piece in a game is
+            # built fresh from the class and the class's own constructor arguments decided what it
+            # drew. The values now land on the class, so the next piece built carries them.
+            self.entries_by_section["Pieces"].append((piece_class, fields, editors))
 
     def _build_rules_tab(self) -> None:
         """Build the Rules section: a rule's declared fields, and a button to edit its logic.
@@ -843,8 +847,9 @@ def _apply(subject: Any, fields: List[Field], values: Dict[str, Any], section: s
     if section == "Pieces":
         # A piece's declaration is richer than its attributes — two symbols in one tuple,
         # vectors shown as text — so the piece applies its own values rather than the form
-        # setting attributes the declaration never named.
-        subject.apply_values(chosen)
+        # setting attributes the declaration never named. The subject is the class, so it is
+        # built once here: every piece the game places afterwards carries what was typed.
+        subject(1).apply_values(chosen)
         return
     for name, value in chosen.items():
         setattr(subject, name, value)
@@ -894,11 +899,20 @@ def _safe_fields(subject: Any) -> List[Field]:
         List[Field]: Its declaration, or an empty list if it declares nothing or raises. A rule
         that cannot describe itself is still configurable by whatever it declares later.
     """
+    target = subject
+    if isinstance(target, type):
+        # A piece is configured through its *class* — that is what the configuration holds, and
+        # what the values are saved against. Asking the class itself for its declaration is an
+        # unbound call missing its `self`, so one instance is built to ask on its behalf.
+        probe = _probe(target)
+        if probe is None:
+            return []
+        target = probe
     try:
-        fields = subject.value_fields()
+        fields = target.value_fields()
     except Exception:  # noqa: BLE001 - a rule may not declare fields at all
         try:
-            fields = subject.parameters()
+            fields = target.parameters()
         except Exception:  # noqa: BLE001 - nor may it declare parameters
             fields = []
     return fields if isinstance(fields, list) else []
