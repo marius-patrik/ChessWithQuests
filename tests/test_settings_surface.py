@@ -22,6 +22,7 @@ not, as `tests/test_view.py` already does.
 """
 
 import inspect
+import json
 import os
 import pathlib
 import shutil
@@ -49,6 +50,27 @@ DEFAULT_GAME = CONFIGURATION_NAME
 from model.game.source_validation import validate_source
 from view.code_editor import CodeEditor, editable_sources
 from view.settings_dialog import SECTIONS, SettingsDialog
+
+
+@pytest.fixture(autouse=True)
+def _no_declared_piece_values():
+    """Clear each piece class's declared values around every test.
+
+    A piece's declared values are class attributes, so they outlive the configuration that set them
+    and are visible to the next test in the same process. That is deliberate — they have to be, or
+    a value set in the form would not reach the pieces a game builds — and it means a test that
+    customises a piece is responsible for putting it back.
+    """
+    from games.chess.pieces import build_pieces as build_chess_pieces
+    from games.checkers.pieces import build_pieces as build_checkers_pieces
+
+    def clear():
+        for piece in list(build_chess_pieces()) + list(build_checkers_pieces()):
+            piece.CONFIGURED.clear()
+
+    clear()
+    yield
+    clear()
 
 
 @pytest.fixture
@@ -1280,23 +1302,25 @@ def test_the_pieces_section_configures_each_piece_separately(tk_root, games_dir)
     tk_root.update()
 
     entries = dialog.section_values("Pieces")
-    assert [type(piece).__name__ for piece, _values in entries] == [
+    # The subject is the piece *class*: that is what a configuration holds and what the values
+    # are saved against. It used to be a throwaway instance invented to describe the class, which
+    # is why nothing typed into this tab was ever played.
+    assert [piece.__name__ for piece, _values in entries] == [
         piece.__name__ for piece in variant.pieces
     ]
-    by_name = {type(piece).__name__: (piece, values) for piece, values in entries}
+    by_name = {piece.__name__: (piece, values) for piece, values in entries}
     assert by_name["Knight"][1]["white_symbol"] == "♘"
     assert by_name["Rook"][1]["white_symbol"] == "♖"
     assert by_name["Knight"][1]["vectors"] != by_name["Rook"][1]["vectors"]
 
     _knight, _knight_fields, editors = next(
-        entry
-        for entry in dialog.entries_by_section["Pieces"]
-        if type(entry[0]).__name__ == "Knight"
+        entry for entry in dialog.entries_by_section["Pieces"] if entry[0].__name__ == "Knight"
     )
     editors["white_symbol"].set("X")
     assert dialog.save() is True
-    assert by_name["Knight"][0]._symbol_for(1) == "X"
-    assert by_name["Rook"][0]._symbol_for(1) == "♖"
+    # Read back through the class the form edited, which is what the game builds pieces from.
+    assert by_name["Knight"][0](1)._symbol_for(1) == "X"
+    assert by_name["Rook"][0](1)._symbol_for(1) == "♖"
 
 
 def test_the_rules_section_asks_for_what_each_rule_declares_and_can_switch_it_off(
@@ -1815,3 +1839,117 @@ def test_rebuilding_the_form_does_not_leave_the_old_pages_behind(tk_root, games_
     assert (
         len(dialog.notebook.winfo_children()) == sections
     ), f"{len(dialog.notebook.winfo_children())} pages are alive where {sections} should be"
+
+
+def test_every_settings_section_survives_a_restart(tk_root, games_dir):
+    """Saving wrote `configuration.json` and nothing ever read it back.
+
+    `save_values` produced the file and no loader consumed it, so a setting was in force for the
+    session that set it and gone by the next: the board reverted to 8x8, the fifty-move rule to 100
+    plies, a quest to its shipped reward, and a clock to 600 seconds. This is the round trip that
+    was missing, over all five sections at once.
+    """
+    from model.game.configuration import load_configuration
+
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    dialog = SettingsDialog(tk_root, variant, root=games_dir)
+    tk_root.update()
+
+    # Every value is set through the form, because `save` applies the form to the configuration:
+    # anything set behind the form's back is written back over by what the widgets still show.
+    _subject, _fields, rule_editors = next(
+        entry for entry in dialog.entries_by_section["Rules"] if entry[0].label == "Fifty-move rule"
+    )
+    rule_editors["plies"].set("123")
+    _subject, _fields, quest_editors = next(
+        entry for entry in dialog.entries_by_section["Quests"] if entry[0].name == "First blood"
+    )
+    quest_editors["reward"].set("999")
+    _subject, _fields, board_editors = dialog.entries_by_section["Board"][0]
+    board_editors["rows"].set("6")
+    board_editors["cols"].set("6")
+    _subject, _fields, clock_editors = dialog.entries_by_section["Clocks"][0]
+    clock_editors["initial_seconds"].set("123")
+    _subject, _fields, piece_editors = next(
+        entry for entry in dialog.entries_by_section["Pieces"] if entry[0].__name__ == "Knight"
+    )
+    piece_editors["white_symbol"].set("X")
+
+    assert dialog.save() is True
+
+    reloaded = load_configuration("house", root=games_dir)
+    assert list(reloaded.board.dimensions) == [6, 6]
+    assert next(r for r in reloaded.rules if r.label == "Fifty-move rule").value["plies"] == 123
+    assert next(q for q in reloaded.quests if q.name == "First blood").reward == 999
+    assert reloaded.clocks[0].initial_seconds == 123
+    assert next(p for p in reloaded.pieces if p.__name__ == "Knight")(1)._symbol_for(1) == "X"
+
+
+def test_a_piece_symbol_set_in_settings_is_what_a_game_draws(tk_root, games_dir):
+    """The Pieces tab used to edit a throwaway probe, so every symbol it accepted was discarded.
+
+    `_build_pieces_tab` builds each form from `_probe(piece_class)` — an instance invented so a
+    class, which is not an object, can be described — and then kept *that instance* as the subject
+    it edited. `Piece._symbols` is an instance attribute, and every piece in a game is built fresh
+    from the class, so nothing typed into the tab was ever played.
+
+    The existing test at `test_the_pieces_section_asks_for_what_each_piece_declares` asserted
+    against the same probe, so it could not fail and said nothing about this.
+    """
+    from model.game.manager import GameManager
+
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    dialog = SettingsDialog(tk_root, variant, root=games_dir)
+    tk_root.update()
+
+    _subject, _fields, editors = next(
+        entry
+        for entry in dialog.entries_by_section["Pieces"]
+        if getattr(entry[0], "__name__", None) == "Knight"
+    )
+    editors["white_symbol"].set("X")
+    assert dialog.save() is True
+
+    manager = GameManager(configuration=variant)
+    manager.new_game()
+    drawn = {
+        piece.getSymbol()
+        for row in range(8)
+        for col in range(8)
+        if (piece := manager.board.get_piece_at((row, col))) is not None
+        and type(piece).__name__ == "Knight"
+    }
+    assert "X" in drawn, drawn
+
+
+def test_configuring_one_piece_does_not_configure_every_piece(tk_root, games_dir):
+    """`CONFIGURED` is declared on the base class, so a subclass that declares none inherits the
+    base's dictionary rather than its own. Declaring a symbol on a knight changed every piece in
+    the game until each subclass was given a fresh one.
+    """
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    knight = next(p for p in variant.pieces if p.__name__ == "Knight")
+    rook = next(p for p in variant.pieces if p.__name__ == "Rook")
+
+    knight(1).apply_values({"white_symbol": "X"})
+
+    assert knight(1)._symbol_for(1) == "X"
+    assert rook(1)._symbol_for(1) != "X"
+
+
+def test_a_configuration_that_was_never_customised_writes_no_piece_values(tk_root, games_dir):
+    """A piece that has never been edited must not appear in the saved file at all.
+
+    Writing its own defaults into the record would pin the shipped piece to whatever it happened to
+    be, so loading that file would freeze a configuration that nothing had touched.
+    """
+    variant = copy_configuration(DEFAULT_GAME, "house", root=games_dir)
+    dialog = SettingsDialog(tk_root, variant, root=games_dir)
+    tk_root.update()
+    assert dialog.save() is True
+
+    saved = json.loads(
+        (pathlib.Path(variant.path) / "configuration.json").read_text(encoding="utf-8")
+    )
+    assert saved.get("pieces", {}) == {}
+    assert saved.get("clocks", {}) == {}
