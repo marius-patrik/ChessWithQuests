@@ -27,6 +27,13 @@ TERMINAL_STATES = (
     GameManager.STATE_STALEMATE,
 )
 
+#: The smallest a board square is drawn, in pixels.
+#:
+#: Below this the piece glyph and its coordinate labels stop being legible, so a window too short
+#: to hold a board this size loses the board rather than shrinking it into unreadability. This is
+#: the floor the fit calculation stops at, not a promise that everything fits at every size.
+MIN_SQUARE_SIZE = 24
+
 #: The state a game can be in, and what the footer says about it.
 STATE_LABELS = {
     GameManager.STATE_TIMEOUT: "Time is up.",
@@ -116,8 +123,14 @@ class PlayerGameView(ttk.Frame):
         self.turn = tk.StringVar()
         self.status = tk.StringVar(value="Welcome to ChessWithQuests")
 
+        self.max_square_size = square_size
         self._build_layout(square_size)
         self.refresh()
+        # `pack` gives a child leftover space only if there is leftover space, and `body` holds
+        # `expand=True`, so on a short window the board column was given nothing at all and Tk
+        # unmapped the bottom panel without a word. The board is the only part of the window whose
+        # size is a choice rather than a requirement, so it is the part that gives way.
+        self.bind("<Configure>", self._on_resize)
 
     def _build_layout(self, square_size: int) -> None:
         """Place every widget.
@@ -130,6 +143,7 @@ class PlayerGameView(ttk.Frame):
         """
         heading = ttk.Frame(self)
         heading.pack(fill="x")
+        self._heading = heading
         ttk.Label(heading, text="ChessWithQuests", font=("TkDefaultFont", 16, "bold")).pack(
             side="left"
         )
@@ -153,7 +167,8 @@ class PlayerGameView(ttk.Frame):
         left = ttk.Frame(body)
         left.pack(side="left", fill="both", expand=True)
 
-        ttk.Label(left, textvariable=self.turn, font=("TkDefaultFont", 12)).pack(anchor="w")
+        self._turn_label = ttk.Label(left, textvariable=self.turn, font=("TkDefaultFont", 12))
+        self._turn_label.pack(anchor="w")
         self.board_view = BoardView(
             left,
             self.manager.board,
@@ -166,24 +181,135 @@ class PlayerGameView(ttk.Frame):
         )
         if self.bottom_player is not None:
             # Packed into `left`, beside the board. Packed into `self` it came after `body`,
-            # which takes all the slack, so on a short window the panel and the footer were
-            # squeezed to nothing and silently stopped appearing.
+            # which takes all the slack.
+            #
+            # This comment used to claim that packing it there also fixed the panel "squeezed to
+            # nothing and silently stopped appearing" on a short window. It did not: `pack` gives
+            # a child the height it asks for and unmaps whatever is left over, and `body` holds
+            # `expand=True`, so on any window shorter than about 760 pixels this panel was not
+            # drawn at all — `winfo_ismapped()` was 0, not a small number. `fit_board` is what
+            # actually fixed it: the board is the only thing here whose size is a choice, so it
+            # is the thing that gives way.
             self.bottom_player.pack(fill="x")
 
         right = ttk.Frame(body, padding=(12, 0))
         right.pack(side="left", fill="both", expand=True)
 
-        ttk.Label(right, text="Quests", font=("TkDefaultFont", 12, "bold")).pack(anchor="w")
-        self.quest_list = QuestList(right, self.manager.quest_manager)
-        self.quest_list.pack(fill="both", expand=True)
-
-        ttk.Label(right, text="Moves", font=("TkDefaultFont", 12, "bold")).pack(anchor="w")
-        self.history = tk.Listbox(right, height=10, width=28)
-        self.history.pack(fill="both", expand=True)
-
-        ttk.Label(self, textvariable=self.status, relief="sunken", anchor="w").pack(
-            fill="x", pady=(8, 0)
+        # Laid out with grid rather than pack, because pack hands every child the height it asked
+        # for and unmaps whatever is left over. Both panels here want more than a short window has,
+        # so pack silently dropped the move history. grid distributes the height that actually
+        # exists between the two rows that can use it, and both stay on screen.
+        right.rowconfigure(1, weight=1)
+        right.rowconfigure(3, weight=1)
+        right.columnconfigure(0, weight=1)
+        ttk.Label(right, text="Quests", font=("TkDefaultFont", 12, "bold")).grid(
+            row=0, column=0, sticky="w"
         )
+        self.quest_list = QuestList(right, self.manager.quest_manager)
+        self.quest_list.grid(row=1, column=0, sticky="nsew")
+
+        ttk.Label(right, text="Moves", font=("TkDefaultFont", 12, "bold")).grid(
+            row=2, column=0, sticky="w"
+        )
+        self.history = tk.Listbox(right, height=1, width=28)
+        self.history.grid(row=3, column=0, sticky="nsew")
+
+        self.status_label = ttk.Label(self, textvariable=self.status, relief="sunken", anchor="w")
+        self.status_label.pack(fill="x", pady=(8, 0))
+        self._left = left
+
+    def _on_resize(self, _event: Optional[tk.Event] = None) -> None:
+        """Fit the board to whatever height the window now has.
+
+        Args:
+            _event: The `<Configure>` event, unused — the widget already knows its own size.
+
+        Returns:
+            None
+        """
+        self.fit_board()
+        self.fit_quest_cards()
+
+    def available_board_height(self) -> int:
+        """Return the height the board may occupy without squeezing any panel out of existence.
+
+        Every other widget in the window is packed with `fill="x"` and none of them has
+        `expand=True`, so each keeps the height it asks for. The board is the one child whose size
+        is a preference, so it absorbs the difference.
+
+        Returns:
+            int: Pixels available for the board, never negative.
+        """
+        if not hasattr(self, "board_view"):
+            return 0
+        total = self.winfo_height()
+        if total <= 1:
+            # Before the first map, Tk reports 1 rather than nothing. Measuring now would fit the
+            # board to a one-pixel window, so the caller is told there is nothing to decide yet.
+            return 0
+        fixed = [self._heading, self._turn_label, self.status_label]
+        for panel in (self.top_player, self.bottom_player):
+            if panel is not None:
+                fixed.append(panel)
+        used = sum(widget.winfo_reqheight() for widget in fixed)
+        # The board's own padding, the frame's padding, and the gap under the turn label.
+        used += 24
+        return max(0, total - used)
+
+    def fit_board(self) -> None:
+        """Shrink or restore the board so every panel stays on screen.
+
+        The square size is never made larger than the window was built with, so a tall window gets
+        the original board rather than an enormous one, and never smaller than
+        `MIN_SQUARE_SIZE`, at which point the window is simply too short to hold everything.
+
+        Returns:
+            None
+        """
+        available = self.available_board_height()
+        if available <= 0:
+            return
+        rows = max(1, self.manager.board.rows)
+        wanted = min(self.max_square_size, available // rows)
+        wanted = max(MIN_SQUARE_SIZE, wanted)
+        if wanted == self.board_view.square_size:
+            return
+        self.board_view.square_size = wanted
+        self.board_view.refresh(self.manager.board)
+
+    def fit_quest_cards(self) -> None:
+        """Show as many quest cards as the window has room for.
+
+        Six cards ask for more height than a short window has, and grid answers an over-long column
+        by collapsing the rows at the bottom of it — which is how the move history used to
+        disappear. The cards are the part of the column that is a choice: the roster is not shorter
+        for having less of it shown.
+
+        The budget comes from the window's own height rather than from the quest column's, because
+        `<Configure>` fires before the layout has settled and the column still reports the height
+        it had at the previous size. Reading it there would decide on the old window.
+
+        Returns:
+            None
+        """
+        total = self.winfo_height()
+        if total <= 1:
+            return
+        fixed = [self._heading, self._turn_label, self.status_label]
+        for panel in (self.top_player, self.bottom_player):
+            if panel is not None:
+                fixed.append(panel)
+        used = sum(widget.winfo_reqheight() for widget in fixed) + 24
+        cards = self.quest_list.winfo_children()
+        card_height = cards[0].winfo_reqheight() if cards else 56
+        # What the column keeps back: the "Quests" and "Moves" headings, the gap between them, and
+        # at least a couple of rows of history.
+        history_min = self.history.winfo_reqheight() + 48
+        budget = total - used - history_min
+        limit = max(1, min(6, budget // max(card_height, 1)))
+        if limit != self.quest_list.limit:
+            self.quest_list.limit = limit
+            self.quest_list.rebuild()
 
     def on_square_clicked(self, position: Tuple[int, int]) -> None:
         """Hand a clicked square to the controller and redraw.

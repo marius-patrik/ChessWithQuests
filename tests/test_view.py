@@ -14,7 +14,12 @@ import pytest
 from model.game.board import Board
 
 from model.game.games import available_games
-from view.player_game_view import PlayerGameView, STATE_LABELS, outcome_sentence
+from view.player_game_view import (
+    MIN_SQUARE_SIZE,
+    PlayerGameView,
+    STATE_LABELS,
+    outcome_sentence,
+)
 from view.player_view import format_seconds
 from view.start_modal import StartModal
 
@@ -616,3 +621,97 @@ def test_a_flagged_clock_announces_a_flag_fall_in_the_real_window(window):
     assert view.manager.result.winner == -1
     assert "flag fall" in view.status.get()
     assert "Checkmate" not in view.status.get()
+
+
+SHORT_WINDOWS = ((1000, 800), (800, 700), (700, 600), (640, 520), (560, 420))
+
+
+def test_every_panel_stays_on_screen_at_every_window_size(tk_root):
+    """The layout dropped panels on a short window and said nothing.
+
+    `pack` hands a child the height it asked for and unmaps whatever is left over, so on a short
+    window the bottom player's clock, name and captured pieces stopped being drawn at all — at
+    700x600 the widget was not thin, it was absent (`winfo_ismapped()` is 0). The move history went
+    the same way at 640x520. Nothing warned the player; the window looked fine and played fine.
+
+    The board is the only part of the window whose size is a choice rather than a requirement, so
+    it is the part that gives way.
+    """
+    from view.app import build_application
+
+    # The session's root is withdrawn, so nothing in it is ever mapped and `winfo_ismapped` would
+    # answer about a window nobody is looking at. These tests are about what is drawn, so it is
+    # shown.
+    tk_root.deiconify()
+    for child in tk_root.winfo_children():
+        child.destroy()
+    build_application(tk_root, game="chess", show_modal=False)
+    view = tk_root.game_view
+    panels = {
+        "top player": view.top_player,
+        "board": view.board_view,
+        "bottom player": view.bottom_player,
+        "quests": view.quest_list,
+        "history": view.history,
+    }
+
+    for width, height in SHORT_WINDOWS:
+        tk_root.geometry(f"{width}x{height}+0+0")
+        tk_root.update()
+        for _ in range(12):
+            tk_root.update()
+        # No call to fit anything: resizing the window is all a player does.
+        tk_root.update()
+        for _ in range(10):
+            tk_root.update()
+
+        for name, panel in panels.items():
+            assert panel.winfo_ismapped(), f"{name} vanished at {width}x{height}"
+
+
+def test_the_board_shrinks_rather_than_the_panels_disappearing(tk_root):
+    """The point of fitting is that the board gives up space, not that everything does."""
+    from view.app import build_application
+
+    tk_root.deiconify()
+    for child in tk_root.winfo_children():
+        child.destroy()
+    build_application(tk_root, game="chess", show_modal=False)
+    view = tk_root.game_view
+
+    sizes = {}
+    for width, height in ((1000, 800), (640, 520)):
+        tk_root.geometry(f"{width}x{height}+0+0")
+        tk_root.update()
+        for _ in range(12):
+            tk_root.update()
+        view.fit_board()
+        view.fit_quest_cards()
+        tk_root.update()
+        for _ in range(10):
+            tk_root.update()
+        sizes[height] = view.board_view.square_size
+
+    assert sizes[800] > sizes[520], "the board did not shrink on the shorter window"
+    assert sizes[520] >= MIN_SQUARE_SIZE
+
+
+def test_the_board_keeps_its_size_when_the_window_is_tall(tk_root):
+    """Fitting must not enlarge a board past the size the window was built with."""
+    from view.app import build_application
+
+    tk_root.deiconify()
+    for child in tk_root.winfo_children():
+        child.destroy()
+    build_application(tk_root, game="chess", show_modal=False)
+    view = tk_root.game_view
+
+    tk_root.geometry("1400x1200+0+0")
+    tk_root.update()
+    for _ in range(12):
+        tk_root.update()
+    tk_root.update()
+    for _ in range(10):
+        tk_root.update()
+
+    assert view.board_view.square_size <= view.max_square_size
