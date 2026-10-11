@@ -130,7 +130,9 @@ def test_renaming_a_module_needs_no_configuration_edit(tmp_path):
     """A module discovered only in the hook's tree must appear without a nav edit."""
     package = tmp_path / "src" / "model" / "widget"
     package.mkdir(parents=True)
-    (tmp_path / "src" / "model" / "__init__.py").write_text('"""Model layer."""\n', encoding="utf-8")
+    (tmp_path / "src" / "model" / "__init__.py").write_text(
+        '"""Model layer."""\n', encoding="utf-8"
+    )
     (package / "__init__.py").write_text('"""Widgets."""\n', encoding="utf-8")
     (package / "sprocket.py").write_text('"""A sprocket."""\n', encoding="utf-8")
 
