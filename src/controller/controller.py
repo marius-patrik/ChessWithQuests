@@ -2,12 +2,8 @@
 
 from typing import Optional, Tuple, List, Dict, Any
 
-try:
-    from model.game.manager import GameManager
-    from model.game.move import Move
-except ImportError:
-    from ..model.game.manager import GameManager
-    from ..model.game.move import Move
+from model.game.manager import GameManager
+from model.game.move import Move
 
 
 class GameController:

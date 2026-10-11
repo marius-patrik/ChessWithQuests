@@ -2,18 +2,11 @@
 
 from typing import List, Tuple, Optional, Any
 
-try:
-    from model.game.board import Board
-    from model.game.move import Move
-    from model.pieces.piece import Piece
-    from model.pieces.pawn import Pawn
-    from model.pieces.king import King
-except ImportError:
-    from .board import Board
-    from .move import Move
-    from ..pieces.piece import Piece
-    from ..pieces.pawn import Pawn
-    from ..pieces.king import King
+from model.game.board import Board
+from model.game.move import Move
+from model.pieces.piece import Piece
+from model.pieces.pawn import Pawn
+from model.pieces.king import King
 
 
 class MoveValidator:
